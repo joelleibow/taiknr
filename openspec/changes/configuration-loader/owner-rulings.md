@@ -31,3 +31,14 @@ What he decided: users need an easy way to turn taiknr on and off without uninst
 > "A command like /taiknr off or /taiknr on would be fantastic!!!"
 
 What he asked for: a `/taiknr on` and `/taiknr off` command. The conductor's scope call: the command goes to the existing board card **Status readout and /taiknr command**, which already holds the session toggle, not into this change. This change delivers the `enabled` field and the loader the command will write through. It does not foreclose the command: the design must leave a clean place for a command to flip `enabled`.
+
+## Orientation Q1 — a broken config file (2026-11-14)
+
+Answering `michael-orientation.md` §4 Q1 (what happens when a config file is present but malformed or invalid):
+
+> "Q1, I respect what Michael is recommending but there's a lot of contingencies that sway me to B, not A. If the user doesn't have openrouter, if it's the default model they entered that has a typo then the feature can't function, etc."
+
+> "I don't want to tangent down the "if the user doesn't have openrouter" caveat right now but that's something we need to address once we have a version working locally and it's working as well as we'd like then we can figure out that abstraction."
+
+- **Q1 → (b), loud and closed.** A present-but-malformed or invalid config file is reported clearly (naming the file and the field), and taiknr does nothing for that session until the file is fixed. It does not fall back to defaults.
+- **Deferred, not in this change:** the dependency on OpenRouter as the classifier provider. Joel will address that abstraction once a version works locally as well as he wants.
