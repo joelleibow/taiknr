@@ -55,3 +55,11 @@ Answering `michael-orientation.md` §4 Q1 (what happens when a config file is pr
 > "Q3, everything stops"
 
 - **Q3 → (a), fully inert.** With `enabled` false, taiknr does no staging, settlement, hydration, recall or classifier calls. Outputs stubbed earlier in the session stay stubbed until it is turned back on.
+
+## Q2 clarification — which project file (2026-11-14)
+
+Asked whether "closest settings file to the working directory" means only `<cwd>/.pi/pi-taiknr.json` (as Pi treats its own `.pi/` settings) or the nearest one found walking up from the working directory:
+
+> "A"
+
+- **The project file is `<cwd>/<CONFIG_DIR_NAME>/pi-taiknr.json` only**, as Pi treats its own project `.pi/` configuration. No parent-directory search.
