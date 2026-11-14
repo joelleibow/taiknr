@@ -1,0 +1,57 @@
+{
+  "mode": "review",
+  "lens": "council-structural",
+  "paraphrase_proposes": "The design writes six root tooling files with content fixed in Decisions 1, 7, 8, 10 and 11 — package.json (four scripts, peer * + dev ^1.5.2, no dependencies, publishing metadata omitted), a committed package-lock.json, tsconfig.json (S2's measured nodenext set, PoC exclusion carried by include alone), biome.json (init 2.6.7 baseline plus VCS block, six-entry files.includes allowlist, lineWidth 120), vitest.config.ts (test.include only) and a three-entry .gitignore — replaces the seven throwing handler stubs with _pi.on(\"<event>\", () => {}) no-op registrations, and runs a one-time biome check --write . pass over the whole allowlist as its own whitespace-only commit before any handler edit. It adds exactly two tests: an entry test asserting the sorted registered names equal the seven via a Proxy fake whose only member is on, and a domain test asserting shouldArchive's >= threshold behavior through the .js specifier chain. Load verification is a manual packages-route check against a git archive HEAD throwaway copy doubling as PI_CODING_AGENT_DIR, asserting Pi's usage header plus grep text (never exit codes), with two negative controls (restored throw; peer moved to dependencies) each undone by re-extracting the archive.",
+  "paraphrase_existing": "The repository is a stub-stage Pi extension package with no package.json, tsconfig.json, .gitignore or harness, so nothing can be loaded, type-checked or tested (Eleanor §1; Trap 6). All seven register*Handler stubs throw at load, so importing the single manifest entry src/app/extension/taiknr.ts fails (Trap 1), and no lineWidth leaves HEAD formatted (R1/R3), leaving every later board card blocked. Twenty src files follow a Clean Architecture layout — src/domain/ and src/use-cases/ import nothing from @earendil-works/pi-* (ADR 0001), src/infra/ holds the Pi adapters and seven handlers, src/app/extension/taiknr.ts is the single composition root — and Pi 1.5.2 loads local packages through the manifest's pi.extensions entries via jiti with no build step, identifying them by resolved absolute path.",
+  "recommendation": "Approve. design.md is byte-for-byte the state round 2 returned clean: both round-1 propose_fix resolutions remain incorporated, placement, one-home discipline, structural completeness and claim calibration all hold, and every settled or declined-recorded finding stays closed. Two new minor spec-alignment items should go to Michael to record or decline: the extension-packaging 'Load check passes' scenario's WHEN clause still names the superseded live-repository form of the manual check, and the development-checks tsconfig requirement says 'SHALL exclude' where the design's fixed content carries the exclusion by include and explicitly rejects an exclude entry. Both are one-line spec-delta rewordings; neither changes a decision, config value, or observable scenario outcome.",
+  "findings": [
+    {
+      "id": "STRUCT-S3R3-1",
+      "severity": "minor",
+      "location": "openspec/changes/foundation-and-packaging/specs/extension-packaging/spec.md — 'The extension entry loads without error' > 'Scenario: Load check passes' (WHEN clause), read against design.md Decision 6 (copy-based manual load check) and michael-resolve-s3-r1.json settled finding MANUAL-CHECK-IN-COPY",
+      "finding": "The scenario's precondition reads 'with PI_CODING_AGENT_DIR pointing at a throwaway agent directory whose settings.json lists the repository under packages', but the design's settled procedure — MANUAL-CHECK-IN-COPY, incorporated in Decision 6 — never lists the live repository: settings.json lists $D, the git archive HEAD copy that serves as both package root and agent directory, and the design states the check 'runs against a throwaway copy of the committed tree, never the live checkout'. The scenario preserves the superseded R6/COMP-1 form (packages pointing at the absolute repo path) and was not updated when the critic-r1-3 fix moved the check into the copy.",
+      "rationale": "Structural completeness requires alignment between specs/ and design.md; when they diverge, the spec is the binding contract a validator or later reviewer follows. The design's own risk analysis (Risks 2, Migration steps 3–4) treats pointing Pi at the live checkout as the hazard the copy was created to avoid — a dirty or pre-change tree loaded instead of the committed state being verified. One home for the procedure: Decision 6; the scenario should state the same setup, not a superseded one.",
+      "concrete_case": "A task author or future validator derives the manual check from the spec scenario rather than Decision 6 and writes settings.json in $D listing /Users/joelleibow/Projects/pi-taiknr under packages. Mid-implementation, with the no-op edits uncommitted, the check loads and validates Derek's dirty working tree instead of the committed tree — exactly the defect critic-r1-3 measured and closed ('Derek's tree is dirty with the no-op edits when he first runs the manual check'), reintroduced at the spec layer.",
+      "recommendation": "Reword the scenario's WHEN clause to match Decision 6, e.g. 'WHEN pi --no-session --help runs with PI_CODING_AGENT_DIR pointing at a throwaway agent directory whose settings.json lists a throwaway copy of the committed tree under packages (design.md Decision 6)'. Spec deltas are amendable within the change (R9 and R11 both reworded scenarios), and no decision, config value, or observable outcome changes. If Michael reads 'the repository' loosely as 'the repository's contents', he can decline with that rationale recorded."
+    },
+    {
+      "id": "STRUCT-S3R3-2",
+      "severity": "minor",
+      "location": "openspec/changes/foundation-and-packaging/specs/development-checks/spec.md — 'Type-check covers source and tests and excludes the proof of concept' requirement sentence, read against design.md Decision 10 (tsconfig block and 'carried by include, not by exclude' paragraph)",
+      "finding": "The requirement states 'tsconfig.json SHALL include src/**/*.ts and tests/**/*.ts, SHALL exclude the root jev-context-poc.ts, and SHALL set module and moduleResolution to nodenext…', but the design's fixed tsconfig content has no exclude key, and Decision 10 explicitly argues the exclusion 'is carried by include, not by exclude' because 'adding an exclude entry would state the same fact twice (feature-spec standard §1)' — its Alternatives section rejects 'Adding the root PoC to exclude explicitly' as 'redundant with include'. The requirement's normative sentence names a mechanism the design's canonical content deliberately omits.",
+      "rationale": "One home for each fact: the fact's home is Decision 10's block, and the spec restates it with different mechanism language. Under the outcome reading ('exclude' = not in the program) the requirement is satisfied and the scenario ('jev-context-poc.ts is not part of the program') passes; under the literal mechanism reading, the design's fixed content fails its own spec and an implementer writing tsconfig from the spec alone adds an exclude entry the design's own one-home argument forbids. That the design felt the need to argue the point is evidence the sentence reads as mechanism.",
+      "concrete_case": "An implementer satisfying the requirement literally adds exclude: [jev-context-poc.ts] to Decision 10's block, which measures green (the entry is redundant, not wrong) but contradicts Decision 10's stated reason for its absence and the standard's no-duplication rule; a reviewer comparing the written file to the Decision 10 block then sees an extra key no ruling supplies — the exact class of unsourced value R1 and S2 were created to prevent.",
+      "recommendation": "Reword the requirement to outcome language matching its own scenario, e.g. 'tsconfig.json SHALL include src/**/*.ts and tests/**/*.ts and SHALL NOT bring the root jev-context-poc.ts into the program, and SHALL set module and moduleResolution to nodenext with strict and noEmit'. One sentence in the spec delta; no change to Decision 10, the scenario, or any config value. If Michael reads 'SHALL exclude' as already outcome-language, he can decline with that recorded."
+    }
+  ],
+  "assumptions": [
+    {
+      "assumption": "design.md, proposal.md and both spec deltas are unchanged since the round-2 review: the round-2 structural and critic reports' line-level citations match the current text, and none of the recorded-but-declined wording corrections (round-1 minors, ROUND-2-TIDY) has been applied — as expected, since they were recorded for Bambadjan's fold-in pass and the r2 resolution forbids fresh rounds from re-opening them.",
+      "status": "verified"
+    },
+    {
+      "assumption": "No michael-resolve-s3-r3.json or later resolution file exists at review start (directory listing shows resolve files only through r2), so no round-3 findings were skipped.",
+      "status": "verified"
+    },
+    {
+      "assumption": "Both new findings were never raised or settled in any prior round: michael-resolve-s1s2.json, michael-resolve-s3-r1.json, michael-resolve-s3-r2.json (read in full, including all settled_findings) and michael-council-rulings.json contain no disposition touching the extension-packaging 'Load check passes' WHEN clause or the tsconfig 'SHALL exclude' mechanism wording.",
+      "status": "verified"
+    },
+    {
+      "assumption": "Tree state at HEAD matches the design's placement tables and my verification: twenty src files including the seven handler files named in the event-mapping table, an empty root tests/, jev-context-poc.ts and test-jev-poc.mjs at the root, a root LICENSE, and no package.json, tsconfig.json, biome.json, vitest.config.ts or .gitignore at the root.",
+      "status": "verified"
+    },
+    {
+      "assumption": "The R1–R11, Trap 1–9 and round-1/round-2 measurement evidence (Biome sweeps, git-archive manual-check controls, lockfile stability, tsc/vitest green runs) reproduces as recorded — accepted as settled binding evidence per the brief, not re-executed.",
+      "status": "unverified"
+    }
+  ],
+  "owner_questions": [],
+  "not_checked": [
+    "tasks.md — does not exist yet in the change directory; design/tasks alignment is Stage 5 scope.",
+    "Measurement evidence behind the rulings and resolutions — accepted as settled binding evidence per the brief; not re-executed (the brief forbids installing or running anything).",
+    "Settled and declined-recorded findings skipped per the brief, sections re-read only for coherence: structural-r1-1 (twenty vs fifteen src files), structural-r1-2 (.gitignore row cross-ref), structural-r2-1 (proposal format-pass sentence), critic-r1-2/4, critic-r2-1/2/3, LOCKFILE-STABILITY, BIOME-JSON-FORMAT, MANUAL-CHECK-IN-COPY, ROUND-2-TIDY, ZO-S1-1, COMP-5/6/7, REPO-NAME, LICENSE-IN-PACKAGE-JSON, MANUAL-CHECK-NO-INSTALL.",
+    "ARCHITECTURE.md §8 and the deferred import-boundary lint — docs-pass items settled under D2/S7/S8/Trap 7 and assigned to Migration Plan step 6; not re-audited.",
+    "Parallel round-3 reports from the other lenses (not present when this review started) — this review is independent of them."
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "round_status": "clean",
+  "resolutions": [
+    {
+      "finding_id": "structural-r3-1",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/specs/extension-packaging/spec.md — 'Load check passes' scenario, WHEN clause (line 43)",
+      "rationale": "Minor and correct: the WHEN clause still says `settings.json` 'lists the repository under `packages`', while Decision 6 (critic-r1-3, MANUAL-CHECK-IN-COPY) lists the `git archive HEAD` copy `$D` and never the live checkout. The observable outcome is identical when the live tree equals HEAD, so no scenario result changes, but the spec is the contract Validate follows and should state the settled setup. Recorded for the fold-in pass: 'WHEN `pi --no-session --help` runs with `PI_CODING_AGENT_DIR` pointing at a throwaway directory that is a `git archive HEAD` copy of the repository and whose `settings.json` lists that copy under `packages` (design.md Decision 6)'.",
+      "evidence": "specs/extension-packaging/spec.md:43; design.md:198–215 (copy-based procedure, 'never the live checkout'); michael-resolve-s3-r1.json critic-r1-3 and settled MANUAL-CHECK-IN-COPY.",
+      "required_change": ""
+    },
+    {
+      "finding_id": "structural-r3-2",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/specs/development-checks/spec.md — 'Type-check covers source and tests and excludes the proof of concept', requirement sentence (line 35)",
+      "rationale": "Minor and correct that the sentence reads as mechanism while Decision 10 deliberately carries the exclusion by `include` alone and rejects an `exclude` key as a second home for the fact. I read 'SHALL exclude' as outcome language (the scenario beneath it is 'not part of the program', and the design's block measured green without an `exclude` key), so the design satisfies the spec as written; the reword removes the literal reading that would make an implementer add an unsourced key. Recorded for the fold-in pass: '`tsconfig.json` SHALL include `src/**/*.ts` and `tests/**/*.ts`, SHALL NOT bring the root `jev-context-poc.ts` into the program, and SHALL set `module` and `moduleResolution` to `nodenext` with `strict` and `noEmit` (S2; D6; Trap 2; Trap 4).'",
+      "evidence": "specs/development-checks/spec.md:35 and its scenario 'Proof of concept excluded' (THEN: not part of the program); design.md:313 'carried by `include`, not by `exclude`'; orientation Trap 2 and michael-resolve-s3-r1.json critic-r1-2: `tsc --noEmit` exit 0 with the include-only block under TS 5.9.3 and 7.0.2.",
+      "required_change": ""
+    }
+  ],
+  "settled_findings": [
+    "critic-r3: no findings; critic completed with four live-code checks (all Pi imports type-only; seven `_pi` stubs with exact throw text; entry touches only `.on`; `shouldArchive` body) all verified against HEAD.",
+    "structural-r3-1 (minor): extension-packaging 'Load check passes' WHEN clause names the live repository; settled setup is the `git archive HEAD` copy. Wording recorded.",
+    "structural-r3-2 (minor): development-checks tsconfig requirement 'SHALL exclude' read as outcome language; reword to 'SHALL NOT bring … into the program'. Wording recorded.",
+    "STAGE-3-TIDY (consolidated, non-blocking, apply once before tasks.md so Stage 5 does not copy superseded wording): design.md — Context 'fifteen' → 'twenty' (structural-r1-1); `.gitignore` row → '(Decision 11; lockfile consequence in Decision 5)' (structural-r1-2); Decision 3 'four root files are new in that commit' → root-files/allowlist/lockfile wording and cite michael-resolve-s3-r1.json critic-r1-1 for the seven-file count (critic-r2-2); Decision 3 post-pass files clause (critic-r2-1); Decision 6 add `cd \"$D\"`, relative `out.txt`, `git -C <repo> archive HEAD` undo, and line 215 → 'Pi loads the package only from the copy, and its project directory is the copy; the live checkout is never modified' (critic-r2-3); Risks 7 and Migration step 5 lockfile-leftover wording (critic-r1-4). proposal.md — line 15 format-pass sentence points at Decision 3 (structural-r2-1); line 43 'verbatim' → 'fixes the content of' (critic-r2-2). specs — extension-packaging:43 WHEN clause (structural-r3-1); development-checks:35 requirement sentence (structural-r3-2). None changes a decision, config value or scenario outcome; no fresh round should re-open them."
+  ],
+  "owner_decisions": []
+}
