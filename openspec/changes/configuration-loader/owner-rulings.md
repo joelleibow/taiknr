@@ -49,3 +49,9 @@ Answering `michael-orientation.md` §4 Q1 (what happens when a config file is pr
 
 - **Q1b → reject.** An unknown top-level key is a config error, handled under Q1(b).
 - **Q2 → field-level layering:** defaults, then the user (agent-level) file over them, then the project file over that. For each field, the project file's value wins when it sets one; otherwise the user file's; otherwise the default.
+
+## Orientation Q3 — what "off" stops (2026-11-14)
+
+> "Q3, everything stops"
+
+- **Q3 → (a), fully inert.** With `enabled` false, taiknr does no staging, settlement, hydration, recall or classifier calls. Outputs stubbed earlier in the session stay stubbed until it is turned back on.
