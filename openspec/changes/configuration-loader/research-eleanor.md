@@ -52,3 +52,81 @@ Binding project docs: `ARCHITECTURE.md:12-13` describes `src/config/` as schema/
 - pi-omlx has several configuration mechanisms (Pi auth, env, and model metadata JSON); the distinctions matter when describing its practice.
 - The brief asks for code quotations with line numbers. Exact key code is summarized above with references; code excerpts for Jefferson selection/read and startup are at `configuration.ts:352-401` and `startup.ts:51-85`.
 - No tests or commands were run; no source/config files were changed. The report itself is the requested artifact.
+
+
+---
+
+## Addendum (2026-11-14, run 1961bbcf) — import direction between layers
+
+
+Scope: `/Users/joelleibow/Projects/taiknr`; inspected the requested architecture sections, all ADRs in `docs/adr/`, `AGENTS.md`, both living specs in `openspec/specs/`, `biome.json`, `tsconfig.json`, and relative import/export-from lines under `src/{app,infra,use-cases,domain,config}`.
+
+### Findings on infra → app
+
+No inspected architecture rule forbids `src/infra/` importing from `src/app/`. The documented ADR 0001 boundary instead forbids Pi-SDK imports into `src/domain/` and `src/use-cases/`. The architecture itself explicitly says there is no check enforcing that narrower boundary:
+
+- `ARCHITECTURE.md` §3, Composition root: “`src/app/` to the Pi extension only.”
+- `ARCHITECTURE.md` §5: Pi host package is “imported exclusively inside `src/app/` and `src/infra/`.”
+- `ARCHITECTURE.md` §8: “No check enforces ADR 0001's import boundary. Only the review half of that ADR's Consequences clause is in force”; enforcement is deferred.
+- `docs/adr/0001-keep-domain-and-use-cases-free-of-pi-types.md` Decision: “Keep `src/domain/` and `src/use-cases/` strictly free of imports from `@earendil-works/pi-*` or any host harness SDK.” Its next sentence places handlers in infra and says app entry points wire adapters around the shared core. It does not specify or prohibit infra→app imports.
+- `docs/adr/0001-keep-domain-and-use-cases-free-of-pi-types.md` Consequences: contributors must enforce the import boundary “during review and checks so Pi types do not leak inward.” The boundary named in the decision is the domain/use-case SDK boundary.
+- `docs/adr/0003-gate-development-with-biome-tsc-and-vitest-under-npm.md` Context says ADR 0001 asks to keep Pi imports out of domain/use-cases; Decision says Biome has no override and says the boundary is not among checks. Consequences likewise say it remains review-only until a rule is added.
+
+The specified example of an infra handler importing an app-declared type is not present: current `session-start.ts` imports `ArchiveStore` from `../../use-cases/ports.js`, not from app. The existing `RecallCache` declaration is in `src/use-cases/recall-relevant-context.ts:11`; app imports its type at `src/app/extension/taiknr.ts:12`, and the context handler imports it directly from use-cases at `src/infra/pi-event-handlers/context.ts:4`.
+
+### Enforced-rule inspection
+
+`biome.json` lines 7–8 set the file include allowlist. Lines 14–23 enable recommended rules with no rule override; lines 25–30 enable organize-imports. There is no architectural-layer/dependency restriction configured. `tsconfig.json` specifies NodeNext module and resolution, strict, noEmit, and source/test include only; it contains no path or layer restriction. The living spec `openspec/specs/development-checks/spec.md`, Requirement “The import boundary is not lint-enforced in this change,” explicitly says no lint rule enforces ADR 0001's boundary and records enforcement as deferred. `openspec/specs/extension-packaging/spec.md`, Requirement “Handler signatures and the import boundary are preserved,” forbids Pi-SDK imports into domain/use-cases, but does not prohibit infra→app imports.
+
+### Existing internal import edges (quoted source lines)
+
+Every matching relative internal import/export-from line found in the five requested source areas is listed below. Lines are quoted verbatim with repository-relative file and line number.
+
+### app → config/domain/infra/use-cases
+
+- `src/app/extension/taiknr.ts:2` — `import { DEFAULT_TAIKNR_CONFIG } from "../../config/taiknr-config.js";`
+- `src/app/extension/taiknr.ts:3` — `import type { ArchivedToolOutput } from "../../domain/archived-output.js";`
+- `src/app/extension/taiknr.ts:4` — `import { InMemoryArchiveStore } from "../../infra/adapters/pi-archive-adapter.js";`
+- `src/app/extension/taiknr.ts:5` — `import { registerAgentBeforeSettleHandler } from "../../infra/pi-event-handlers/agent-before-settle.js";`
+- `src/app/extension/taiknr.ts:6` — `import { registerContextHandler } from "../../infra/pi-event-handlers/context.js";`
+- `src/app/extension/taiknr.ts:7` — `import { registerSessionCompactHandler } from "../../infra/pi-event-handlers/session-compact.js";`
+- `src/app/extension/taiknr.ts:8` — `import { registerSessionStartHandler } from "../../infra/pi-event-handlers/session-start.js";`
+- `src/app/extension/taiknr.ts:9` — `import { registerSessionTreeHandler } from "../../infra/pi-event-handlers/session-tree.js";`
+- `src/app/extension/taiknr.ts:10` — `import { registerToolCallHandler } from "../../infra/pi-event-handlers/tool-call.js";`
+- `src/app/extension/taiknr.ts:11` — `import { registerTurnEndHandler } from "../../infra/pi-event-handlers/turn-end.js";`
+- `src/app/extension/taiknr.ts:12` — `import type { RecallCache } from "../../use-cases/recall-relevant-context.js";`
+
+### infra → config/domain/use-cases
+
+- `src/infra/adapters/pi-context-adapter.ts:2` — `import type { RecalledOutput } from "../../domain/recall.js";`
+- `src/infra/adapters/pi-notifier-adapter.ts:2` — `import type { FailureNotifier } from "../../use-cases/ports.js";`
+- `src/infra/adapters/pi-jev-scorer-adapter.ts:2` — `import type { TaiknrConfig } from "../../config/taiknr-config.js";`
+- `src/infra/adapters/pi-jev-scorer-adapter.ts:3` — `import type { RelevanceScore } from "../../domain/recall.js";`
+- `src/infra/adapters/pi-jev-scorer-adapter.ts:4` — `import type { RelevanceScorer } from "../../use-cases/ports.js";`
+- `src/infra/adapters/pi-archive-adapter.ts:2` — `import type { ArchivedToolOutput, ToolOutputCandidate } from "../../domain/archived-output.js";`
+- `src/infra/adapters/pi-archive-adapter.ts:3` — `import type { ArchiveStore } from "../../use-cases/ports.js";`
+- `src/infra/pi-event-handlers/session-start.ts:2` — `import type { ArchiveStore } from "../../use-cases/ports.js";`
+- `src/infra/pi-event-handlers/turn-end.ts:2` — `import type { TaiknrConfig } from "../../config/taiknr-config.js";`
+- `src/infra/pi-event-handlers/turn-end.ts:3` — `import type { ArchivedToolOutput } from "../../domain/archived-output.js";`
+- `src/infra/pi-event-handlers/agent-before-settle.ts:2` — `import type { ArchivedToolOutput } from "../../domain/archived-output.js";`
+- `src/infra/pi-event-handlers/agent-before-settle.ts:3` — `import type { ArchiveStore } from "../../use-cases/ports.js";`
+- `src/infra/pi-event-handlers/context.ts:2` — `import type { TaiknrConfig } from "../../config/taiknr-config.js";`
+- `src/infra/pi-event-handlers/context.ts:3` — `import type { ArchiveStore, FailureNotifier } from "../../use-cases/ports.js";`
+- `src/infra/pi-event-handlers/context.ts:4` — `import type { RecallCache } from "../../use-cases/recall-relevant-context.js";`
+- `src/infra/pi-event-handlers/session-compact.ts:2` — `import type { ArchiveStore } from "../../use-cases/ports.js";`
+- `src/infra/pi-event-handlers/session-tree.ts:2` — `import type { ArchiveStore } from "../../use-cases/ports.js";`
+
+### use-cases → domain
+
+- `src/use-cases/stage-tool-outputs.ts:1` — `import type { ArchivedToolOutput, ToolOutputCandidate } from "../domain/archived-output.js";`
+- `src/use-cases/hydrate-archive-store.ts:1` — `import type { ArchivedToolOutput } from "../domain/archived-output.js";`
+- `src/use-cases/ports.ts:1` — `import type { ArchivedToolOutput } from "../domain/archived-output.js";`
+- `src/use-cases/ports.ts:2` — `import type { RelevanceScore } from "../domain/recall.js";`
+- `src/use-cases/commit-archived-batch.ts:1` — `import type { ArchivedToolOutput } from "../domain/archived-output.js";`
+- `src/use-cases/recall-relevant-context.ts:1` — `import type { RecalledOutput } from "../domain/recall.js";`
+
+No relative internal import/export-from lines were found from `src/infra/` to `src/app/`, from domain into another listed layer, or from config into another listed layer. External package imports are omitted here because the requested listing is for edges between the five source areas.
+
+### Other requested material read
+
+All three ADRs were read: ADR 0001 (above), `docs/adr/0002-deterministic-settlement-stubbing-and-tail-recall.md` (settlement persistence and tail-recall decisions; no layer import-direction rule), and ADR 0003 (above). Living specs read: `openspec/specs/development-checks/spec.md` and `openspec/specs/extension-packaging/spec.md`; `openspec/specs/.gitkeep` is not a living spec. `AGENTS.md` describes commands, ESM `.js` specifiers, test placement, handler signatures, ADR process, and tooling traps; it gives no additional layer dependency rule.

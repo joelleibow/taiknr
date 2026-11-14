@@ -4,12 +4,18 @@
 
 ### Requirement: Handler signatures and the import boundary are preserved
 
-The `register*Handler(pi, …)` signatures and the adapter and port contracts SHALL stay fixed, except one per-session-config revision the design names (O1): the session-start registration and the config-carrying dependency types MAY change to carry the session's configuration. No other registrar's exported name, parameter order or types MAY change, and no `@earendil-works/pi-*` import MAY enter `src/domain/` or `src/use-cases/` (ADR 0001; D5; Michael §2). Formatter whitespace MAY change in those files (R3).
+The `register*Handler(pi, …)` signatures and the adapter and port contracts SHALL stay fixed, except the three differences enumerated below, which carry the session's configuration (O1; ruling 6):
+
+1. `registerSessionStartHandler` gains the per-session configuration holder as a third parameter, and keeps its `pi` and store parameters in their order.
+2. The `config` member of `registerTurnEndHandler`'s and `registerContextHandler`'s dependency objects changes type from `TaiknrConfig` to the per-session configuration holder. The other members of both objects are unchanged.
+3. `ConfigPaths.projectConfigPath` changes type from `string` to `string | undefined`. It is neither a registrar signature nor an adapter contract; it is listed here so a reviewer has one list of every permitted difference (rulings 2, 6).
+
+Everything else SHALL be unchanged against `HEAD`: the other four registrars' exported names, parameter order, types and return types; `createPiJevScorerAdapter(ctx, config: TaiknrConfig)`; and the port contracts. No `@earendil-works/pi-*` import MAY enter `src/domain/` or `src/use-cases/` (ADR 0001; D5; Michael §2). Formatter whitespace MAY change in those files (R3).
 
 #### Scenario: Signatures unchanged
 
-- **WHEN** the seven handler files are compared with `HEAD`
-- **THEN** the six registrars other than the session-start one keep their exported names, parameter order, types and return types, and the session-start and dependency-contract changes are exactly the ones the design names (O1)
+- **WHEN** the seven handler files and `src/config/taiknr-config.ts` are compared with `HEAD`
+- **THEN** the differences are the three listed above, each stub body replaced by its implementation, and formatter whitespace — and nothing else
 
 #### Scenario: Boundary holds
 
