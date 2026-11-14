@@ -4,10 +4,7 @@ import type { RelevanceScore } from "../../domain/recall.js";
 import type { RelevanceScorer } from "../../use-cases/ports.js";
 
 /** Translate stubbed archive state into a Pi classifier request via ModelRegistry. */
-export function createPiJevScorerAdapter(
-	_ctx: ExtensionContext,
-	_config: TaiknrConfig,
-): RelevanceScorer {
+export function createPiJevScorerAdapter(_ctx: ExtensionContext, _config: TaiknrConfig): RelevanceScorer {
 	return {
 		async score(
 			_promptText: string,
