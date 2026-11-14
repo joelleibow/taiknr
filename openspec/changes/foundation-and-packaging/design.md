@@ -27,7 +27,7 @@ Michael's eleven rulings (R1–R11) settle every open question the council raise
 
 **Goals:**
 
-- Write the five root configuration files verbatim, plus a committed `package-lock.json`, so `npm install && npm run check` is reproducible from a clean checkout.
+- Write the five root configuration files with the content fixed in Decisions 1, 7, 8, 10 and 11, plus a committed `package-lock.json`, so `npm install && npm run check` is reproducible from a clean checkout.
 - Make Pi 1.5.2 load the package's single entry point without error, with the seven event names type-checked and asserted.
 - Give the load path an automated pass/fail signal inside `npm run check`, and a manual load check that fails visibly when discovery or dependency placement breaks.
 - Keep the handler signatures, the import boundary, the single manifest entry and the proof-of-concept files exactly as they are.
@@ -56,6 +56,8 @@ No new `src/` module. Every new file is either root tooling configuration or a t
 | `biome.json` | Lint and format baseline plus file scope (Decisions 1, 2) |
 | `vitest.config.ts` | The test discovery boundary (Decision 7) |
 | `.gitignore` | The clean-tree baseline (Decision 5) |
+
+The configuration blocks in Decisions 1, 7, 8, 10 and 11 fix **content**: keys, values and order. Whitespace in every file on the allowlist is whatever the one-time format pass (Decision 3) produces under `biome.json`: tab indentation, and short arrays such as `files.includes` collapsed to one line at width 120. A reviewer compares the written files to the blocks by content, not by byte.
 
 **Test files.** `tests/` stays at the root, outside the extension entry's directory: both siblings keep a root test directory (Eleanor §2), and keeping tests out of `src/` keeps the composition root free of test-only code.
 
@@ -95,7 +97,7 @@ All seven exist as `on(event: "…")` overloads in Pi 1.5.2 (D4; R6).
 
 ### 1. Biome baseline: `biome init` 2.6.7, plus VCS integration, the scoped file list, and `lineWidth` 120
 
-`biome.json` is written verbatim; every value traces to a source.
+`biome.json`'s content is fixed in the block below; every value traces to a source.
 
 ```json
 {
@@ -169,7 +171,7 @@ The allowlist is the six entries above: `src/**`, `tests/**`, and the four root 
 
 ### 3. One-time format pass, first, reviewed as whitespace-only; no permanent writer script
 
-The format pass runs before any handler edit, so the whitespace change is a commit of its own and its diff can be read as whitespace alone. `npm run lint` stays `biome check .` and read-only, and nothing in the `check` chain passes `--write` (R2). No `format` or `lint:fix` script is added: nothing in this change needs a permanent writer after the pass, and R2 permits such a script without requiring one.
+The format pass is `npx biome check --write .` — scoped by `files.includes` to `src/**`, `tests/**` and the four root config files — run once after the six root files are written and `npm install` has completed, and before any handler edit. Measured on this tree it rewrites exactly seven files: the four `src/` files named in the modified-files table and `biome.json`, `package.json`, `tsconfig.json` (tabs, and `files.includes` on one line). The change is a commit of its own whose diff is read as whitespace alone; the four root files are new in that commit, so they are reviewed against their Decision blocks by content. `npm run lint` stays `biome check .` and read-only, and nothing in the `check` chain passes `--write` (R2). No `format` or `lint:fix` script is added: nothing in this change needs a permanent writer after the pass, and R2 permits such a script without requiring one.
 
 **Alternatives weighed.** No format pass — `npm run check` is red on its own first run, under every candidate width (R3). Folding the pass into the stub edits — a reviewer can no longer separate whitespace from behavior, which is exactly what the reworded "Signatures unchanged" scenario guards. A narrower width to shrink the pass — no width leaves the tree untouched (R1's sweep), so this trades one cost for a larger one.
 
@@ -188,26 +190,29 @@ The lockfile fixes the exact resolution of every tool the checks run, which matt
 ### 6. The load path gets two guards, and neither is production code
 
 - **In-repo guard:** `tests/app/extension/taiknr.test.ts` invokes the default export with a Proxy fake whose only member is `on` (any other member access throws) and asserts the sorted list of registered names equals exactly the seven. It runs inside `npm run check`, needs no Pi runtime (every Pi import in `src/` is `import type`), goes red against `HEAD`'s throwing stubs and green after the no-op edit, and catches a valid-but-wrong event name that `tsc` accepts (R6).
-- **Manual load check**, run against a throwaway agent directory and asserting on text, never on an exit code:
+- **Manual load check**, run against a throwaway copy of the committed tree and asserting on text, never on an exit code:
 
-  Prerequisites (measured environment): Node 26.8.1, npm 11.19.0, Pi 1.5.2 on PATH (`pi --version` must print `1.5.2`), `rg`. No `npm install` is needed for this check: Pi loads host packages from its own copies.
+  Prerequisites unchanged (Node 26.8.1, npm 11.19.0, Pi 1.5.2 via `pi --version`, `rg`). The check runs against a throwaway copy of the committed tree, never the live checkout, so it needs no clean-tree precondition and no revert; commit the stub edits first.
 
   ```
   D=$(mktemp -d)
-  printf '{"packages":[%s]}' "$(node -p 'JSON.stringify(process.argv[1])' "$PWD")" > "$D/settings.json"
+  git archive HEAD | tar -x -C "$D"
+  printf '{"packages":[%s]}' "$(node -p 'JSON.stringify(process.argv[1])' "$D")" > "$D/settings.json"
   PI_CODING_AGENT_DIR="$D" pi --no-session --help > "$D/out.txt" 2>&1
   head -1 "$D/out.txt"
   rg -c 'Failed to load extension|Host-provided extension packages' "$D/out.txt"
   ```
 
-  Pass rule, all three: (1) `head -1` prints Pi's usage header, `pi - AI coding assistant …` (proof Pi ran; a missing or failing `pi` prints something else or nothing); (2) `rg -c` prints nothing and exits 1 (no match); (3) both negative controls below print a count of 1. Any other output is a failure. `$D` is removed after the controls (`rm -rf "$D"`), not before.
+  (`$D` is both the package root Pi loads and the throwaway agent directory; Pi reads only `settings.json` from the agent directory and only `package.json` and `pi.extensions` from the package, so sharing one directory is safe.)
 
-  Discovery is proven by two negative controls, run after the positive run, each on a clean tree (`git status --short` empty) and each reverted with `git checkout -- <file>` before the next step, whether or not it passed:
+  Pass rule unchanged, all three: usage header printed; `rg -c` prints nothing and exits 1; both controls print `1`. In detail: (1) `head -1` prints Pi's usage header, `pi - AI coding assistant …` (proof Pi ran; a missing or failing `pi` prints something else or nothing); (2) `rg -c` prints nothing and exits 1 (no match); (3) both negative controls below print a count of 1. Any other output is a failure.
 
-  - Control A (load error): in `src/infra/pi-event-handlers/session-tree.ts`, replace the body line `_pi.on("session_tree", () => {});` with `throw new Error("Not implemented: registerSessionTreeHandler");`. Re-run the `pi` line and `rg -c 'Failed to load extension' "$D/out.txt"` → prints `1`. Revert: `git checkout -- src/infra/pi-event-handlers/session-tree.ts`.
-  - Control B (dependency placement): add `"dependencies": { "@earendil-works/pi-coding-agent": "*" }` to `package.json`, leaving `peerDependencies` and `devDependencies` as they are. Do not run `npm install`: Pi reads the manifest's `dependencies` object directly at load, so the lockfile and `node_modules/` are untouched. Re-run the `pi` line and `rg -c 'Host-provided extension packages' "$D/out.txt"` → prints `1`. Revert: `git checkout -- package.json`.
+  Discovery is proven by two negative controls, run after the positive run, each inside `$D` and each undone by re-extracting the archive before the next step, whether or not it passed:
 
-  After both: `git status --short` is empty, then `rm -rf "$D"`. Record `pi --version` with the result.
+  - Control A (load error): in `$D/src/infra/pi-event-handlers/session-tree.ts` replace `_pi.on("session_tree", () => {});` with `throw new Error("Not implemented: registerSessionTreeHandler");`, re-run the `pi` line, `rg -c 'Failed to load extension' "$D/out.txt"` → `1`. Undo by re-extracting: `git archive HEAD | tar -x -C "$D"`.
+  - Control B (dependency placement): in `$D/package.json` add `"dependencies": { "@earendil-works/pi-coding-agent": "*" }`; no `npm install` (Pi reads the manifest's `dependencies` object directly at load, so the lockfile and `node_modules/` are untouched); re-run the `pi` line, `rg -c 'Host-provided extension packages' "$D/out.txt"` → `1`. Undo by re-extracting as above.
+
+  Cleanup: `rm -rf "$D"`. The live checkout is never read by Pi and never modified. Record `pi --version` with the result.
 - **Domain guard:** `tests/domain/archived-output.test.ts` as specified in the test table. `test` and `expect` are imported from `vitest` (no globals, Decision 7). It is shown to catch a mistake once, by the `>=` → `>` scratch mutation, then the mutation is reverted.
 
 **Alternatives weighed.** Relying on the `--help` exit code — measured 0 whether or not an extension failed to load, so it cannot fail (R6). Passing `-ne` on the packages route — `-ne` disables configured packages, and with it a throwing stub produced no error at all, which makes the command vacuous; that is why the readiness review's literal `pi -ne --help` form is rejected (R6). A non-interactive run (`--mode json`) — exits 1 on load failure but costs a model call (R6). Relying on `tsc` for the event names — it accepts `session_before_tree`, a real Pi event, so it cannot catch a wrong registration (R6). Treating the in-repo guard as the production mechanism — it is a test; the entry still calls `.on` and nothing else (R6).
@@ -228,7 +233,7 @@ This makes the development-checks invariant true as written — the test command
 
 **Alternatives weighed.** Config-free `vitest run` — passes today only because neither proof-of-concept filename contains a `.test.` segment, so a stray root `*.test.ts` would join the suite (F5; R10). `vitest run tests` with no config file — works, but leaves the invariant unstated in a file (CAT-1; R10). Copying Pi's package config, including `globals: true` — tests written against bare `describe` would then fail `tsc --noEmit` under `types: ["node"]`, so the tests import from `vitest` explicitly (CR-9; R7).
 
-### 8. `package.json` verbatim
+### 8. `package.json` content fixed
 
 ```json
 {
@@ -309,7 +314,7 @@ The proof-of-concept exclusion is carried by `include`, not by `exclude`: `jev-c
 
 **Alternatives weighed.** Adding `target`, `lib` or `verbatimModuleSyntax` — each is a value no ruling or measurement supplies, and the measured zero-error run did not have them. Adding the root PoC to `exclude` explicitly — redundant with `include`. `bundler` module resolution like `pi-omlx` — this package runs under Node's ESM rules with `.js` specifiers, and `nodenext` is what measured green (D6; Trap 2).
 
-### 11. `.gitignore` verbatim
+### 11. `.gitignore` content fixed
 
 ```
 node_modules/
@@ -336,10 +341,10 @@ C5 left one wording open: whether the test requirement should read "no live mode
 ## Risks / Trade-offs
 
 1. **A new top-level source directory is silently unlinted.** Someone adds `scripts/…` later; `biome check .` skips it and no scenario notices. → The six `files.includes` entries are written in this document and in the development-checks lint requirement, and the "A new source file is inside the scope" scenario keeps `src/` and `tests/` covered without an edit; a new top-level root is a one-line config change with a spec-visible reason.
-2. **The settings entry is active while the checkout is behind this change.** Every Pi session in every project prints `Failed to load extension … Not implemented: registerSessionStartHandler`; interactive sessions continue, but `--print` and `--mode json` runs exit 1. → Migration Plan steps 3–4: remove the entry before reverting or checking out an earlier commit.
+2. **The settings entry is active while the checkout is behind this change.** Every Pi session in every project prints `Failed to load extension … Not implemented: registerSessionStartHandler`; interactive sessions continue, but `--print` and `--mode json` runs exit 1. → Migration Plan steps 3–4: remove the entry before reverting or checking out an earlier commit. The manual check never loads the live checkout (Decision 6 runs against a `git archive` copy), so re-running it after step 2 cannot trip this.
 3. **`pi --help` exits 0 on a failed load.** A green exit code could be read as a good load. → The manual check asserts on stderr text, and the in-repo guard turns red inside `npm run check` (Decision 6). The manual check requires Pi's usage header as positive proof that Pi ran, because a filtered pipeline is silent on a missing command too.
 4. **A handler registers a valid-but-wrong event name.** `session_before_tree` exists in Pi 1.5.2's types, so `tsc` passes while Pi never invokes the handler. → The entry test compares the sorted list against exactly seven names, and was measured red on that exact substitution (R6).
-5. **The format pass hides a behavior change.** Whitespace and stub edits land together; review can no longer see the second. → Format commit first, its diff reviewed as whitespace-only, handler edits second (Decision 3); the ordering is a task sequence, not a migration step.
+5. **The format pass hides a behavior change.** Whitespace and stub edits land together; review can no longer see the second. → Format pass over the whole allowlist first (Decision 3), its `src/` diff reviewed as whitespace-only and the root configs reviewed against their blocks by content; handler edits second. The ordering is a task sequence, not a migration step.
 6. **The format pass shifts line-level blame on four files.** `git blame` attributes their parameter lists to this change. → Accepted: four files, all parameter-list collapses, with `.git-blame-ignore-revs` recorded as an open, unadopted option (Decision 12).
 7. **A revert leaves build leftovers on disk.** After a revert, `.gitignore`'s `node_modules/` entry is gone with it, so `node_modules/` and `package-lock.json` show as untracked. → Migration Plan step 5: delete both by hand.
 8. **`npm pack` fails on a version-less manifest.** A later attempt to pack prints "Invalid package, must have name and version". → Accepted and named: packing and publishing belong to the publishing card, which writes real metadata (Decision 9); `pi install` loads a local checkout without publishing (Chidi §1).
