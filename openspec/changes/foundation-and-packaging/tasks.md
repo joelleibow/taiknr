@@ -61,19 +61,19 @@ The order is the design's: root tooling first, then the one-time format pass as 
 
 - [ ] 2.1 Run `npx biome check --write .` — scoped by `files.includes` to `src/**`, `tests/**` and the four root config files — and read the diff as whitespace alone (Decision 3).
   - Failing behavioral test: none — formatter output only, and no behaviour changes; boundary cases: none. The guard is that the pass is whitespace alone, which the diff check below proves.
-  - Verified: `git show --stat` after committing lists exactly seven paths — `src/infra/adapters/pi-archive-adapter.ts`, `src/infra/adapters/pi-jev-scorer-adapter.ts`, `src/infra/pi-event-handlers/tool-call.ts`, `src/use-cases/commit-archived-batch.ts`, `biome.json`, `package.json`, `tsconfig.json` (the seven-file count is `michael-resolve-s3-r1.json` critic-r1-1's measurement). Whitespace-only proof, binding: for each of the four `src/` paths the file at `HEAD~1` and at `HEAD` are identical once spaces, tabs, newlines and commas are removed —
+  - Verified: run immediately after `npx biome check --write .` and before the commit. Whitespace-only proof, binding: for each of the four `src/` paths the committed file at `HEAD` and the working-tree file are identical once spaces, tabs, newlines and commas are removed —
 
 ```
 for f in src/infra/adapters/pi-archive-adapter.ts src/infra/adapters/pi-jev-scorer-adapter.ts src/infra/pi-event-handlers/tool-call.ts src/use-cases/commit-archived-batch.ts; do
-	[ "$(git show HEAD~1:$f | tr -d ' \t\n,')" = "$(git show HEAD:$f | tr -d ' \t\n,')" ] && echo "whitespace-only: $f" || echo "CONTENT CHANGED: $f"
+	[ "$(git show HEAD:$f | tr -d ' \t\n,')" = "$(tr -d ' \t\n,' < "$f")" ] && echo "whitespace-only: $f" || echo "CONTENT CHANGED: $f"
 done
 ```
 
-prints `whitespace-only` four times and `CONTENT CHANGED` never. The pass joins parameter and import lists onto one line and drops their trailing commas, so `git show -w` is not empty for these files and is not the oracle (measured: 21 changed lines remain under `-w`); read the diff with `git show --word-diff=plain -- src/` to see the joins. Secondary: `npm run typecheck` exits 0. `npx biome check .` afterwards reports "No fixes applied" and zero errors, and `npm run typecheck` still exits 0.
+prints `whitespace-only` four times and `CONTENT CHANGED` never. The comparison is order-independent, since the left side is the committed `HEAD` file and the right side the working tree, so it measures the same thing before and after the commit. The pass joins parameter and import lists onto one line and drops their trailing commas, so `git show -w` is not empty for these files and is not the oracle (measured: 21 changed lines remain under `-w`); read the diff with `git show --word-diff=plain -- src/` to see the joins. Secondary: `npm run typecheck` exits 0. `npx biome check .` afterwards reports "No fixes applied" and zero errors, and `npm run typecheck` still exits 0.
 
 - [ ] 2.2 Commit the pass by itself, with no other change staged, so a reviewer can read the whitespace apart from the stub edits (Decision 3; Risks 5).
   - Failing behavioral test: none — a commit step; boundary cases: none.
-  - Verified: `git show --stat --oneline HEAD` names the seven paths above and nothing else; `git log --oneline -2` shows this commit sitting directly on 1.7's with no other change between them.
+  - Verified: `git show --stat --oneline HEAD` lists exactly seven paths — `src/infra/adapters/pi-archive-adapter.ts`, `src/infra/adapters/pi-jev-scorer-adapter.ts`, `src/infra/pi-event-handlers/tool-call.ts`, `src/use-cases/commit-archived-batch.ts`, `biome.json`, `package.json`, `tsconfig.json` — and nothing else (the seven-file count is `michael-resolve-s3-r1.json` critic-r1-1's measurement); `git log --oneline -2` shows this commit sitting directly on 1.7's with no other change between them.
 
 ## 3. The seven no-op registrations
 
