@@ -12,5 +12,5 @@ export function registerContextHandler(
 		recallCache: RecallCache;
 	},
 ): void {
-	throw new Error("Not implemented: registerContextHandler");
+	_pi.on("context", () => {});
 }
