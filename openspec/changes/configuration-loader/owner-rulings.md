@@ -63,3 +63,11 @@ Asked whether "closest settings file to the working directory" means only `<cwd>
 > "A"
 
 - **The project file is `<cwd>/<CONFIG_DIR_NAME>/pi-taiknr.json` only**, as Pi treats its own project `.pi/` configuration. No parent-directory search.
+
+## Council OD — announcing a valid "off" (2026-11-14)
+
+Answering the council's owner decision (`michael-council-rulings.json`, O7: should a valid `enabled: false` be announced at session start):
+
+> "I'm with Michael. A"
+
+- **O7 → (a), silent.** A valid config with `enabled: false` produces no output at session start. A rejected file stays loud.
