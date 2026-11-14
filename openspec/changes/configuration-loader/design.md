@@ -17,7 +17,7 @@ The pinned constraints are in `council.md` "Question and Scope"; the eighteen ru
 
 **Goals:**
 
-- Resolve taiknr's config from the agent file and the trusted project file at every `session_start`, layered field by field, validated with named rejections (`specs/configuration/spec.md`).
+- Resolve taiknr's config from the agent file and the trusted project file at every `session_start`, layered field by field, project over agent over defaults, validated with named rejections (`specs/configuration/spec.md`).
 - Leave the session inert — no staging, settlement, hydration, recall or classifier call — when a file is rejected or `enabled` is false, through one enforcement point every later card reuses.
 - Hand the session's resolved state to the turn-end and context handlers in place of the constant, without moving the other four registrars' contracts.
 - Leave one assignable seam for the deferred `/taiknr on|off` command: the holder's `setEnabled(boolean): boolean`.
@@ -183,7 +183,7 @@ The key stays required, so the caller has to state the trust decision; `undefine
 
 ### D4 — Validation by hand, in one per-field rule table, with one error class
 
-`loadTaiknrConfig` reads each path, strips a leading U+FEFF, parses, checks the root is a plain JSON object, then walks the *known-key list* over the parsed object — rejecting unknown keys and checking each field's rule — and finally layers the three sources field by field. The rules and their provenance:
+`loadTaiknrConfig` reads each path, strips a leading U+FEFF, parses, checks the root is a plain JSON object, then walks the *known-key list* over the parsed object — rejecting unknown keys and checking each field's rule — and finally layers the three sources field by field in this order: the built-in default, overlaid by the agent file's value, overlaid by the trusted project file's value — for each field the project file wins when it sets one, otherwise the agent file, otherwise the default (owner-rulings "Orientation Q1b and Q2"). Example: agent file `{"enabled": true, "decisionThreshold": 0.9}`, trusted project file `{"enabled": false}` → resolved `enabled: false`, `decisionThreshold: 0.9`, defaults elsewhere. The rules and their provenance:
 
 | Field | Rule | Source of the value |
 |---|---|---|
@@ -203,7 +203,7 @@ The session-start handler's body is four steps, in this order:
 
 1. Build `agentConfigPath = join(getAgentDir(), CONFIG_FILE_NAME)` and `projectConfigPath = ctx.isProjectTrusted() ? join(ctx.cwd, CONFIG_DIR_NAME, CONFIG_FILE_NAME) : undefined`.
 2. Call `loadTaiknrConfig({ agentConfigPath, projectConfigPath })` inside try/catch.
-3. `session.assign(...)` — `{ status: "ready", config }` on success, `{ status: "rejected", error }` on a `TaiknrConfigError`.
+3. `session.assign(...)` — `{ status: "ready", config }` on success, `{ status: "rejected", error }` on a `TaiknrConfigError`. The loader converts every `fs` and parse failure into a `TaiknrConfigError`, so this branch is the only error branch. Should anything else escape (a defect), it propagates unassigned and the holder stays `unresolved`, which is inert.
 4. Rethrow on rejection. Then the hydration slot a later card fills, only when `session.isActive()`.
 
 There is no `ctx.ui.notify`, and nothing else is emitted. The message is `<absolute file path>: <field>: <reason>`, or `<absolute file path>: <reason>` when `field` is undefined, ending with `fix the file, then run /reload or start a new session`. The host already prefixes the extension path, so the message carries no `pi-taiknr:` prefix. (Ruling 5; CR-7; CB-2; R10; CC-1.)
@@ -212,7 +212,7 @@ There is no `ctx.ui.notify`, and nothing else is emitted. The message is `<absol
 
 ### D6 — Read errors are classified before "absent" is concluded
 
-The loader attempts the read and catches. `ENOENT` is not immediately absent: it runs `lstatSync` on the path. If `lstat` also fails with `ENOENT` the file is absent and silent; if the read failed `ENOTDIR` — `<cwd>/<CONFIG_DIR_NAME>` is not a directory — the file is absent too; if `lstat` succeeds the entry exists and is unreadable, so it is a rejection. `EISDIR`, `EACCES` and every other read failure are rejections naming the file with no field and the errno in the reason. (Ruling 8; CR-5; R3; CC-4.)
+The loader attempts the read and catches. `ENOENT` is not immediately absent: it runs `lstatSync` on the path. If `lstat` also fails with `ENOENT` the file is absent and silent; if the read failed `ENOTDIR` — `<cwd>/<CONFIG_DIR_NAME>` is not a directory — the file is absent too; if `lstat` succeeds the entry exists and is unreadable, so it is a rejection. If `lstat` fails with anything other than `ENOENT`, that is also a rejection naming the file with no field and the `lstat` errno in the reason (`cannot be read: <errno>`). Only the two outcomes `ENOENT`/`ENOENT` and read `ENOTDIR` are absent; every other combination is a `TaiknrConfigError`, so the loader never lets a raw `fs` error escape. `EISDIR`, `EACCES` and every other read failure are rejections naming the file with no field and the errno in the reason. (Ruling 8; CR-5; R3; CC-4.)
 
 *Alternatives weighed.* `existsSync` then `readFileSync`: it cannot tell a missing file from a dangling symlink, and it races a deletion (R3). Treating every read error as absent: it silently runs the defaults over a file the user put in place, which is the case Joel's Q1(b) exists to prevent.
 
