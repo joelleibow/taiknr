@@ -1,0 +1,45 @@
+{
+  "round_status": "clean",
+  "resolutions": [
+    {
+      "finding_id": "critic-r2-1",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/design.md — Decision 3 (line 174, last two sentences)",
+      "rationale": "Minor and correct as a reading risk: Decision 3's 'run once' and 'no permanent writer script' are about the committed scripts and the one whitespace commit, not a prohibition on running `biome check --write` while writing a new file. Files written after the pass (the two tests, the seven stub edits) are on the allowlist and must be committed in Biome's style; my end-to-end run passed because they were. Nothing here is a design choice left to Derek — `npm run check` tells him — but the clause removes the misreading. Recorded; if Bambadjan folds it in: after 'No `format` or `lint:fix` script is added' insert 'Files written after the pass — the two tests and the seven stub edits — are committed in Biome's style; running `npx biome check --write <file>` on a file while writing it is part of writing it, not a script and not a second pass.'",
+      "evidence": "design.md:174; michael-resolve-s3-r1.json critic-r1-2 evidence: with tab-indented tests written after the pass, `npm run check` → 'Checked 26 files, No fixes applied', exit 0.",
+      "required_change": ""
+    },
+    {
+      "finding_id": "critic-r2-2",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/design.md — Decision 3 (line 174, 'the four root files are new in that commit'); proposal.md:43 ('writes every configuration file verbatim')",
+      "rationale": "Minor and correct, and the 'four root files' sentence is my own wording from critic-r1-1's required change. Six root files are written before the pass (`package.json`, `package-lock.json`, `tsconfig.json`, `biome.json`, `vitest.config.ts`, `.gitignore`); four are on the allowlist; which commit they land in is a tasks.md sequencing matter (Stage 5), and the design should not assert a count that depends on it. The seven-file claim's source is michael-resolve-s3-r1.json critic-r1-1. Recorded; corrections: Decision 3 → 'the root files written before the pass are new in that commit or the one before it (tasks decide); the four on the allowlist are reviewed against their Decision blocks by content, the lockfile against Decision 5, and the seven-file count is michael-resolve-s3-r1.json critic-r1-1's measurement'. proposal.md:43 → 'The design fixes the content of every configuration file.'",
+      "evidence": "design.md:47–58 root table lists six files; design.md:174; proposal.md:43; michael-resolve-s3-r1.json critic-r1-1 evidence 'Checked 24 files. Fixed 7 files.'",
+      "required_change": ""
+    },
+    {
+      "finding_id": "critic-r2-3",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/design.md — Decision 6 command block (lines 198–204) and 'The live checkout is never read by Pi' (line 215)",
+      "rationale": "Minor and correct: the block runs `pi` with the live checkout as cwd, and Pi treats cwd as the project directory (project `.pi/` is an auto-discovery root for trusted projects, Chidi §4). Today the live `.pi/` holds only `marbleization/` and `tasks/` (no `extensions/`, no `settings.json`), so the claim holds by circumstance. Measured the fix: running Pi from inside the copy (`cd \"$D\"`) with `PI_CODING_AGENT_DIR=\"$D\"` passes identically (usage header printed, no match), and the copy has no `.pi/` because it is excluded locally. I also settled the critic's two unverified assumptions: bsdtar 3.5.3 re-extraction overwrites the control-modified file and keeps `settings.json`/`out.txt`; after undo, Pi loads clean again (no stale transpile cache — `loader.js` creates jiti with `moduleCache: false`, Chidi §2). Recorded; the corrections: add `cd \"$D\"` after the `tar` line, write `out.txt` relative, use `git -C <repo> archive HEAD | tar -x -C \"$D\"` for the undo, and reword line 215 to 'Pi loads the package only from the copy, and its project directory is the copy; the live checkout is never modified.'",
+      "evidence": "Live `ls -a .pi/` → marbleization, tasks only. Temp copy (removed): `(cd \"$D\" && PI_CODING_AGENT_DIR=\"$D\" pi --no-session --help > out.txt 2>&1)` → header 'pi - AI coding assistant …', `rg -c` no match exit 1. Control A → 1; `git archive HEAD | tar -x -C \"$D\"` → session-tree.ts restored (`rg -c '_pi.on(\"session_tree\"'` = 1), settings.json and out.txt present; re-run → no match. `tar --version` bsdtar 3.5.3.",
+      "required_change": ""
+    },
+    {
+      "finding_id": "structural-r2-1",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/proposal.md — 'What Changes' bullet 7 (line 15)",
+      "rationale": "Minor and correct: proposal.md:15 still describes the superseded `src/`-scoped pass and 'reflows four files', which the critic-r1-1 fix widened in design.md Decision 3 to `biome check --write .` over the allowlist, rewriting seven files. Two homes for one fact, one stale. Recorded; the correction is to point at the design: 'Run a one-time Biome format pass over the `files.includes` allowlist before any handler edit (design.md Decision 3), so `npm run check` is green on the code as committed.' Same pass as critic-r2-2's proposal.md:43 wording.",
+      "evidence": "proposal.md:15 'over `src/` … reflows four files'; design.md:174 '`npx biome check --write .` … rewrites exactly seven files'.",
+      "required_change": ""
+    }
+  ],
+  "settled_findings": [
+    "critic-r2-1 (minor): post-pass files are committed in Biome's style; `--write` on a file while writing it is not a second pass or a script. Wording recorded.",
+    "critic-r2-2 (minor): six root files are written before the pass, four on the allowlist; the seven-file count's source is michael-resolve-s3-r1.json critic-r1-1; proposal.md:43 'verbatim' → 'content fixed'. Wording recorded.",
+    "critic-r2-3 (minor): run Pi from inside the copy (`cd \"$D\"`); measured identical pass. Also measured: bsdtar re-extraction restores the control-modified file and keeps settings.json/out.txt; Pi reloads clean after undo (jiti moduleCache false). Wording recorded.",
+    "structural-r2-1 (minor): proposal.md:15 format-pass sentence points at design.md Decision 3 instead of restating a superseded scope. Wording recorded.",
+    "ROUND-2-TIDY: the four recorded wording corrections (design.md Decision 3 sentences; Decision 6 `cd \"$D\"` and line 215; proposal.md:15 and :43) plus the round-1 recorded minors (twenty src files; .gitignore row → Decision 11; Risks 7 / step 5 lockfile wording) can be applied in one non-blocking pass by Bambadjan; none changes a decision, config value or spec requirement, and no fresh round should re-open them."
+  ],
+  "owner_decisions": []
+}
