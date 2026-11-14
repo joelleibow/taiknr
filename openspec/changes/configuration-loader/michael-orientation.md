@@ -94,7 +94,7 @@ Skipped: no measurement of the typebox import under `tsc`/vitest with a peer ent
 
 Amends `michael-orientation.md` after Joel's two rulings of 2026-11-14 ("An on/off switch", "The /taiknr on|off command"). Only changed or new material below; everything not named stands. Measurements are source readings of Pi 1.5.2 (`loader.js`, `types.d.ts`, `docs/extensions.md`, `docs/packages.md`, `docs/settings.md`) plus the copy-based measurements already in the orientation; no file was edited and no model was called.
 
-## 1. Revised decision rows
+### 1. Revised decision rows
 
 | # | Decision | Where made | Kind |
 |---|---|---|---|
@@ -102,7 +102,7 @@ Amends `michael-orientation.md` after Joel's two rulings of 2026-11-14 ("An on/o
 | D10 (narrowed) | Out of scope: environment-variable overrides, UI status readouts, and the `/taiknr on|off` command, which goes to the **Status readout and /taiknr command** card. This change must leave a clean place for that command to flip `enabled`, and must not foreclose it. | `owner-rulings.md` "The /taiknr on|off command" (conductor's scope call on Joel's request); card "Out of scope"; `ARCHITECTURE.md` §9 | Joel's request, scoped by the conductor; nothing contradicts it |
 | D11 (new) | Joel wants the field even though the host already offers an uninstall-free disable: `pi config` writes `-path` exclusions into `packages`/`extensions` and "starts with personal configuration; press Tab to switch scope, or run `pi config --local`" (`docs/packages.md` L145; `docs/settings.md` L164). The host route needs a restart or `/reload` and cannot be flipped from inside a session; Joel's `/taiknr off` can. The design records this as the reason the field exists alongside the host mechanism. | Pi docs (measured); Joel's two rulings | Evidence + Joel's ruling |
 
-## 2. New traps (measured where it settles one)
+### 2. New traps (measured where it settles one)
 
 11. **"Off" cannot mean "not registered".** The entry test fixes exactly seven `pi.on` calls at factory time (measured red on an eighth or a missing one, orientation §2), and the factory has no `ctx`, so it cannot know `enabled` when it registers (Trap 1). The config is read at `session_start` (S4). Two mechanisms remain: (a) handlers stay registered and do nothing while `enabled` is false — one check at one seam; (b) the session-start handler calls the disposers `pi.on` returns (`types.d.ts` L1231 `(): () => void`; `loader.js` L219–231 splices the handler out of `extension.handlers`) and re-registers on `on` — measured possible (`assertActive()` only forbids a discarded extension) but it moves the seven-registration invariant to session time, breaks the entry test's premise that registration is factory-only, and makes a later `/taiknr on` re-register handlers mid-session. (a) is the one that keeps D6 intact; see S10.
 12. **Nothing observable turns off in this change.** All seven handlers are no-ops at HEAD, so an `enabled` check in front of them is a check before nothing. The "consumer for every new field" bar is met here by the loader (parse, default, validate) and the per-session holder exposing `enabled` at the seam; the behavioural consumer is each later card's handler. The design must name that seam once, not sprinkle seven `if (!config.enabled) return` lines into no-ops, and the tests assert the field's load/validation/default and the holder's value, not invented behaviour.
@@ -111,7 +111,7 @@ Amends `michael-orientation.md` after Joel's two rulings of 2026-11-14 ("An on/o
 15. **`"enabled": false` in a project file is a per-project off switch,** and under field-merge (Q2a) it composes with an agent-level `true` without restating anything else. Under whole-document (Q2b) a project file that only says `{"enabled": false}` would also reset the other four fields to defaults. This is a concrete consequence to put in front of Joel with Q2; it does not change my pick (a).
 16. **Validation of the new field is one row:** a JSON boolean; `"false"` (string), `0`, `null` are invalid (Trap 7's typed-key rule). Default `true` (Joel's own suggestion; the only default under which a missing file keeps today's behaviour).
 
-## 3. New questions only Joel can answer
+### 3. New questions only Joel can answer
 
 **Q3 — What does "off" stop?** (product behaviour; defines the field's semantics now, even though the handlers that honour it land with later cards)
 Source: Joel's words "turn taiknr on and off"; ADR 0002 mechanisms 1–3 (archive at settlement, hydrate the side store, recall at `context`); the fact that already-settled stubs are `context_edit` entries that no later run rewrites (ADR 0002 "More difficult").
@@ -122,7 +122,7 @@ Source: Joel's words "turn taiknr on and off"; ADR 0002 mechanisms 1–3 (archiv
 
 Nothing else new is his. The field's default, its validation, the no-watcher rule and the registration mechanism are settled below; which file the command writes belongs to the Status card's orientation (Trap 14 records what it will find).
 
-## 4. Settled vs open (additions only)
+### 4. Settled vs open (additions only)
 
 **Now settled:**
 - **S10 Mechanism of "off".** All seven handlers stay registered at factory time; the per-session holder (O1) carries `enabled`; "off" is the registered handlers doing nothing (Trap 11a). Disposer-based unregistration (11b) is rejected: it revises D6's seven-registration invariant for no gain.
