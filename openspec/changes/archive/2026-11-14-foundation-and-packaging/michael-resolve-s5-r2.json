@@ -1,0 +1,51 @@
+{
+  "round_status": "needs_fixes",
+  "resolutions": [
+    {
+      "finding_id": "readiness-r2-1",
+      "disposition": "propose_fix",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 2.1 Verified (the `git show -w --stat -- src/` clause)",
+      "rationale": "Valid, and measured. `--stat` suppresses the patch, so 'no hunk' is true of any diff; and `-w` cannot absorb the 120-width pass, which joins lines and drops trailing commas — measured: `git show -w --format= -- src/` on the format commit still shows 21 changed lines across the four files, so structural-r2-1's remedy (`git show -w -- src/`) is also not an oracle. The strip comparison the readiness lens proposed is: for each of the four files, `HEAD~1` and `HEAD` are identical after deleting spaces, tabs, newlines and commas (measured true for all four), and it catches a token change (measured: renaming `_argsByCallId` → `_argsByCallID` makes it differ). That comparison is the binding guard; `npm run typecheck` is secondary.",
+      "evidence": "Temp copy (removed): `biome check --write .` then commit; `git show --stat` listed the four src files with +/- counts; `git show -w --format= -- src/ | rg -c '^[-+][^-+]'` → 21; with `--ignore-blank-lines` → 21. For each src path: `[ \"$(git show HEAD~1:$f | tr -d ' \\t\\n,')\" = \"$(git show HEAD:$f | tr -d ' \\t\\n,')\" ]` → true ×4; negative control (one identifier changed) → false. `git show --word-diff=plain` shows the line joins and the dropped trailing commas.",
+      "required_change": "In 2.1 Verified, replace the sentence '`git show -w --stat -- src/` produces no hunk for the four `src/` files, so their change is whitespace alone (parameter-list and import-list collapses).' with:\n\n'Whitespace-only proof, binding: for each of the four `src/` paths the file at `HEAD~1` and at `HEAD` are identical once spaces, tabs, newlines and commas are removed —\n\n```\nfor f in src/infra/adapters/pi-archive-adapter.ts src/infra/adapters/pi-jev-scorer-adapter.ts src/infra/pi-event-handlers/tool-call.ts src/use-cases/commit-archived-batch.ts; do\n\t[ \"$(git show HEAD~1:$f | tr -d ' \\t\\n,')\" = \"$(git show HEAD:$f | tr -d ' \\t\\n,')\" ] && echo \"whitespace-only: $f\" || echo \"CONTENT CHANGED: $f\"\ndone\n```\n\nprints `whitespace-only` four times and `CONTENT CHANGED` never. The pass joins parameter and import lists onto one line and drops their trailing commas, so `git show -w` is not empty for these files and is not the oracle (measured: 21 changed lines remain under `-w`); read the diff with `git show --word-diff=plain -- src/` to see the joins. Secondary: `npm run typecheck` exits 0.'"
+    },
+    {
+      "finding_id": "readiness-r2-2",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 5.1 Verified (append)",
+      "rationale": "Minor and correct: extension-packaging 'No competing entry point' and 'Boundary holds' have no checking task; both are one-line greps. Recorded wording for 5.1 Verified: 'Two extension-packaging scenarios: `rg -c \"@earendil-works/pi-\" src/domain src/use-cases` prints nothing and exits 1 (\"Boundary holds\", D3), and `ls index.ts extensions` reports both missing (\"No competing entry point\").' Measured at HEAD: `rg` over src/domain and src/use-cases finds no Pi import (orientation D3); no root `index.ts` or `extensions/` exists.",
+      "evidence": "specs/extension-packaging/spec.md scenarios 'No competing entry point' and 'Boundary holds'; tasks.md 4.1 greps only the test file; michael-orientation.md §1 D3 measurement.",
+      "required_change": ""
+    },
+    {
+      "finding_id": "readiness-r2-3",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — §6 intro and tasks 6.2/6.3 ('re-run the `pi` line'), 6.1 prerequisites",
+      "rationale": "Minor and correct: §6 assumes one persistent shell for `R`/`D` and abbreviates the rerun. Recorded wording: §6 intro adds 'Run 6.1–6.4 in a single shell session so `R` and `D` persist; if any prerequisite version differs from the measured one, stop and report rather than proceed.' In 6.2 and 6.3 replace 're-run the `pi` line' with the full command `cd \"$D\" && PI_CODING_AGENT_DIR=\"$D\" pi --no-session --help > out.txt 2>&1`.",
+      "evidence": "tasks.md §6 lines 148–180; `tar -x -C \"\"` with an unset `D` targets the current directory (shell semantics).",
+      "required_change": ""
+    },
+    {
+      "finding_id": "structural-r2-1",
+      "disposition": "propose_fix",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 2.1 Verified",
+      "rationale": "Valid on the defect (the `--stat` oracle is vacuous), deduplicated with readiness-r2-1; but the proposed remedy `git show -w -- src/` is measured insufficient — the pass joins lines and drops trailing commas, leaving 21 changed lines under `-w`. Apply readiness-r2-1's strip comparison instead.",
+      "evidence": "See readiness-r2-1: `git show -w --format= -- src/ | rg -c '^[-+][^-+]'` → 21 on the measured format commit.",
+      "required_change": "Apply readiness-r2-1's required change; do not substitute `git show -w -- src/`."
+    },
+    {
+      "finding_id": "structural-r2-2",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 1.6 Failing clause (line 53)",
+      "rationale": "Minor and correct: the include is first exercised in 3.1 and the not-collected boundary is observed in 4.3; 4.2 is the mutation step. Recorded wording: '…its behaviour is verified in 3.1 when the first test file exists… Boundary cases: a test outside `tests/` must not be collected, checked in 4.3.'",
+      "evidence": "tasks.md:53 vs 3.1 (first test file) and 4.3 (collected file set).",
+      "required_change": ""
+    }
+  ],
+  "settled_findings": [
+    "WHITESPACE-ORACLE: `git show -w` is not empty for the 120-width pass (line joins + dropped trailing commas; 21 changed lines measured). The binding whitespace-only proof is the per-file strip comparison (`tr -d ' \\t\\n,'` of HEAD~1 vs HEAD), measured true for the four files and false on a one-identifier change. Fresh rounds should not propose `-w` or `--ignore-blank-lines` forms.",
+    "codebase-r2: no findings; codebase lens completed and re-verified every current-state citation against HEAD.",
+    "S5-R2-TIDY (minor wording, apply in the same pass as 2.1's fix): 5.1 adds the 'Boundary holds' and 'No competing entry point' greps (readiness-r2-2); §6 single-shell sentence, full rerun command, prerequisite-mismatch stop rule (readiness-r2-3); 1.6 pointers → 3.1 and 4.3 (structural-r2-2). None changes a decision or config value."
+  ],
+  "owner_decisions": []
+}

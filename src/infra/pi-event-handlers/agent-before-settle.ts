@@ -10,5 +10,5 @@ export function registerAgentBeforeSettleHandler(
 		originalContentByEntryId: Map<string, unknown[]>;
 	},
 ): void {
-	throw new Error("Not implemented: registerAgentBeforeSettleHandler");
+	_pi.on("agent_before_settle", () => {});
 }

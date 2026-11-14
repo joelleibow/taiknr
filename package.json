@@ -1,0 +1,25 @@
+{
+	"name": "pi-taiknr",
+	"type": "module",
+	"pi": {
+		"extensions": [
+			"./src/app/extension/taiknr.ts"
+		]
+	},
+	"scripts": {
+		"lint": "biome check .",
+		"typecheck": "tsc --noEmit",
+		"test": "vitest run",
+		"check": "npm run lint && npm run typecheck && npm run test"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.6.7",
+		"@earendil-works/pi-coding-agent": "^1.5.2",
+		"@types/node": "^22",
+		"typescript": "^7.0.2",
+		"vitest": "^5.1.0"
+	}
+}

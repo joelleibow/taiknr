@@ -1,0 +1,23 @@
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { expect, test } from "vitest";
+import taiknr from "../../../src/app/extension/taiknr.js";
+
+test("registers exactly the seven lifecycle events and touches nothing else", () => {
+	const events: string[] = [];
+	const fake = new Proxy({} as ExtensionAPI, {
+		get(_target, prop) {
+			if (prop === "on") return (event: string) => events.push(event);
+			throw new Error(`unexpected ExtensionAPI member: ${String(prop)}`);
+		},
+	});
+	taiknr(fake);
+	expect(events.sort()).toEqual([
+		"agent_before_settle",
+		"context",
+		"session_compact",
+		"session_start",
+		"session_tree",
+		"tool_call",
+		"turn_end",
+	]);
+});

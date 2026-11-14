@@ -1,0 +1,70 @@
+{
+  "verdict": "changes_requested",
+  "requirements": [
+    {
+      "requirement": "Judge-verify CRITICAL 1 — development-checks 'A fresh install leaves the working tree clean' / scenario 'Install does not dirty the tree'",
+      "evidence": "Reproduced in a `git archive HEAD` copy committed as a clean repo: `npm install` → ` M package-lock.json`, 3486 insertions / 3486 deletions, `git diff -w --stat` empty (whitespace only). Cause confirmed: committed lockfile is 2-space indented (line 2 begins with two spaces) while `package.json` is tab-indented since the format pass 74c8ae6; npm 11.19.0 writes the lockfile with `package.json`'s indent. `npm ci` leaves the tree clean (measured), so only `npm install` trips it. After regenerating the lockfile on the committed tree and committing, a further `npm install` leaves the tree clean (measured) and the lockfile is tab-indented. Task 1.7 ran the proof before the format pass changed `package.json`'s indent; no task re-ran it after 2.2. My implementation gate ran `npm ci`, not `npm install`, and so missed it.",
+      "status": "must_change"
+    },
+    {
+      "requirement": "Judge-verify evidence that ran (check chain, failure scenarios, load check with both controls, whitespace-only proof, commit shapes, config blocks)",
+      "evidence": "Consistent with my implementation gate's own re-runs on the same HEAD code commits (michael-implement-gate.json): `npm run check` exit 0, lint/type/test failures reproduced, strip comparison whitespace-only ×7, both negative controls count 1, Decision blocks equal by content. Not re-run a third time.",
+      "status": "met"
+    },
+    {
+      "requirement": "Judge-verify SUGGESTION 1 — docs commit 2712f09 adds AGENTS.md and ADR 0003 beyond the proposal's stated §8 correction",
+      "evidence": "Read 2712f09: ARCHITECTURE.md §1/§6/§8 rewritten; AGENTS.md and docs/adr/0003 added. Checked each claim against the code: six root files, versions (biome 2.6.7, tsc 7.0.2, vitest 5.1.0, pi 1.5.2 — match the lockfile), allowlist of six entries, read-only lint, `nodenext`, `tests/**/*.test.ts` include, no boundary rule, `_pi` names kept, `--help` exits 0 on a failed load, host-package warning on `dependencies`, no `version` → `npm pack` fails. All true against the tree and my measurements. Additive documentation; documentation never blocks (D2). One calibration slip, see findings.",
+      "status": "met"
+    },
+    {
+      "requirement": "Judge-PR-review 'Nice to have' 1 — PR description does not mention the ~50 workflow files under openspec/changes/foundation-and-packaging/",
+      "evidence": "Those files are the change's working record, committed throughout by the conductor (git log: research, proposal, council, reviews, resolutions, gate). Not a code or design defect; a PR-description sentence closes it. Documentation-only.",
+      "status": "met"
+    },
+    {
+      "requirement": "Judge-PR-review verdict 'Ship' — code checks (check chain, load check, manifest, configs, handlers, tests, docs vs code)",
+      "evidence": "Matches the implementation gate. The reviewer's load check symlinked `node_modules` and did not re-run the negative controls; both were covered by Judge-verify and by my gate, so nothing is left unverified between the two reports.",
+      "status": "met"
+    },
+    {
+      "requirement": "Docs commit 2712f09 against the code (brief's explicit ask)",
+      "evidence": "ARCHITECTURE.md §8 and AGENTS.md match `package.json`, `biome.json`, `tsconfig.json`, `vitest.config.ts` and the handler shape exactly (checked each named value). ADR 0003 'Context' says 'The sibling extensions and Pi's own root settle their work the same way: one tool for lint and format, the TypeScript compiler in no-emit mode, and vitest … with the lockfile committed' — true of pi-omlx and Pi's root, false of pi-jefferson (`node --test`, pnpm, `pnpm-lock.yaml`; Eleanor §2, my R4 evidence). Minor documentation calibration.",
+      "status": "met"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "major",
+      "location": "package-lock.json (committed at ef06173, 2-space indented) vs package.json (tab-indented since 74c8ae6); tasks.md 1.3/1.7/2.2 ordering; design.md Decision 5",
+      "finding": "One rule nobody wrote: npm writes `package-lock.json` with `package.json`'s indentation, so a lockfile generated before the format pass is rewritten by every later `npm install`. The development-checks requirement 'A fresh install leaves the working tree clean' is therefore unmet on HEAD (reproduced: ` M package-lock.json`, whitespace-only, 3486/3486). Task 1.7 proved the scenario on the pre-format tree, and the plan never re-proved it after 2.2, so the ticked record is true of the wrong tree. Nothing runtime breaks and `npm ci` is unaffected, so major, not blocking. Two routes, one cause: (Derek) regenerate the lockfile on the committed tree and commit it; (Bambadjan, plan gate) add the post-format clean-install proof to tasks.md and the one-sentence rule to Decision 5 so the record matches what was done and the trap cannot recur.",
+      "required_change": "Derek: on the committed tree run `npm install`, confirm `git diff -w --stat package-lock.json` is empty (whitespace only) and `git status --short` shows only ` M package-lock.json`, commit it alone as 'Regenerate the lockfile with package.json's indentation'; then prove the scenario — `npm install && git status --short` prints nothing — and `npm run check` exit 0; tick nothing new until Bambadjan's task exists. Bambadjan (through the readiness gate): tasks.md — add task 2.3 'Regenerate `package-lock.json` after the format pass: `npm install`, confirm the diff is whitespace-only (`git diff -w --stat package-lock.json` empty), commit it alone; Verified: `npm install && git status --short` prints nothing on the committed tree (development-checks \"Install does not dirty the tree\")', and move 1.7's clean-install sentence there, leaving 1.7 with the six-path commit check. design.md Decision 5 — append one sentence: 'npm writes the lockfile with `package.json`'s indentation, so the lockfile is regenerated after the format pass and the clean-install proof runs on the final committed tree.' No new mechanism, script or config value.",
+      "required_change_ran": true
+    },
+    {
+      "severity": "minor",
+      "location": "docs/adr/0003-development-with-biome-tsc-and-vitest-under-npm.md — Context, 'The sibling extensions and Pi's own root settle their work the same way'",
+      "finding": "Overstated: pi-omlx and Pi's root use Biome + tsc + vitest under npm with a committed lockfile; pi-jefferson uses `node --test`, pnpm and `pnpm-lock.yaml` (Eleanor §2; R4 evidence). The decision stands on Joel's community ruling and the measured majority, not on unanimity.",
+      "required_change": "Docs pass: 'pi-omlx and Pi's own root settle their work the same way …' (or 'the Pi-ecosystem majority'). Documentation only.",
+      "required_change_ran": false
+    },
+    {
+      "severity": "minor",
+      "location": "PR #1 description (GitHub), per judge-pr-review 'Nice to have' 1 and judge-verify SUGGESTION 1",
+      "finding": "The description lists code and doc files but not the ~5,000 lines of change-record files under `openspec/changes/foundation-and-packaging/`, nor AGENTS.md and ADR 0003 as docs-pass additions.",
+      "required_change": "Conductor adds one sentence to the PR description: the `openspec/changes/foundation-and-packaging/` files are the change's working record and are meant to merge; AGENTS.md and ADR 0003 are the docs pass. Documentation only.",
+      "required_change_ran": false
+    }
+  ],
+  "later_gates": [
+    "Readiness gate re-run on the tasks.md/design.md correction (one task and one sentence); then Derek's lockfile commit is judged against the new task 2.3 at the implementation gate re-entry.",
+    "Validate re-run: `npm install && git status --short` empty on the final HEAD; `npm run check` exit 0.",
+    "Docs pass: ADR 0003 wording; PR description sentence.",
+    "Joel's post-gate settings entry (Q2(a)) remains outside the repository and unexercised."
+  ],
+  "not_covered": [
+    "Did not re-run the full check chain, the load check or the negative controls a third time; Judge-verify's and my implementation gate's independent runs on the same code commits agree.",
+    "Did not read the PR description on GitHub; the PR-description finding rests on the two Judge reports.",
+    "Did not run `test-jev-poc.mjs` or any model-calling command.",
+    "Judge-verify ran `npm install` in the live checkout and restored the lockfile with `git checkout --`; I confirmed the live tree is clean (`git status --short` shows only the two untracked judge reports) but did not audit that restoration further."
+  ]
+}

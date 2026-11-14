@@ -1,0 +1,76 @@
+{
+  "verdict": "approve",
+  "requirements": [
+    {
+      "requirement": "Contract adherence: every change maps to a task, nothing lands outside one, every task's deliverable is in the diff, every tick matches code",
+      "evidence": "`git diff --stat e5a6da8..HEAD`: 19 paths = the 8 Create + 10 Modify paths in tasks.md's File Boundary plus tasks.md itself; no other path. Per-commit stats match 1.7 (six paths), 2.2 (seven), 3.9 (eight), 4.4 (one), tick commit (tasks.md only). 31 ticks, 0 unticked; each tick's deliverable located in the tree. Decision 1/8/10 blocks compared by JSON content and key order to the committed biome.json/package.json/tsconfig.json → all equal. The single-tick-commit choice is inside the contract (the Verified clauses need exact path counts mid-run).",
+      "status": "met"
+    },
+    {
+      "requirement": "Decision 4 / 'Signatures unchanged': stub bodies replaced by `_pi.on(\"<event>\", () => {})`, `_pi` name kept, nothing else in the function changes",
+      "evidence": "`git show 515c3ef -- src` shows exactly seven -/+ line pairs, each a `throw new Error(\"Not implemented: …\")` → `_pi.on(\"<event>\", () => {});` with the mapping table's event; all seven signatures still name `_pi`; no other hunk.",
+      "status": "met"
+    },
+    {
+      "requirement": "Decision 3: one-time format pass is its own commit and whitespace-only",
+      "evidence": "Re-ran the strip comparison between ef06173 and 74c8ae6 for the four src files and the three root JSON files: `whitespace-only` ×7, `CONTENT CHANGED` never. 74c8ae6 touches exactly those seven paths and sits directly on ef06173.",
+      "status": "met"
+    },
+    {
+      "requirement": "Development-checks: `npm run check` green on the committed tree; chain fails at each layer; check never writes",
+      "evidence": "In a `git archive HEAD` copy: `npm ci` from the committed lockfile exit 0 with lockfile unchanged; `npm run check` → Biome 'Checked 26 files. No fixes applied.', tsc silent, vitest 2 files / 4 tests, exit 0. Lint-layer failure reproduced (a leading-tab→spaces edit → check exit 1). `rg -- '--write' package.json` empty. Resolved versions biome 2.6.7, typescript 7.0.2, vitest 5.1.0, pi-coding-agent 1.5.2 — the measured tree (REGISTRY-TODAY).",
+      "status": "met"
+    },
+    {
+      "requirement": "Tests prove something (Derek's bar): no mocking the thing under test, behavioral assertions, shown catching a mistake",
+      "evidence": "Entry test: a Proxy fake at the Pi boundary records `.on` and throws on any other member; asserts exact sorted seven-name list. Re-ran mutations: restored throw → red ('Not implemented: registerSessionTreeHandler'); `session_before_tree` (tsc exit 0, cannot catch it) → red. Domain test: three `test` blocks, one per boundary case; `>=`→`>` → 1 failed / 2 passed. Both tests import only `{ expect, test }` from vitest; no unused imports; no `describe`.",
+      "status": "met"
+    },
+    {
+      "requirement": "ADR 0001 / D3 boundary and extension-packaging scenarios 'Boundary holds', 'No competing entry point', ESM `.js` specifiers",
+      "evidence": "`rg -c '@earendil-works/pi-' src/domain src/use-cases` → nothing; no root `index.ts` or `extensions/`; all Pi imports in `src/` are `import type`; tests import through `.js` specifiers and vitest resolved them (4 tests green); the domain test file has no Pi import.",
+      "status": "met"
+    },
+    {
+      "requirement": "Extension-packaging 'Load check passes' and 'No duplicate-dependency warning' with both negative controls, in a throwaway `git archive` copy (Q2(a): Joel's settings untouched)",
+      "evidence": "Re-ran in a fresh `mktemp -d` copy as both package root and `PI_CODING_AGENT_DIR`: positive run printed Pi's usage header and matched neither diagnostic (rg exit 1); Control A (restored throw) → `Failed to load extension` count 1; Control B (`dependencies` entry, no install) → `Host-provided extension packages` count 1; re-extract undo → clean again. `pi --version` 1.5.2. Live checkout untouched (`git status --short` empty afterwards); `~/.pi/agent/settings.json` not in the diff.",
+      "status": "met"
+    },
+    {
+      "requirement": "Mechanical: suppression search, secrets/env files, Markdown in the diff",
+      "evidence": "`git diff e5a6da8..HEAD | rg` for `type: ignore|pyright: ignore|noqa|rubocop:disable|eslint-disable|@ts-ignore|@ts-expect-error|biome-ignore` → none. No `.env`/secret-like path in the diff. The only Markdown in the diff is tasks.md (the tick commit).",
+      "status": "met"
+    },
+    {
+      "requirement": "Decision 9: publishing metadata omitted; Decision 5: lockfile committed, not ignored; Decision 11: three-entry .gitignore",
+      "evidence": "package.json has no version/keywords/description/license/files/private/engines; package-lock.json is tracked (3488 lines in ef06173) and `.gitignore` is exactly `node_modules/`, `*.tgz`, `.DS_Store`.",
+      "status": "met"
+    },
+    {
+      "requirement": "Observability and errors (Derek's bar)",
+      "evidence": "Not applicable to this change by design: the handlers register no-ops and no use case runs; the design's load path is guarded by the entry test and the manual check rather than logging. Nothing to judge.",
+      "status": "met"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "minor",
+      "location": "ARCHITECTURE.md §8 (line 68) — 'Packaging, TypeScript configuration, and the test harness are queued…' and 'kept outside src/app/extension/ so Pi does not load tests as extensions'",
+      "finding": "Both sentences are now false: the tooling exists and the stated reason for a root `tests/` is wrong for a manifest-driven package (S8; Trap 7). Derek reported it correctly for Bambadjan's docs pass, and the diff rightly contains no Markdown edit. Documentation never blocks a feature (D2).",
+      "required_change": "Docs pass (Migration Plan step 6): rewrite §8 to name the five root files, the committed lockfile, the four scripts and the `files.includes` lint scope; state root `tests/` as convention; record the import-boundary lint as deferred (S7).",
+      "required_change_ran": false
+    }
+  ],
+  "later_gates": [
+    "Validate: Judge Gen's independent review and the verification report; this gate re-ran the checks but did not review Derek's process logs beyond his report.",
+    "Docs pass: ARCHITECTURE.md §8 correction (minor finding above).",
+    "Joel's post-gate step: adding `../../Projects/pi-taiknr` to `packages` in `~/.pi/agent/settings.json` (Q2(a)); the interactive-session behaviour with the live entry was by design not exercised here.",
+    "Future cards: `npm pack` fails on the version-less manifest until the publishing card writes `version` and `license: MIT` (Decision 9, accepted)."
+  ],
+  "not_covered": [
+    "Commit signatures: Derek reports `gpgsig` headers present; I did not verify signatures.",
+    "The npm `install-scripts` warnings for `@google/genai` and `protobufjs` Derek noted — transitive to pi-coding-agent, exit 0, not inspected further.",
+    "I did not run `test-jev-poc.mjs` or any model-calling command.",
+    "I re-ran the gate checks in a `git archive` copy (removed), not in the live checkout; Derek's reported outputs in the live checkout were taken as consistent with mine where they matched."
+  ]
+}

@@ -11,5 +11,5 @@ export function registerTurnEndHandler(
 		originalContentByEntryId: Map<string, unknown[]>;
 	},
 ): void {
-	throw new Error("Not implemented: registerTurnEndHandler");
+	_pi.on("turn_end", () => {});
 }
