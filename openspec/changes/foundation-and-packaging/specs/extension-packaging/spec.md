@@ -8,12 +8,12 @@ Defines how the taiknr package is shaped and declared so Pi loads it as a local 
 
 ### Requirement: Package manifest declares a single extension entry point
 
-`package.json` SHALL declare the extension entry under `pi.extensions` as `./src/app/extension/taiknr.ts`. The package root SHALL NOT gain an `index.ts` or an `extensions/` directory, because either would change which files Pi's fallback discovery considers (Chidi §1, §4; Michael §2).
+`package.json` SHALL declare the extension entry under `pi.extensions` as `./src/app/extension/taiknr.ts`. The package root SHALL NOT gain an `index.ts` or an `extensions/` directory. When a manifest carries any resource field, Pi uses only the entries it names and does not scan the conventional resource directories, so the single named entry is what Pi loads (Chidi §1, §4; Michael §2; R11).
 
 #### Scenario: Manifest names the entry
 
-- **WHEN** Pi resolves the package's resources
-- **THEN** it loads only the entry named in `pi.extensions` and does not scan the conventional resource directories
+- **WHEN** `package.json` is inspected
+- **THEN** `pi.extensions` equals `["./src/app/extension/taiknr.ts"]`
 
 #### Scenario: No competing entry point
 
@@ -26,7 +26,7 @@ The package SHALL declare `@earendil-works/pi-coding-agent` in `peerDependencies
 
 #### Scenario: No duplicate-dependency warning
 
-- **WHEN** the package is loaded through a `packages` entry in a throwaway agent directory
+- **WHEN** the package is loaded through a `packages` entry in a throwaway agent directory, with no `-ne` flag, which would disable configured packages
 - **THEN** Pi prints no host-provided-package warning
 
 #### Scenario: Type-check resolves the Pi types
@@ -36,26 +36,26 @@ The package SHALL declare `@earendil-works/pi-coding-agent` in `peerDependencies
 
 ### Requirement: The extension entry loads without error
 
-The extension entry SHALL load under Pi 1.5.2 without throwing. Each of the seven handler registrars SHALL register a no-op handler for its lifecycle event instead of throwing, and SHALL register nothing else (Q1(a); Trap 1).
+The extension entry SHALL load under Pi 1.5.2 without throwing. Each of the seven handler registrars SHALL register a no-op handler for its lifecycle event instead of throwing, and SHALL register nothing else (Q1(a); Trap 1; R3).
 
 #### Scenario: Load check passes
 
-- **WHEN** `pi -ne -e <repo> --help` runs against the checkout
-- **THEN** no extension load error is reported
+- **WHEN** `pi --no-session --help` runs with `PI_CODING_AGENT_DIR` pointing at a throwaway agent directory whose `settings.json` lists the repository under `packages`
+- **THEN** stderr contains no `Failed to load extension` line and no host-provided-package warning. `--help` exits 0 whether or not an extension loaded, so the assertion is on the text, never on the exit code (R6)
 
 #### Scenario: Seven events registered
 
-- **WHEN** the entry's default export is invoked with Pi's extension API
-- **THEN** it registers handlers for `session_start`, `session_tree`, `session_compact`, `tool_call`, `turn_end`, `agent_before_settle` and `context`
+- **WHEN** `tests/app/extension/taiknr.test.ts` invokes the entry's default export with a recording fake whose only member is `on`
+- **THEN** the sorted list of registered event names equals exactly `session_start`, `session_tree`, `session_compact`, `tool_call`, `turn_end`, `agent_before_settle` and `context` (R6)
 
 ### Requirement: Handler signatures and the import boundary are preserved
 
-The change SHALL NOT alter the `register*Handler(pi, …)` signatures or the adapter and port contracts, and SHALL NOT introduce a `@earendil-works/pi-*` import into `src/domain/` or `src/use-cases/` (D3; Michael §2).
+The change SHALL NOT alter the `register*Handler(pi, …)` signatures or the adapter and port contracts, and SHALL NOT introduce a `@earendil-works/pi-*` import into `src/domain/` or `src/use-cases/` (D3; Michael §2). The one-time format pass MAY change formatter whitespace in those files (R3).
 
 #### Scenario: Signatures unchanged
 
 - **WHEN** the seven handler files are compared with `HEAD`
-- **THEN** only the stub bodies differ
+- **THEN** their exported function names, parameter order and types, and return types are unchanged; each file's stub body is replaced; and any remaining difference is formatter whitespace (R3)
 
 #### Scenario: Boundary holds
 
@@ -66,10 +66,10 @@ The change SHALL NOT alter the `register*Handler(pi, …)` signatures or the ada
 
 `package.json` SHALL set `"type": "module"`, and source imports SHALL keep `.js` specifiers on `.ts` files (D6; S1).
 
-#### Scenario: ESM resolution without a build step
+#### Scenario: Test runner resolution without a build step
 
 - **WHEN** a test imports a `src/` module through its `.js` specifier chain
-- **THEN** Node resolves the chain to the `.ts` sources without a build step
+- **THEN** the test runner resolves the chain to the `.ts` sources without a build step (R10)
 
 ### Requirement: Load verification uses a throwaway agent directory
 

@@ -266,9 +266,9 @@ The one knob no measurement could decide is `lineWidth`: it is Joel's, and R1 ha
 
 ## Owner Decisions Required
 
-### OD-1 — Biome `lineWidth`: 80 or 120 (pending)
+### OD-1 — Biome `lineWidth`: 80 or 120 (ruled)
 
-**Status: pending.** Michael marked this `joel`. The conductor brings it to Joel; when he rules, his words go into `owner-rulings.md` and this section will cite them.
+**Status: ruled — `lineWidth` 120.** Joel ruled after this council met: "i prefer 120" (`owner-rulings.md`, "Biome line width (2026-11-14)"). That entry records 120 as the one setting in `biome.json` that differs from the `biome init` 2.6.7 output, which is what R1 left open and everything else in `biome.json` settled regardless. Michael's recommendation of 120 (below) is what Joel took.
 
 **The choice.** `lineWidth` 80, which is the `biome init` default, or 120, which is what Pi and all four Biome-using `pi-package` extensions use. Nothing else about `biome.json` is open (R1).
 
