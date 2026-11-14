@@ -26,5 +26,5 @@ Answering Michael's orientation questions (`michael-orientation.md` §4):
 
 > "Whatever the community is doing for typical biome config is what we're going with. Our decisions need to reflect the communities preferences so we're well aligned for adoption."
 
-- **Q3 settled as (b): Biome + `tsc` + vitest.** Biome's configuration is whatever is typical in the community, not a bespoke or sibling-copied config.
+- **Q3 settled as (b): Biome + `tsc` + vitest.** Biome's configuration is "whatever the community is doing for typical biome config."
 - **Standing principle for this change:** decisions reflect the community's preferences, so the package is aligned for adoption.
