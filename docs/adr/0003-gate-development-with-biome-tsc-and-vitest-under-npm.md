@@ -8,7 +8,7 @@ Accepted
 
 The repository reached its first board card with a source tree, contracts and no tooling: nothing could be linted, type-checked or tested, and no two contributors would have agreed on what "green" meant.
 
-Three forces shaped the answer. Pi loads TypeScript from the manifest's entry, so a build step would produce an artifact nothing consumes and the type gate is a check rather than a compile. The sibling extensions and Pi's own root settle their work the same way: one tool for lint and format, the TypeScript compiler in no-emit mode, and vitest, all driven by npm scripts from the repository root with the lockfile committed. This repository's decisions are meant to follow that practice rather than invent a local one. ADR 0001 also asks that Pi imports be kept out of the domain and use-case layers, which calls for a linter able to express a restricted import when that rule is written.
+Three forces shaped the answer. Pi loads TypeScript from the manifest's entry, so a build step would produce an artifact nothing consumes and the type gate is a check rather than a compile. pi-omlx and Pi's own root settle their work the same way: one tool for lint and format, the TypeScript compiler in no-emit mode, and vitest, all driven by npm scripts from the repository root with the lockfile committed. This repository's decisions are meant to follow that practice rather than invent a local one. ADR 0001 also asks that Pi imports be kept out of the domain and use-case layers, which calls for a linter able to express a restricted import when that rule is written.
 
 ## Decision
 

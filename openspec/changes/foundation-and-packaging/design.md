@@ -183,7 +183,7 @@ Each stub body becomes `_pi.on("<event>", () => {});` with the event from the ma
 
 ### 5. npm is the package manager and `package-lock.json` is committed
 
-The lockfile fixes the exact resolution of every tool the checks run, which matters because the load and type checks verify event names and types against whatever `@earendil-works/pi-coding-agent` resolves to (R4; R7). It is not added to `.gitignore`, and Biome needs no exclusion for it (ignored by default, R2).
+The lockfile fixes the exact resolution of every tool the checks run, which matters because the load and type checks verify event names and types against whatever `@earendil-works/pi-coding-agent` resolves to (R4; R7). It is not added to `.gitignore`, and Biome needs no exclusion for it (ignored by default, R2). npm writes the lockfile with `package.json`'s indentation, so the lockfile is regenerated after the format pass and the clean-install proof runs on the final committed tree.
 
 **Alternatives weighed.** Ignoring the lockfile the way `pi-omlx` does — the outlier against npm's documented default and Pi's own practice, which commits it (R4). pnpm with `pnpm-lock.yaml` like `pi-jefferson` — no ruling or measurement asks for a second package manager, and every script in the specs already says `npm run`. Sanitizing `.npmrc` or pinning via `overrides` — nothing measured needs either.
 
