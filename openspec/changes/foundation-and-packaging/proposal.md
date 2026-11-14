@@ -12,7 +12,7 @@
 - Add `.gitignore` with `node_modules/`, `*.tgz` and `.DS_Store`, no `.pi/` entry and no `package-lock.json` entry (S3; Trap 5; R4).
 - Add `biome.json` as the `@biomejs/biome` 2.6.7 `biome init` output plus VCS integration, a `files.includes` allowlist scoped to `src/**`, `tests/**` and the root configuration files, and `lineWidth` 120 (R1; R2; OD-1; Chidi addendum §1).
 - Add `vitest.config.ts` setting `test.include` to `tests/**/*.test.ts` and nothing else (R10; Chidi addendum §4).
-- Run a one-time Biome format pass over `src/` before any other source edit, so `npm run check` is green on the code as committed; at `lineWidth` 120 it reflows four files (R3; R1).
+- Run a one-time Biome format pass over the `files.includes` allowlist before any handler edit (design.md Decision 3), so `npm run check` is green on the code as committed.
 - Replace each of the seven handler stubs' `throw` with a no-op `pi.on("<event>", () => {})` registration, so the extension loads and the seven event names are type-checked against Pi 1.5.2 (Q1(a); Trap 1; R3).
 - Add a first test under `tests/` that imports a `src/domain/` module through its `.js` specifier chain and asserts an implemented pure function's behavior (`shouldArchive`, `selectRecalledIds`) (S6; R5).
 - Add `tests/app/extension/taiknr.test.ts`, which invokes the entry's default export with a recording fake and asserts exactly the seven registered event names, so the load path has an automated pass/fail signal inside `npm run check` (R6).
@@ -40,4 +40,4 @@ None. `openspec list --specs` reports no living specs, so every capability here 
 
 ## Open Questions
 
-None. Joel's standing principle plus measurement narrowed the Biome question to one knob, and Michael's rulings settled everything around it: the baseline is the `biome init` 2.6.7 output with VCS integration and a scoped `files.includes` (R1, R2). Joel then ruled the one open knob, `lineWidth` 120 (`owner-rulings.md`, "Biome line width"). The design writes every configuration file verbatim.
+None. Joel's standing principle plus measurement narrowed the Biome question to one knob, and Michael's rulings settled everything around it: the baseline is the `biome init` 2.6.7 output with VCS integration and a scoped `files.includes` (R1, R2). Joel then ruled the one open knob, `lineWidth` 120 (`owner-rulings.md`, "Biome line width"). The design fixes the content of every configuration file.

@@ -32,7 +32,7 @@ Defines the local commands that verify the package — lint, type-check and test
 
 ### Requirement: Type-check covers source and tests and excludes the proof of concept
 
-`tsconfig.json` SHALL include `src/**/*.ts` and `tests/**/*.ts`, SHALL exclude the root `jev-context-poc.ts`, and SHALL set `module` and `moduleResolution` to `nodenext` with `strict` and `noEmit` (S2; D6; Trap 2; Trap 4).
+`tsconfig.json` SHALL include `src/**/*.ts` and `tests/**/*.ts`, SHALL NOT bring the root `jev-context-poc.ts` into the program, and SHALL set `module` and `moduleResolution` to `nodenext` with `strict` and `noEmit` (S2; D6; Trap 2; Trap 4).
 
 #### Scenario: Proof of concept excluded
 

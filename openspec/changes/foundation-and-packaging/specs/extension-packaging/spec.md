@@ -40,7 +40,7 @@ The extension entry SHALL load under Pi 1.5.2 without throwing. Each of the seve
 
 #### Scenario: Load check passes
 
-- **WHEN** `pi --no-session --help` runs with `PI_CODING_AGENT_DIR` pointing at a throwaway agent directory whose `settings.json` lists the repository under `packages`
+- **WHEN** `pi --no-session --help` runs with `PI_CODING_AGENT_DIR` pointing at a throwaway directory that is a `git archive HEAD` copy of the repository and whose `settings.json` lists that copy under `packages` (design.md Decision 6)
 - **THEN** stderr contains no `Failed to load extension` line and no host-provided-package warning. `--help` exits 0 whether or not an extension loaded, so the assertion is on the text, never on the exit code (R6)
 
 #### Scenario: Seven events registered

@@ -4,7 +4,7 @@
 
 `proposal.md` gives the motivation. What shapes the approach is the state of the tree and the constraints on it.
 
-The repository is stub-stage: fifteen tracked `src/` files, an `ARCHITECTURE.md`, two accepted ADRs, two root proof-of-concept files, and no `package.json`, `tsconfig.json`, `.gitignore` or harness. `tests/` exists on disk, empty and untracked (Eleanor §1; Trap 6). Nothing can be loaded, type-checked or tested.
+The repository is stub-stage: twenty tracked `src/` files, an `ARCHITECTURE.md`, two accepted ADRs, two root proof-of-concept files, and no `package.json`, `tsconfig.json`, `.gitignore` or harness. `tests/` exists on disk, empty and untracked (Eleanor §1; Trap 6). Nothing can be loaded, type-checked or tested.
 
 Two measured facts drive everything below.
 
@@ -55,7 +55,7 @@ No new `src/` module. Every new file is either root tooling configuration or a t
 | `tsconfig.json` | The `tsc --noEmit` program: source, tests, and the proof-of-concept exclusion (Decision 10) |
 | `biome.json` | Lint and format baseline plus file scope (Decisions 1, 2) |
 | `vitest.config.ts` | The test discovery boundary (Decision 7) |
-| `.gitignore` | The clean-tree baseline (Decision 5) |
+| `.gitignore` | The clean-tree baseline (Decision 11; lockfile consequence in Decision 5) |
 
 The configuration blocks in Decisions 1, 7, 8, 10 and 11 fix **content**: keys, values and order. Whitespace in every file on the allowlist is whatever the one-time format pass (Decision 3) produces under `biome.json`: tab indentation, and short arrays such as `files.includes` collapsed to one line at width 120. A reviewer compares the written files to the blocks by content, not by byte.
 
@@ -171,7 +171,7 @@ The allowlist is the six entries above: `src/**`, `tests/**`, and the four root 
 
 ### 3. One-time format pass, first, reviewed as whitespace-only; no permanent writer script
 
-The format pass is `npx biome check --write .` — scoped by `files.includes` to `src/**`, `tests/**` and the four root config files — run once after the six root files are written and `npm install` has completed, and before any handler edit. Measured on this tree it rewrites exactly seven files: the four `src/` files named in the modified-files table and `biome.json`, `package.json`, `tsconfig.json` (tabs, and `files.includes` on one line). The change is a commit of its own whose diff is read as whitespace alone; the four root files are new in that commit, so they are reviewed against their Decision blocks by content. `npm run lint` stays `biome check .` and read-only, and nothing in the `check` chain passes `--write` (R2). No `format` or `lint:fix` script is added: nothing in this change needs a permanent writer after the pass, and R2 permits such a script without requiring one.
+The format pass is `npx biome check --write .` — scoped by `files.includes` to `src/**`, `tests/**` and the four root config files — run once after the six root files are written and `npm install` has completed, and before any handler edit. Measured on this tree it rewrites exactly seven files: the four `src/` files named in the modified-files table and `biome.json`, `package.json`, `tsconfig.json` (tabs, and `files.includes` on one line). The change is a commit of its own whose diff is read as whitespace alone; the root files written before the pass are new in that commit or the one before it (tasks decide); the four on the allowlist are reviewed against their Decision blocks by content, the lockfile against Decision 5, and the seven-file count is michael-resolve-s3-r1.json critic-r1-1's measurement. `npm run lint` stays `biome check .` and read-only, and nothing in the `check` chain passes `--write` (R2). No `format` or `lint:fix` script is added: nothing in this change needs a permanent writer after the pass, and R2 permits such a script without requiring one. Files written after the pass — the two tests and the seven stub edits — are committed in Biome's style; running `npx biome check --write <file>` on a file while writing it is part of writing it, not a script and not a second pass.
 
 **Alternatives weighed.** No format pass — `npm run check` is red on its own first run, under every candidate width (R3). Folding the pass into the stub edits — a reviewer can no longer separate whitespace from behavior, which is exactly what the reworded "Signatures unchanged" scenario guards. A narrower width to shrink the pass — no width leaves the tree untouched (R1's sweep), so this trades one cost for a larger one.
 
@@ -197,10 +197,11 @@ The lockfile fixes the exact resolution of every tool the checks run, which matt
   ```
   D=$(mktemp -d)
   git archive HEAD | tar -x -C "$D"
+  cd "$D"
   printf '{"packages":[%s]}' "$(node -p 'JSON.stringify(process.argv[1])' "$D")" > "$D/settings.json"
-  PI_CODING_AGENT_DIR="$D" pi --no-session --help > "$D/out.txt" 2>&1
-  head -1 "$D/out.txt"
-  rg -c 'Failed to load extension|Host-provided extension packages' "$D/out.txt"
+  PI_CODING_AGENT_DIR="$D" pi --no-session --help > out.txt 2>&1
+  head -1 out.txt
+  rg -c 'Failed to load extension|Host-provided extension packages' out.txt
   ```
 
   (`$D` is both the package root Pi loads and the throwaway agent directory; Pi reads only `settings.json` from the agent directory and only `package.json` and `pi.extensions` from the package, so sharing one directory is safe.)
@@ -209,10 +210,10 @@ The lockfile fixes the exact resolution of every tool the checks run, which matt
 
   Discovery is proven by two negative controls, run after the positive run, each inside `$D` and each undone by re-extracting the archive before the next step, whether or not it passed:
 
-  - Control A (load error): in `$D/src/infra/pi-event-handlers/session-tree.ts` replace `_pi.on("session_tree", () => {});` with `throw new Error("Not implemented: registerSessionTreeHandler");`, re-run the `pi` line, `rg -c 'Failed to load extension' "$D/out.txt"` → `1`. Undo by re-extracting: `git archive HEAD | tar -x -C "$D"`.
-  - Control B (dependency placement): in `$D/package.json` add `"dependencies": { "@earendil-works/pi-coding-agent": "*" }`; no `npm install` (Pi reads the manifest's `dependencies` object directly at load, so the lockfile and `node_modules/` are untouched); re-run the `pi` line, `rg -c 'Host-provided extension packages' "$D/out.txt"` → `1`. Undo by re-extracting as above.
+  - Control A (load error): in `$D/src/infra/pi-event-handlers/session-tree.ts` replace `_pi.on("session_tree", () => {});` with `throw new Error("Not implemented: registerSessionTreeHandler");`, re-run the `pi` line, `rg -c 'Failed to load extension' out.txt` → `1`. Undo by re-extracting: `git -C <repo> archive HEAD | tar -x -C "$D"`.
+  - Control B (dependency placement): in `$D/package.json` add `"dependencies": { "@earendil-works/pi-coding-agent": "*" }`; no `npm install` (Pi reads the manifest's `dependencies` object directly at load, so the lockfile and `node_modules/` are untouched); re-run the `pi` line, `rg -c 'Host-provided extension packages' out.txt` → `1`. Undo by re-extracting as above.
 
-  Cleanup: `rm -rf "$D"`. The live checkout is never read by Pi and never modified. Record `pi --version` with the result.
+  Cleanup: `rm -rf "$D"`. Pi loads the package only from the copy, and its project directory is the copy; the live checkout is never modified. Record `pi --version` with the result.
 - **Domain guard:** `tests/domain/archived-output.test.ts` as specified in the test table. `test` and `expect` are imported from `vitest` (no globals, Decision 7). It is shown to catch a mistake once, by the `>=` → `>` scratch mutation, then the mutation is reverted.
 
 **Alternatives weighed.** Relying on the `--help` exit code — measured 0 whether or not an extension failed to load, so it cannot fail (R6). Passing `-ne` on the packages route — `-ne` disables configured packages, and with it a throwing stub produced no error at all, which makes the command vacuous; that is why the readiness review's literal `pi -ne --help` form is rejected (R6). A non-interactive run (`--mode json`) — exits 1 on load failure but costs a model call (R6). Relying on `tsc` for the event names — it accepts `session_before_tree`, a real Pi event, so it cannot catch a wrong registration (R6). Treating the in-repo guard as the production mechanism — it is a test; the entry still calls `.on` and nothing else (R6).
@@ -346,7 +347,7 @@ C5 left one wording open: whether the test requirement should read "no live mode
 4. **A handler registers a valid-but-wrong event name.** `session_before_tree` exists in Pi 1.5.2's types, so `tsc` passes while Pi never invokes the handler. → The entry test compares the sorted list against exactly seven names, and was measured red on that exact substitution (R6).
 5. **The format pass hides a behavior change.** Whitespace and stub edits land together; review can no longer see the second. → Format pass over the whole allowlist first (Decision 3), its `src/` diff reviewed as whitespace-only and the root configs reviewed against their blocks by content; handler edits second. The ordering is a task sequence, not a migration step.
 6. **The format pass shifts line-level blame on four files.** `git blame` attributes their parameter lists to this change. → Accepted: four files, all parameter-list collapses, with `.git-blame-ignore-revs` recorded as an open, unadopted option (Decision 12).
-7. **A revert leaves build leftovers on disk.** After a revert, `.gitignore`'s `node_modules/` entry is gone with it, so `node_modules/` and `package-lock.json` show as untracked. → Migration Plan step 5: delete both by hand.
+7. **A revert leaves build leftovers on disk.** After a revert, `.gitignore`'s `node_modules/` entry is gone with it, so `node_modules/` shows as untracked (and `package-lock.json` too if `npm install` ran after the revert). → Migration Plan step 5.
 8. **`npm pack` fails on a version-less manifest.** A later attempt to pack prints "Invalid package, must have name and version". → Accepted and named: packing and publishing belong to the publishing card, which writes real metadata (Decision 9); `pi install` loads a local checkout without publishing (Chidi §1).
 9. **A warning-only lint violation passes `check`.** `noUnusedVariables` reports at warn severity and `biome check` exits 0. → Accepted by ruling: the scenario covers error-severity rules and formatting only, and no `--error-on-warnings` is added (R9).
 10. **A test written outside `tests/` never runs.** With the explicit include, it is silently absent from the suite. → The include line and the rule that tests live under `tests/` with a `*.test.ts` name are both written down, in `vitest.config.ts` and in the development-checks requirement.
@@ -361,7 +362,7 @@ Joel's Q2(a) puts the settings edit outside the repository and outside this chan
 2. **Joel adds `"../../Projects/pi-taiknr"` to `packages` in `~/.pi/agent/settings.json`** — and in the chezmoi source `dotfiles/home/dot_pi/private_agent/settings.json` — himself, after the gate (Q2(a)). Relative paths in settings resolve from `~/.pi/agent`, so this form matches the two existing sibling entries (Trap 8; R8). From that moment the extension loads in every Pi session in every project and registers seven no-op handlers. This step is Joel's and is not a ticked task.
 3. **Rollback order: remove the settings entry first, then revert the change.** Reverting first leaves every session trying to load a package whose entry throws.
 4. **Do not switch the checkout below this change while the entry is active.** A pre-change commit turns every Pi session start into a `Failed to load extension … Not implemented` diagnostic: interactive sessions continue, `--print` and `--mode json` runs exit 1 (R8's measurement).
-5. **After a revert, delete `node_modules/` and `package-lock.json` by hand.** The reverted `.gitignore` no longer covers `node_modules/`.
+5. **After a revert, delete `node_modules/` by hand, and `package-lock.json` if `npm install` ran after the revert.** The reverted `.gitignore` no longer covers `node_modules/`.
 6. **Post-merge hand-off — the docs pass (D2).** Correct `ARCHITECTURE.md` §8's stated reason for a root `tests/` directory, which is false for a manifest-driven layout (S8; Trap 7); record the import-boundary lint as deferred in the architecture record and, if the project keeps one, in the ADR set (S7). Documentation never blocks the feature.
 
 ## Open Questions
