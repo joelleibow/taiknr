@@ -36,3 +36,12 @@ Answering `council.md` OD-1 (Biome `lineWidth` 80 or 120):
 > "i prefer 120"
 
 - **OD-1 → `lineWidth` 120.** The one setting in `biome.json` that differs from the `biome init` 2.6.7 output.
+
+## Repository and package name (2026-11-14)
+
+> "a repo for usage o on GitHub https://github.com/joelleibow/taiknr"
+
+> "The pi extension is pi-taiknr. The  repo is just taiknr"
+
+- **The GitHub repository is `joelleibow/taiknr`**, now this checkout's `origin`. Joel created it with an `Initial commit` carrying an MIT `LICENSE` (Copyright (c) 2026 Joel Leibow); the local history is rebased onto that commit.
+- **The npm package / Pi extension name stays `pi-taiknr`.** The repository name and the package name differ deliberately.
