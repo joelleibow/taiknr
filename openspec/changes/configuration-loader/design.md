@@ -13,6 +13,8 @@ Four facts about the host shape everything below, each measured in `michael-orie
 
 The pinned constraints are in `council.md` "Question and Scope"; the eighteen rulings that bind this design are in `council.md` "Michael's Rulings". Joel's own rulings are in `owner-rulings.md`.
 
+Codes `Trap N`, `S N` and `orientation D N` refer to `michael-orientation.md` and its addendum; bare `D N` refers to this document's Decisions.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -26,12 +28,12 @@ The pinned constraints are in `council.md` "Question and Scope"; the eighteen ru
 
 **Non-Goals:**
 
-- `/taiknr on` and `/taiknr off`, environment-variable overrides, a UI status readout, any writer of a config file, and per-field provenance (D10; rulings 15, 14).
+- `/taiknr on` and `/taiknr off`, environment-variable overrides, a UI status readout, any writer of a config file, and per-field provenance (orientation D10; rulings 15, 14).
 - A file watcher (`docs/extensions.md` L254; Trap 13), and hydration of the archive store, which lands with the archive card.
 - Behavioural enforcement inside handler bodies: the handlers are no-ops and the gate is the inertness mechanism (Trap 12; rulings 4, 17).
 - Any resolution record or log, and any output on a successful or absent file (ruling 14).
 - Constructing the scorer adapter; it has no call site at HEAD and the recall card builds it (ruling 16).
-- The docs pass. `ARCHITECTURE.md` §3/§4/§9, `AGENTS.md` and any ADR are brought in line after implementation, and nothing in it blocks the feature (D4; S9, S15).
+- The docs pass. `ARCHITECTURE.md` §3/§4/§9, `AGENTS.md` and any ADR are brought in line after implementation, and nothing in it blocks the feature (orientation D4; S9, S15).
 
 ## Module & File Placement
 
@@ -43,16 +45,16 @@ The pinned constraints are in `council.md` "Question and Scope"; the eighteen ru
 | `src/config/session-config.ts` | New | The per-session holder: one state machine over `unresolved` / `rejected` / `ready`, and the three operations the session and the command seam use. Host-free like the rest of `src/config/`. |
 | `src/app/extension/handler-gate.ts` | New | Wrapping an `ExtensionAPI` so that a registered handler runs only while the holder is active. |
 | `src/app/extension/taiknr.ts` | Modified | The composition root: create the holder and the gate, pass them to the registrars, hand the turn-end and context registrations the holder instead of `DEFAULT_TAIKNR_CONFIG`. |
-| `src/infra/pi-event-handlers/session-start.ts` | Modified | The session-time bridge: build the two paths from the event context, gate on trust, call the loader, assign the holder, rethrow on rejection. |
+| `src/infra/pi-event-handlers/session-start.ts` | Modified | The session-time bridge: build the two paths from the event context, gate on trust, call the loader, assign the holder, throw the report on rejection. |
 | `src/infra/pi-event-handlers/turn-end.ts` | Modified (type only) | The `config` member of the deps object becomes the holder; the registrar's parameters and the object's other members are unchanged. |
 | `src/infra/pi-event-handlers/context.ts` | Modified (type only) | Same as turn-end. |
-| `tests/config/taiknr-config.test.ts` | New | The host-free loader: layering, every rejection class, the read-error classification, the boundary values. |
-| `tests/config/session-config.test.ts` | New | The holder's three states and its three operations. |
+| `tests/config/taiknr-config.test.ts` | New | The host-free loader: layering, every rejection class, the read-error classification, the boundary values, and the two-key file `{"decisionTreshold":0.9,"enabled":"no"}`, whose first failing key in source order is named. |
+| `tests/config/session-config.test.ts` | New | The holder's three states and its three operations, including `setEnabled` with the already-held value returning `true` and producing a new config object. |
 | `tests/app/extension/handler-gate.test.ts` | New | The gate invokes a registered handler only while active, and forwards everything else untouched. |
-| `tests/infra/pi-event-handlers/session-start.test.ts` | New | Paths from a fake context, the trust gate, the assign-then-throw order, and the re-read on a second call with a different working directory. |
-| `tests/support/fake-pi.ts` | New | One handler-capturing `ExtensionAPI` fake plus a context stub, shared by the holder, gate and session-start tests. Not collected (the include is `tests/**/*.test.ts`), still linted and type-checked (`tests/**`). |
+| `tests/infra/pi-event-handlers/session-start.test.ts` | New | Paths from a fake context, the trust gate, the assign-then-throw order, the re-read on a second call with a different working directory, and a relative `PI_CODING_AGENT_DIR` still yielding an absolute agent path. |
+| `tests/support/fake-pi.ts` | New | One handler-capturing `ExtensionAPI` fake plus a context stub, shared by the gate and session-start tests (the context stub by the session-start test alone). Not collected (the include is `tests/**/*.test.ts`), still linted and type-checked (`tests/**`). |
 
-Unchanged: the four other handler files under `src/infra/pi-event-handlers/`, `src/infra/adapters/pi-jev-scorer-adapter.ts`, `tests/app/extension/taiknr.test.ts`, `src/domain/`, `src/use-cases/`, `package.json`, `biome.json`, `tsconfig.json`, `vitest.config.ts`, `.gitignore` (ruling 6, 9, 12, 16; D5, D7).
+Unchanged: the four other handler files under `src/infra/pi-event-handlers/`, `src/infra/adapters/pi-jev-scorer-adapter.ts`, `tests/app/extension/taiknr.test.ts`, `src/domain/`, `src/use-cases/`, `package.json`, `biome.json`, `tsconfig.json`, `vitest.config.ts`, `.gitignore` (ruling 6, 9, 12, 16; orientation D5, D7).
 
 ### Why the two new units are new files
 
@@ -66,7 +68,7 @@ Unchanged: the four other handler files under `src/infra/pi-event-handlers/`, `s
 
 `src/app/extension/` imports the holder's factory and the loader from `src/config/`, and the registrars from `src/infra/pi-event-handlers/`; it imports the host as types only.
 
-`src/infra/pi-event-handlers/session-start.ts`, `turn-end.ts` and `context.ts` import the holder's type from `src/config/`, in the same direction `turn-end.ts:2` and `context.ts:2` already import `TaiknrConfig`. `session-start.ts` also imports the host's `getAgentDir` and `CONFIG_DIR_NAME` as values — the boundary `ARCHITECTURE.md` §5 draws for host imports, and the reason those two `join`s live there rather than in `src/config/` (ruling 10).
+`src/infra/pi-event-handlers/session-start.ts`, `turn-end.ts` and `context.ts` import the holder's type from `src/config/`, in the same direction `turn-end.ts:2` and `context.ts:2` already import `TaiknrConfig`. `session-start.ts` also imports the host's `getAgentDir` and `CONFIG_DIR_NAME` as values — the boundary `ARCHITECTURE.md` §5 draws for host imports, and the reason those two path builds live there rather than in `src/config/` (ruling 10).
 
 This change adds no `src/infra/` → `src/app/` edge. Nothing written anywhere forbids one — ADR 0001 forbids only Pi imports in `src/domain/` and `src/use-cases/`, and `ARCHITECTURE.md` §8 and ADR 0003 record that boundary as review-held, not checked (`research-eleanor.md` addendum) — but the graph has no such edge at HEAD and this change does not create the first, so the holder sits inward where `RecallCache` sits.
 
@@ -77,13 +79,13 @@ Written out once, here; `specs/extension-packaging/spec.md` cites this list by m
 ```ts
 // src/config/taiknr-config.ts
 
-export type TaiknrConfig = {
+export interface TaiknrConfig {
 	decisionThreshold: number;
 	defaultDecisionModel: string;
 	defaultDecisionModelProvider: string;
 	minCharsToArchive: number;
 	enabled: boolean; // new
-};
+}
 
 export const CONFIG_FILE_NAME = "pi-taiknr.json";
 
@@ -95,10 +97,10 @@ export const DEFAULT_TAIKNR_CONFIG: TaiknrConfig = {
 	enabled: true, // new
 };
 
-export type ConfigPaths = {
+export interface ConfigPaths {
 	agentConfigPath: string;
 	projectConfigPath: string | undefined; // was string
-};
+}
 
 export class TaiknrConfigError extends Error {
 	readonly filePath: string;
@@ -109,6 +111,8 @@ export class TaiknrConfigError extends Error {
 
 export function loadTaiknrConfig(paths: ConfigPaths): TaiknrConfig; // throws TaiknrConfigError
 ```
+
+Differences against HEAD in this file: `enabled` on `TaiknrConfig` and `DEFAULT_TAIKNR_CONFIG` (owner-rulings "An on/off switch"), the new exports `CONFIG_FILE_NAME` and `TaiknrConfigError`, `ConfigPaths.projectConfigPath` (extension-packaging item 3), and the loader body; the `interface` keyword is kept.
 
 ```ts
 // src/config/session-config.ts
@@ -123,12 +127,12 @@ export type SessionConfigState =
 	| { readonly status: "unresolved" }
 	| ResolvedSessionConfig;
 
-export type SessionConfig = {
+export interface SessionConfig {
 	readonly state: SessionConfigState;
 	assign(next: ResolvedSessionConfig): void;
 	isActive(): boolean;
 	setEnabled(enabled: boolean): boolean;
-};
+}
 
 export function createSessionConfig(): SessionConfig;
 ```
@@ -157,13 +161,15 @@ export function registerSessionStartHandler(
 ): void;
 ```
 
+HEAD's `_pi`/`_store` lose the prefix because the body now uses them; not a signature change.
+
 The turn-end and context deps objects change in one member each — `config: TaiknrConfig` becomes `config: SessionConfig` — and nowhere else (ruling 6).
 
 ## Decisions
 
 ### D1 — A three-state holder, created per factory call, with three operations
 
-`SessionConfigState` is `unresolved` (from factory time until the first `session_start`), `rejected` carrying the `TaiknrConfigError`, or `ready` carrying the resolved `TaiknrConfig`. `assign` replaces the state whole, so a fixed file clears a prior rejection; `isActive()` is `ready && config.enabled`; `setEnabled` succeeds only from `ready`. `state` is a readonly property, the read every consumer uses at event time; it is data, not a fourth operation. (Ruling 1.)
+`SessionConfigState` is `unresolved` (from factory time until the first `session_start`), `rejected` carrying the `TaiknrConfigError`, or `ready` carrying the resolved `TaiknrConfig`. `assign` replaces the state whole, so a fixed file clears a prior rejection; `isActive()` is `ready && config.enabled`; `setEnabled` succeeds only from `ready`. From `ready` it replaces the state with `{ status: "ready", config: { ...config, enabled } }` — a new object, so a handler already holding the previous `config` is unaffected — and returns `true`, including when the value is unchanged. From `unresolved` or `rejected` it returns `false` and changes nothing. `state` is a readonly property, the read every consumer uses at event time; it is data, not a fourth operation. (Ruling 1.)
 
 *Alternatives weighed.* Filling one shared `TaiknrConfig` in place: it cannot represent `rejected`, it needs an initial value that is exactly the defaults Joel's Q1(b) forbids running on, and it hands a command a mutable value typed as plain data (CR-1; STR-2; ruling 1). Two states `inactive | ready`: the rejected state must carry the error, both for the seam's refusal message and for the Status card's readout (CAT-1 vs ruling 1). Four states with a separate user-off: `enabled` is a field of the ready config, and a fourth state adds a case no operation needs (ruling 1).
 
@@ -177,23 +183,23 @@ The key stays required, so the caller has to state the trust decision; `undefine
 
 `createGatedPi(pi, session)` returns a proxy whose only intercepted member is `on`: it registers a wrapper that returns `undefined` while `!session.isActive()` and the handler's own result once active, and forwards every other member with `Reflect.get`. The six non-session-start registrars receive the gated `pi`; `registerSessionStartHandler` receives the raw `pi`, because the config must resolve even while the previous state was inactive. Later cards add no per-handler check. (Ruling 4; R4; CAT-1; STR-3.)
 
-*Alternatives weighed.* A shared predicate called first in each handler body: four of the six registrars have no config parameter, so it forces a signature change in each later card, against D6 and `AGENTS.md`, and it is untestable today (ruling 4; CR-6 vs ruling 4). Unregistering and re-registering handlers on a flip, through the disposers `pi.on` returns: it moves the seven-registration invariant to session time, breaks the entry test's premise, and makes `/taiknr on` re-register mid-session (Trap 11b; S10).
+*Alternatives weighed.* A shared predicate called first in each handler body: four of the six registrars have no config parameter, so it forces a signature change in each later card, against orientation D6 and `AGENTS.md`, and it is untestable today (ruling 4; CR-6 vs ruling 4). Unregistering and re-registering handlers on a flip, through the disposers `pi.on` returns: it moves the seven-registration invariant to session time, breaks the entry test's premise, and makes `/taiknr on` re-register mid-session (Trap 11b; S10).
 
 *The one recorded cast.* Pi's `on` has only per-event overloads and no `event: string` catch-all (`types.d.ts` L1231–1266), so the wrapper needs one cast — measured as `(target.on as unknown as LooseOn)(event, wrapper)`; without it `tsc` reports `TS2769`. That cast is the only place this change bypasses the host's typing, and the gate is the only place it lives. Handlers read `session.state` at event time and never capture a `TaiknrConfig` at factory time (ruling 4).
 
 ### D4 — Validation by hand, in one per-field rule table, with one error class
 
-`loadTaiknrConfig` reads each path, strips a leading U+FEFF, parses, checks the root is a plain JSON object, then walks the *known-key list* over the parsed object — rejecting unknown keys and checking each field's rule — and finally layers the three sources field by field in this order: the built-in default, overlaid by the agent file's value, overlaid by the trusted project file's value — for each field the project file wins when it sets one, otherwise the agent file, otherwise the default (owner-rulings "Orientation Q1b and Q2"). Example: agent file `{"enabled": true, "decisionThreshold": 0.9}`, trusted project file `{"enabled": false}` → resolved `enabled: false`, `decisionThreshold: 0.9`, defaults elsewhere. The rules and their provenance:
+`loadTaiknrConfig` reads each path, strips a leading U+FEFF, parses, checks the root is a plain JSON object, then walks the parsed object's keys against the known-key set — rejecting unknown keys and checking each field's rule — and finally layers the three sources field by field in this order: the built-in default, overlaid by the agent file's value, overlaid by the trusted project file's value — for each field the project file wins when it sets one, otherwise the agent file, otherwise the default (owner-rulings "Orientation Q1b and Q2"). Example: agent file `{"enabled": true, "decisionThreshold": 0.9}`, trusted project file `{"enabled": false}` → resolved `enabled: false`, `decisionThreshold: 0.9`, defaults elsewhere. The rules and their provenance:
 
 | Field | Rule | Source of the value |
 |---|---|---|
-| `decisionThreshold` | `Number.isFinite` then `0 <= x <= 1` | The comparand is a probability (`src/domain/recall.ts:13`; ADR 0002 mechanism 3; D8) |
-| `minCharsToArchive` | `Number.isInteger` then `>= 0` | The comparand is a text length, 0 meaning archive everything (`src/domain/archived-output.ts:20`; D8) |
+| `decisionThreshold` | `Number.isFinite` then `0 <= x <= 1` | The comparand is a probability (`src/domain/recall.ts:13`; ADR 0002 mechanism 3; orientation D8) |
+| `minCharsToArchive` | `Number.isInteger` then `>= 0` | The comparand is a text length, 0 meaning archive everything (`src/domain/archived-output.ts:20`; orientation D8) |
 | `defaultDecisionModel`, `defaultDecisionModelProvider` | strings with `trim().length > 0` | Only non-emptiness is checkable here; registry resolution is the classifier card's (Trap 10; ruling 12) |
 | `enabled` | `typeof === "boolean"` | Joel's suggested field and default (`owner-rulings.md` "An on/off switch"; Trap 16) |
 | any key outside the known-field list | rejected, naming the key | `Object.hasOwn` / a `Set`, so `toString` and `__proto__` are rejected (ruling 12) |
 
-The reasons this change uses, pinned so a test can assert them: `unknown field`, `must be <= 1`, `must be >= 0`, `must be an integer >= 0`, `must be a number`, `must be a non-empty string`, `must be a boolean`, `root must be an object`, `cannot be parsed: <parser message>`, `cannot be read: <errno>`. The first violation found is the one reported; one field per error is the smallest sufficient report. `TaiknrConfigError`'s `field` is `undefined` for parse, root and read failures, so "names the file, and the field where one applies" is true by type (ruling 5, 12; CB-3; CC-3).
+The reasons this change uses, pinned so a test can assert them: `unknown field`, `must be <= 1`, `must be >= 0`, `must be an integer >= 0`, `must be a number`, `must be a non-empty string`, `must be a boolean`, `root must be an object`, `cannot be parsed: <parser message>`, `cannot be read: <errno>`. The first violation found is the one reported. Deterministically: the agent file is read and validated before the project file; within a file, each key of `Object.keys(parsed)` is visited in source order and checked as unknown-or-rule, so the first failing key in the file is the one named. Layering runs only after both files validate. One field per error is the smallest sufficient report. `TaiknrConfigError`'s `field` is `undefined` for parse, root and read failures, so "names the file, and the field where one applies" is true by type (ruling 5, 12; CB-3; CC-3).
 
 *Alternatives weighed.* typebox: a new `peerDependencies` entry, a message formatter still needed for its two-entry unknown-key output, and a host-mapped import inside the layer that must be callable with no Pi runtime, which a future `cli/` or `mcp/` entry point would not resolve (ruling 12; Trap 9; R12). Spreading the parsed objects into a defaults object: `__proto__` survives a spread as an own key, so the unknown-key check and the merge both iterate names instead (ruling 12).
 
@@ -201,18 +207,18 @@ The reasons this change uses, pinned so a test can assert them: `unknown field`,
 
 The session-start handler's body is four steps, in this order:
 
-1. Build `agentConfigPath = join(getAgentDir(), CONFIG_FILE_NAME)` and `projectConfigPath = ctx.isProjectTrusted() ? join(ctx.cwd, CONFIG_DIR_NAME, CONFIG_FILE_NAME) : undefined`.
+1. Build `agentConfigPath = resolve(getAgentDir(), CONFIG_FILE_NAME)` and `projectConfigPath = ctx.isProjectTrusted() ? resolve(ctx.cwd, CONFIG_DIR_NAME, CONFIG_FILE_NAME) : undefined`, importing `resolve` from `node:path`, because `getAgentDir()` returns `PI_CODING_AGENT_DIR` as given, relative when the user set it relative (measured), and the spec asserts an absolute path.
 2. Call `loadTaiknrConfig({ agentConfigPath, projectConfigPath })` inside try/catch.
-3. `session.assign(...)` — `{ status: "ready", config }` on success, `{ status: "rejected", error }` on a `TaiknrConfigError`. The loader converts every `fs` and parse failure into a `TaiknrConfigError`, so this branch is the only error branch. Should anything else escape (a defect), it propagates unassigned and the holder stays `unresolved`, which is inert.
-4. Rethrow on rejection. Then the hydration slot a later card fills, only when `session.isActive()`.
+3. `session.assign(...)` — `{ status: "ready", config }` on success, `{ status: "rejected", error }` on a `TaiknrConfigError`. The loader converts every `fs` and parse failure into a `TaiknrConfigError`, so this branch is the only error branch. Should anything else escape (a defect), it propagates unassigned and the holder keeps its prior state — `unresolved` in production, because Pi loads a new runtime, and so a new holder, before every `session_start` (`docs/extensions.md` L376–392); the two-call session-start test exercises the re-read, not this path.
+4. On rejection, throw `` `new Error(`${error.message}; fix the file, then run /reload or start a new session`, { cause: error })` ``. Then the hydration slot a later card fills, only when `session.isActive()`.
 
-There is no `ctx.ui.notify`, and nothing else is emitted. The message is `<absolute file path>: <field>: <reason>`, or `<absolute file path>: <reason>` when `field` is undefined, ending with `fix the file, then run /reload or start a new session`. The host already prefixes the extension path, so the message carries no `pi-taiknr:` prefix. (Ruling 5; CR-7; CB-2; R10; CC-1.)
+There is no `ctx.ui.notify`, and nothing else is emitted. `TaiknrConfigError.message` is host-neutral: `<absolute file path>: <field>: <reason>`, or `<absolute file path>: <reason>` when `field` is undefined. The recovery line is appended only by the session-start handler's throw, because `/reload` is Pi vocabulary and `src/config/` has none; the holder's `rejected.error` carries the host-neutral message. The host already prefixes the extension path, so the message carries no `pi-taiknr:` prefix. (Ruling 5; CR-7; CB-2; R10; CC-1.)
 
 *Alternatives weighed.* `ctx.ui.notify(..., "error")`: invisible where `hasUI` is false, i.e. print and JSON (Trap 6; Chidi Q3). A factory throw: it would require reading at factory time, which has neither cwd nor trust (Trap 1; Q1(c)). A list of every failing file and field in one message (CR-7's suggestion): one field per error is the smaller sufficient report, and the message names the recovery step, so the second mistake surfaces on the next `/reload` rather than making the message a diagnostics dump (ruling 12's one-violation choice).
 
 ### D6 — Read errors are classified before "absent" is concluded
 
-The loader attempts the read and catches. `ENOENT` is not immediately absent: it runs `lstatSync` on the path. If `lstat` also fails with `ENOENT` the file is absent and silent; if the read failed `ENOTDIR` — `<cwd>/<CONFIG_DIR_NAME>` is not a directory — the file is absent too; if `lstat` succeeds the entry exists and is unreadable, so it is a rejection. If `lstat` fails with anything other than `ENOENT`, that is also a rejection naming the file with no field and the `lstat` errno in the reason (`cannot be read: <errno>`). Only the two outcomes `ENOENT`/`ENOENT` and read `ENOTDIR` are absent; every other combination is a `TaiknrConfigError`, so the loader never lets a raw `fs` error escape. `EISDIR`, `EACCES` and every other read failure are rejections naming the file with no field and the errno in the reason. (Ruling 8; CR-5; R3; CC-4.)
+The loader attempts the read and catches. `ENOENT` is not immediately absent: it runs `lstatSync` on the path. If `lstat` also fails with `ENOENT` the file is absent and silent; if the read of the *project* path failed `ENOTDIR` — `<cwd>/<CONFIG_DIR_NAME>` is not a directory — the project file is absent; an `ENOTDIR` on the agent path is a rejection like any other read failure (spec "An unreadable file is a rejection"); if `lstat` succeeds the entry exists and is unreadable, so it is a rejection. If `lstat` fails with anything other than `ENOENT`, that is also a rejection naming the file with no field and the `lstat` errno in the reason (`cannot be read: <errno>`). Only the two outcomes `ENOENT`/`ENOENT` and read `ENOTDIR` are absent; every other combination is a `TaiknrConfigError`, so the loader never lets a raw `fs` error escape. `EISDIR`, `EACCES` and every other read failure are rejections naming the file with no field and the errno in the reason. (Ruling 8; CR-5; R3; CC-4.)
 
 *Alternatives weighed.* `existsSync` then `readFileSync`: it cannot tell a missing file from a dangling symlink, and it races a deletion (R3). Treating every read error as absent: it silently runs the defaults over a file the user put in place, which is the case Joel's Q1(b) exists to prevent.
 
@@ -229,6 +235,8 @@ There is no logger to emit to: Pi ships no extension logging API, and `console.*
 ### D9 — The command seam is `setEnabled(boolean): boolean`
 
 It returns false and changes nothing unless the state is `ready`, so a fixed-but-unreloaded rejection stays closed until `/reload` or a new session — which is why the rejection message names that recovery step. Its effect lasts until the next `session_start`, which re-reads the files. It does not hydrate: a session that started inert skipped hydration, and turning on mid-session is the Status card's hazard to handle when it wires the command. Nothing else is built here; no command is registered. (Ruling 15; CR-6; R11; S13.)
+
+*Alternative weighed.* A writable `enabled` on the ready config as the seam: a write from `rejected` or `unresolved` could not be refused, so a fixed-but-unreloaded rejection could be un-rejected and the Status card would mutate a value typed as plain data (ruling 15; CR-6).
 
 ### D10 — No separate resolution orchestrator; the session-start handler stays a bridge
 
@@ -258,6 +266,7 @@ An unknown top-level key is a rejection naming the file and the key with the rea
 - **One bad field in the agent file disables taiknr for the session, including the values the project file would have supplied.** That is Joel's Q1(b) with no fallback. → Mitigation: the message names the file, the field and the reason, and the recovery step; the first violation is reported, so the second surfaces on the next `/reload`.
 - **A user who scrolls past the stderr line sees taiknr do nothing.** In print and JSON modes the line is on stderr, not stdout; the session itself is not blocked (ruling 5, measured). → Mitigation: the recovery line is part of the message; anything more is the Status card's UI.
 - **`<cwd>/<CONFIG_DIR_NAME>` being a regular file is treated as an absent project layer.** A user who creates a file named `.pi` where they meant a directory gets silence. → Mitigation: accepted, and it is what `ENOTDIR` means; the stray file is visible in their tree, and treating it as a rejection would reject sessions in directories taiknr was never configured for (ruling 8).
+- **A dangling symlink *above* the file is treated as absent.** If `<cwd>/.pi` or the agent directory is itself a link whose target is gone, the read and the `lstat` both report `ENOENT` on the file path, so the layer is silently absent. → Accepted: distinguishing it would mean walking parents; the user's own tree shows the broken link (ruling 8).
 - **Re-enabling mid-session does not hydrate the archive store.** A session that starts with `enabled: false` skips hydration, so a later `/taiknr on` could recall from an empty or stale store (R11; CR-6). → Mitigation: `setEnabled` does not pretend to fix it; the hazard is handed to the Status card, which owns the command and can trigger hydration.
 - **An in-flight classifier call is not cancelled by turning off.** → Mitigation: out of scope by ruling; the Status card owns the toggle's full semantics, and the gate stops new events, not work already started (R4 caveat).
 - **The gate is the only inertness mechanism, and it is invisible in the handler files.** A later card could add a handler that bypasses the gated `pi`. → Mitigation: the gate is created in `taiknr.ts` and every non-session-start registration takes the gated value; the spec's enabled requirement says a handler other than session-start does not run while inert, and the gate test asserts it (ruling 4, 17).
@@ -270,7 +279,7 @@ Nothing is persisted and nothing is written, so there is no data migration and n
 
 **Deploy.**
 
-1. Merge the change; `npm run check` green before merge is the only gate, and no tooling file or `package.json` entry changes (D7; ruling 12).
+1. Merge the change; `npm run check` green before merge is the only gate, and no tooling file or `package.json` entry changes (orientation D7; ruling 12).
 2. Nothing else to install or enable. A user with no config file sees today's behaviour plus the `enabled` field's default.
 3. The new behaviour takes effect at the next session start after the code lands: `/reload`, `/new`, `/resume`, `/fork`, or a new process (Trap 13).
 
@@ -278,7 +287,7 @@ Nothing is persisted and nothing is written, so there is no data migration and n
 
 **Post-merge hand-offs**, each after the PR merges:
 
-- **Docs pass** (D4): `ARCHITECTURE.md` §1's `src/config/` line gains the per-session holder; §3's merge wording and §4's literal `~/.pi/agent` and `.pi` paths and its "loaded at startup" phrase; §9's note that the toggle flips `enabled` through the holder; `AGENTS.md`'s "the behavior behind them does not" sentence, once config behaviour exists. No ADR is required for this change's decisions: they are configuration semantics recorded here, not a structural choice between alternatives with a lasting architectural trade-off.
+- **Docs pass** (orientation D4): `ARCHITECTURE.md` §1's `src/config/` line gains the per-session holder; §3's merge wording and §4's literal `~/.pi/agent` and `.pi` paths and its "loaded at startup" phrase; §9's note that the toggle flips `enabled` through the holder; `AGENTS.md`'s "the behavior behind them does not" sentence, once config behaviour exists. No ADR is required for this change's decisions: they are configuration semantics recorded here, not a structural choice between alternatives with a lasting architectural trade-off.
 - **Status readout and `/taiknr` command card**: the seam is `setEnabled`; the command must handle hydration on off→on and may add the resolution record and the disabled readout this change deliberately omits (rulings 14, 15; R11).
 - **Archive and recall cards**: verify the two deferred "off" scenarios through the composition-root gate, with no per-handler check (ruling 17; CR-10).
 - **Recall card**: constructs `createPiJevScorerAdapter(ctx, config)` from the holder's ready config inside the context handler; its signature stays as at HEAD (ruling 16).

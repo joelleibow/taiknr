@@ -144,12 +144,12 @@ When a config file is present but cannot be parsed or fails validation, taiknr S
 #### Scenario: The report names the field and the recovery step
 
 - **WHEN** a file is rejected for an out-of-range `decisionThreshold`
-- **THEN** the message reads `<absolute file path>: decisionThreshold: <reason>`, ending with the instruction to fix the file and then run `/reload` or start a new session (ruling 5)
+- **THEN** the session-start handler's thrown error reads `<absolute file path>: decisionThreshold: <reason>`, ending with the instruction to fix the file and then run `/reload` or start a new session (ruling 5)
 
 #### Scenario: A parse or read failure names no field
 
 - **WHEN** a file is rejected because it cannot be parsed or read
-- **THEN** the message carries the absolute path and the reason only (ruling 5)
+- **THEN** the thrown message carries the absolute path and the reason, then the recovery instruction (ruling 5)
 
 #### Scenario: No fallback to the other layer
 
