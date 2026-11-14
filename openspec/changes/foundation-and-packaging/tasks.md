@@ -50,7 +50,7 @@ The order is the design's: root tooling first, then the one-time format pass as 
   - Verified: `npx tsc --noEmit` exits 0 with no output on the stub tree (Trap 2; R7). `npx tsc --noEmit --listFiles | rg -c 'jev-context-poc'` prints nothing and exits 1, which is the development-checks "Proof of concept excluded" scenario. `npx tsc --noEmit --listFiles` names `tests/**` files once they exist, checked again in 5.1.
 
 - [ ] 1.6 Create `vitest.config.ts` with the Decision 7 content and nothing else.
-  - Failing behavioral test: none yet — `tests/` is empty at this step, so the include has nothing to collect; its behaviour is verified in 4.2 when the first test file exists (development-checks "Tests under `tests/` are found"). Boundary cases: a test outside `tests/` must not be collected, checked in 4.2.
+  - Failing behavioral test: none yet — `tests/` is empty at this step, so the include has nothing to collect; its behaviour is verified in 3.1 when the first test file exists (development-checks "Tests under `tests/` are found"). Boundary cases: a test outside `tests/` must not be collected, checked in 4.3.
   - Verified: `npx tsc --noEmit` still exits 0, so the config file stayed outside the program (Decision 10); `rg -c 'include' vitest.config.ts` → 1 with `tests/**/*.test.ts` as the only entry.
 
 - [ ] 1.7 Commit the five hand-written root files and the `package-lock.json` that `npm install` created in 1.3 — six paths in one commit — before the format pass.
@@ -61,7 +61,15 @@ The order is the design's: root tooling first, then the one-time format pass as 
 
 - [ ] 2.1 Run `npx biome check --write .` — scoped by `files.includes` to `src/**`, `tests/**` and the four root config files — and read the diff as whitespace alone (Decision 3).
   - Failing behavioral test: none — formatter output only, and no behaviour changes; boundary cases: none. The guard is that the pass is whitespace alone, which the diff check below proves.
-  - Verified: `git show --stat` after committing lists exactly seven paths — `src/infra/adapters/pi-archive-adapter.ts`, `src/infra/adapters/pi-jev-scorer-adapter.ts`, `src/infra/pi-event-handlers/tool-call.ts`, `src/use-cases/commit-archived-batch.ts`, `biome.json`, `package.json`, `tsconfig.json` (the seven-file count is `michael-resolve-s3-r1.json` critic-r1-1's measurement). `git show -w --stat -- src/` produces no hunk for the four `src/` files, so their change is whitespace alone (parameter-list and import-list collapses). `npx biome check .` afterwards reports "No fixes applied" and zero errors, and `npm run typecheck` still exits 0.
+  - Verified: `git show --stat` after committing lists exactly seven paths — `src/infra/adapters/pi-archive-adapter.ts`, `src/infra/adapters/pi-jev-scorer-adapter.ts`, `src/infra/pi-event-handlers/tool-call.ts`, `src/use-cases/commit-archived-batch.ts`, `biome.json`, `package.json`, `tsconfig.json` (the seven-file count is `michael-resolve-s3-r1.json` critic-r1-1's measurement). Whitespace-only proof, binding: for each of the four `src/` paths the file at `HEAD~1` and at `HEAD` are identical once spaces, tabs, newlines and commas are removed —
+
+```
+for f in src/infra/adapters/pi-archive-adapter.ts src/infra/adapters/pi-jev-scorer-adapter.ts src/infra/pi-event-handlers/tool-call.ts src/use-cases/commit-archived-batch.ts; do
+	[ "$(git show HEAD~1:$f | tr -d ' \t\n,')" = "$(git show HEAD:$f | tr -d ' \t\n,')" ] && echo "whitespace-only: $f" || echo "CONTENT CHANGED: $f"
+done
+```
+
+prints `whitespace-only` four times and `CONTENT CHANGED` never. The pass joins parameter and import lists onto one line and drops their trailing commas, so `git show -w` is not empty for these files and is not the oracle (measured: 21 changed lines remain under `-w`); read the diff with `git show --word-diff=plain -- src/` to see the joins. Secondary: `npm run typecheck` exits 0. `npx biome check .` afterwards reports "No fixes applied" and zero errors, and `npm run typecheck` still exits 0.
 
 - [ ] 2.2 Commit the pass by itself, with no other change staged, so a reviewer can read the whitespace apart from the stub edits (Decision 3; Risks 5).
   - Failing behavioral test: none — a commit step; boundary cases: none.
@@ -174,7 +182,7 @@ The order is the design's: root tooling first, then the one-time format pass as 
 
 - [ ] 5.1 Run `npm run check` on the committed tree and confirm the whole chain passes.
   - Failing behavioral test: the chain itself is the aggregate check; each of its three layers is shown failing in 5.2–5.4. Boundary cases: none.
-  - Verified: exit 0, Biome reporting "No fixes applied" over `src/`, `tests/` and the four root config files, `tsc --noEmit` silent, `vitest run` reporting 2 files passed. The lint step covers the two new test files with no `biome.json` edit (`git diff --stat biome.json` empty), the development-checks "A new source file is inside the scope" scenario.
+  - Verified: exit 0, Biome reporting "No fixes applied" over `src/`, `tests/` and the four root config files, `tsc --noEmit` silent, `vitest run` reporting 2 files passed. The lint step covers the two new test files with no `biome.json` edit (`git diff --stat biome.json` empty), the development-checks "A new source file is inside the scope" scenario. Two extension-packaging scenarios: `rg -c "@earendil-works/pi-" src/domain src/use-cases` prints nothing and exits 1 ("Boundary holds", D3), and `ls index.ts extensions` reports both missing ("No competing entry point").
 
 - [ ] 5.2 Show the chain failing at the lint step: change one line's leading tab in `src/domain/archived-output.ts` to two spaces, run `npm run check`, then revert (development-checks "Check fails on a lint error"; R9).
   - Failing behavioral test: the formatting violation, which an error-severity formatting finding must turn red — Biome 2.6.7 reported seven formatting errors across the unformatted root configs and four `src/` files before any reflow (`michael-resolve-s3-r1.json` critic-r1-1). Boundary cases: a warn-severity rule is deliberately out of scope — `noUnusedVariables` was measured at warn and leaves `check` green (R9).
@@ -194,7 +202,7 @@ The order is the design's: root tooling first, then the one-time format pass as 
 
 ## 6. The manual load check in a `git archive` copy
 
-Run after the stub-edit commit in 3.9, against a throwaway copy, never the live checkout (Decision 6).
+Run after the stub-edit commit in 3.9, against a throwaway copy, never the live checkout (Decision 6). Run 6.1–6.4 in a single shell session so `R` and `D` persist; if any prerequisite version differs from the measured one, stop and report rather than proceed.
 
 - [ ] 6.1 Positive run. Confirm the prerequisites — Node 26.8.1, npm 11.19.0, `pi --version` printing `1.5.2`, `rg` on `PATH` — then run the recipe from the repository root:
 
@@ -213,11 +221,11 @@ Run after the stub-edit commit in 3.9, against a throwaway copy, never the live 
   - Failing behavioral test: the two load scenarios — extension-packaging "Load check passes" and "No duplicate-dependency warning". Boundary cases: a missing `pi` prints something other than the usage header, so the first observation catches it.
   - Verified, all three: `head -1 out.txt` prints Pi's usage header, `pi - AI coding assistant …`, proof Pi ran; `rg -c` prints nothing and exits 1, so neither `Failed to load extension` nor `Host-provided extension packages` appears; and the two controls in 6.2 and 6.3 each print a count of 1. Any other output is a failure. Never assert on the exit code — `--help` exits 0 whether or not an extension loaded (R6). No `npm install` is needed (MANUAL-CHECK-NO-INSTALL).
 
-- [ ] 6.2 Control A, the load error. In `$D/src/infra/pi-event-handlers/session-tree.ts`, replace `_pi.on("session_tree", () => {});` with `throw new Error("Not implemented: registerSessionTreeHandler");`, re-run the `pi` line, then undo by re-extracting.
+- [ ] 6.2 Control A, the load error. In `$D/src/infra/pi-event-handlers/session-tree.ts`, replace `_pi.on("session_tree", () => {});` with `throw new Error("Not implemented: registerSessionTreeHandler");`, `cd "$D" && PI_CODING_AGENT_DIR="$D" pi --no-session --help > out.txt 2>&1`, then undo by re-extracting.
   - Failing behavioral test: this is the negative control proving discovery — the check must notice a handler that throws at load. Boundary cases: none.
   - Verified: `rg -c 'Failed to load extension' out.txt` prints `1`. Undo with `git -C "$R" archive HEAD | tar -x -C "$D"`, whether or not the control passed; re-running the `pi` line then matches nothing again (bsdtar re-extraction restores the file and keeps `settings.json` and `out.txt`).
 
-- [ ] 6.3 Control B, the dependency placement. In `$D/package.json`, add `"dependencies": { "@earendil-works/pi-coding-agent": "*" }` and leave `peerDependencies` and `devDependencies` as they are; run no `npm install` — Pi reads the manifest's `dependencies` object directly at load, so the lockfile and `node_modules/` stay untouched. Re-run the `pi` line, then undo by re-extracting.
+- [ ] 6.3 Control B, the dependency placement. In `$D/package.json`, add `"dependencies": { "@earendil-works/pi-coding-agent": "*" }` and leave `peerDependencies` and `devDependencies` as they are; run no `npm install` — Pi reads the manifest's `dependencies` object directly at load, so the lockfile and `node_modules/` stay untouched. `cd "$D" && PI_CODING_AGENT_DIR="$D" pi --no-session --help > out.txt 2>&1`, then undo by re-extracting.
   - Failing behavioral test: the second negative control — the check must notice a host package moved into `dependencies`. Boundary cases: none.
   - Verified: `rg -c 'Host-provided extension packages' out.txt` prints `1`. Undo with `git -C "$R" archive HEAD | tar -x -C "$D"` either way.
 
