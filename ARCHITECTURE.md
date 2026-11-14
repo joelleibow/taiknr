@@ -16,7 +16,7 @@ src/
   infra/
     adapters/        Translators between Pi DTOs / APIs and domain/use-case contracts
     pi-event-handlers/ Thin Pi lifecycle hook registrations bridging events to adapters and use cases
-tests/               Test suite (isolated outside the extension entry directory)
+tests/               Test suite, mirroring the src/ layer layout
 docs/
   adr/               Architecture Decision Records
 ```
@@ -39,7 +39,7 @@ flowchart LR
 - **Domain (`src/domain/`):** Defines core types (`ToolOutputCandidate`, `ArchivedToolOutput`, `RelevanceScore`, `RecalledOutput`) and pure rules for archival eligibility, deterministic one-line stub rendering, threshold filtering, and `<recalled_context>` block formatting. Contains zero Pi imports.
 - **Use cases (`src/use-cases/`):** Orchestrates staging large tool outputs, committing settled batches into the archive store, hydrating the store from branch history, and caching/scoring relevance recall with fail-open handling. Depends only on domain types and port interfaces.
 - **Adapters (`src/infra/adapters/`):** Translates Pi-specific event DTOs and runtime objects into use-case contracts and back—mapping `TurnEndEvent` results into candidates, converting committed batches into `context_edit` (preserving non-text blocks) and `custom` boundary drafts, reading branch entries, invoking Pi's classifier registry, appending tail recall blocks while preserving user image blocks, and emitting once-per-session failure warnings.
-- **Pi event handlers (`src/infra/pi-event-handlers/`):** Subscribes to `session_start`, `session_tree`, `session_compact`, `tool_call`, `turn_end`, `agent_before_settle`, and `context`, delegating immediately to adapters and use cases.
+- **Pi event handlers (`src/infra/pi-event-handlers/`):** Subscribes to `session_start`, `session_tree`, `session_compact`, `tool_call`, `turn_end`, `agent_before_settle`, and `context`. Every handler registers a no-op callback for its own event today; the delegation to adapters and use cases arrives with the later board cards.
 
 ## 4. Data Stores
 
@@ -55,7 +55,7 @@ flowchart LR
 
 ## 6. Deployment & Infrastructure
 
-Runs inside the local Pi Node.js process as a Pi extension package loaded from its local checkout path in `~/.pi/agent/settings.json` via the `package.json` `"pi": { "extensions": [...] }` manifest. Requires no standalone daemon or database service.
+Runs inside the local Pi Node.js process as a Pi extension package loaded from its local checkout, named under `packages` in `~/.pi/agent/settings.json` (relative paths there resolve from `~/.pi/agent`). The manifest's `"pi": { "extensions": [...] }` names the single entry inside `src/app/extension/`, and Pi loads nothing else from the package. Nothing is published: `package.json` carries no `version`, `license` or `files` yet, so `npm pack` fails until the publishing card writes them. Requires no standalone daemon or database service.
 
 ## 7. Security
 
@@ -65,7 +65,19 @@ Runs inside the local Pi Node.js process as a Pi extension package loaded from i
 
 ## 8. Development & Testing
 
-Packaging, TypeScript configuration, and the test harness are queued on the Foundation board card (`package.json`, `tsconfig.json`, and `tests/`). Once initialized, typechecking and tests will run from the repository root under `tests/` (kept outside `src/app/extension/` so Pi does not load tests as extensions).
+The package is wired for local work. Six files at the root carry the tooling: `package.json`, `package-lock.json`, `tsconfig.json`, `biome.json`, `vitest.config.ts` and `.gitignore`. The lockfile is committed, so a fresh checkout resolves the versions this repository was checked against: Biome 2.6.7, TypeScript 7.0.2, vitest 5.1.0 and `@earendil-works/pi-coding-agent` 1.5.2.
+
+Three tools gate the code, in one chain behind `npm run check`:
+
+- **Lint and format (`npm run lint`):** Biome over the allowlist `biome.json` declares, which is `src/`, `tests/` and the four root configuration files Biome reads. The run is read-only, and formatting is part of the gate, at 120 columns.
+- **Types (`npm run typecheck`):** `tsc --noEmit` over `src/` and `tests/` under `nodenext` resolution, so the `.js` specifiers on `.ts` files resolve without a build step. The proof-of-concept files at the root sit outside the program.
+- **Tests (`npm run test`):** vitest, collecting only `tests/**/*.test.ts`.
+
+Tests live at the root under `tests/`, each file mirroring the `src/` layer it exercises. Pi loads only the entries its manifest names, so a root test directory is never loaded as an extension; it sits there because the sibling packages keep their suites at the root.
+
+No check enforces ADR 0001's import boundary. Only the review half of that ADR's Consequences clause is in force, and nothing in `src/domain/` or `src/use-cases/` imports a Pi package today. Enforcement is deferred to a later card, as either a Biome rule or a check of its own.
+
+Loading the extension for local use takes the `packages` entry described in §6. `AGENTS.md` carries the commands, conventions and traps a contributor runs into; this section does not repeat them. ADR 0003 records why the toolchain is shaped this way.
 
 ## 9. Future Considerations
 
