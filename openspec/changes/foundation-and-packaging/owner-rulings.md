@@ -28,3 +28,11 @@ Answering Michael's orientation questions (`michael-orientation.md` §4):
 
 - **Q3 settled as (b): Biome + `tsc` + vitest.** Biome's configuration is "whatever the community is doing for typical biome config."
 - **Standing principle for this change:** decisions reflect the community's preferences, so the package is aligned for adoption.
+
+## Biome line width (2026-11-14)
+
+Answering `council.md` OD-1 (Biome `lineWidth` 80 or 120):
+
+> "i prefer 120"
+
+- **OD-1 → `lineWidth` 120.** The one setting in `biome.json` that differs from the `biome init` 2.6.7 output.
