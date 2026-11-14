@@ -1,0 +1,124 @@
+{
+  "round_status": "needs_fixes",
+  "resolutions": [
+    {
+      "finding_id": "readiness-r1-1",
+      "disposition": "propose_fix",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 3.1 (import specifier)",
+      "rationale": "Valid. `tests/app/extension/taiknr.test.ts` is three directories below the root, so the entry is `../../../src/app/extension/taiknr.js`; the two-level specifier in 3.1 resolves to a non-existent `tests/src/`. The domain test's `../../src/domain/archived-output.js` is correct (two levels). My round-1 end-to-end run used the three-level path.",
+      "evidence": "design.md test table: `tests/app/extension/taiknr.test.ts`; michael-resolve-s3-r1.json critic-r1-2 evidence: imports resolved through `../../../src/app/extension/taiknr.js` and `../../src/domain/archived-output.js`, `npm run check` exit 0.",
+      "required_change": "In 3.1 replace `../../src/app/extension/taiknr.js` with `../../../src/app/extension/taiknr.js`. (The full file text in readiness-r1-2's change carries the corrected path.)"
+    },
+    {
+      "finding_id": "readiness-r1-2",
+      "disposition": "propose_fix",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 3.1 (test body); task 4.1 (test body, see readiness-r1-7)",
+      "rationale": "Valid in part: the cast form decides whether the first `tsc --noEmit` is green, and 3.1 also tells the coder to import `describe` without using it, which Biome `recommended` reports as a `noUnusedImports` warning (measured) — that would fail 3.2's 'no diagnostic' verification. The remedy is to write the file text the measurement used, so no choice remains. `new Proxy({} as ExtensionAPI, …)` type-checks under `strict` without `as unknown` (measured, s3-r1 critic-r1-2 run).",
+      "evidence": "Measured today: a test importing `{ describe, expect, test }` with `describe` unused → `lint/correctness/noUnusedImports` warning (check exit 0, so 5.x passes but 3.2's 'no diagnostic' fails). michael-resolve-s3-r1.json critic-r1-2: the exact Proxy test below passed `tsc --noEmit` (TS 7.0.2) and vitest 5.1.0 inside `npm run check` exit 0; michael-council-rulings.json ruling 6: red on a restored throw and on `session_before_tree`.",
+      "required_change": "Replace 3.1's description of the test body with the file content, verbatim:\n\n```ts\nimport type { ExtensionAPI } from \"@earendil-works/pi-coding-agent\";\nimport { expect, test } from \"vitest\";\nimport taiknr from \"../../../src/app/extension/taiknr.js\";\n\ntest(\"registers exactly the seven lifecycle events and touches nothing else\", () => {\n\tconst events: string[] = [];\n\tconst fake = new Proxy({} as ExtensionAPI, {\n\t\tget(_target, prop) {\n\t\t\tif (prop === \"on\") return (event: string) => events.push(event);\n\t\t\tthrow new Error(`unexpected ExtensionAPI member: ${String(prop)}`);\n\t\t},\n\t});\n\ttaiknr(fake);\n\texpect(events.sort()).toEqual([\n\t\t\"agent_before_settle\",\n\t\t\"context\",\n\t\t\"session_compact\",\n\t\t\"session_start\",\n\t\t\"session_tree\",\n\t\t\"tool_call\",\n\t\t\"turn_end\",\n\t]);\n});\n```\n\nState: one `test`, no `describe`; imports are only what the file uses (an unused `describe` is a Biome `noUnusedImports` warning). Keep the sentence that the seven names are spelled here and read from no shared mapping."
+    },
+    {
+      "finding_id": "readiness-r1-3",
+      "disposition": "propose_fix",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 1.3 (task line and Verified); task 1.7 (add a Verified sentence)",
+      "rationale": "Valid; same defect as structural-r1-1 (deduplicated here). 1.3 says 'commit the package-lock.json' while 1.7 commits it among six paths, and 1.3's third Verified sentence requires an empty `git status --short` on a tree whose new files are all untracked. LOCKFILE-STABILITY was measured on a committed tree (repeat install, clean-clone install, `npm ci` all byte-identical), so the clean-tree assertion belongs after 1.7.",
+      "evidence": "tasks.md:40 'Run `npm install` and commit'; tasks.md:56–58 six-path commit in 1.7; tasks.md:42 'git status --short empty' at a step where 1.1–1.2 files are untracked. michael-resolve-s3-r1.json LOCKFILE-STABILITY measurement (npm 11.19.0).",
+      "required_change": "1.3 task line → 'Run `npm install` (Decision 5). The `package-lock.json` it creates is committed with the five root files in 1.7.'\n1.3 Verified → '`git status --short` lists `package-lock.json` plus the files from 1.1–1.2 and nothing else. `npm ls typescript vitest @biomejs/biome @earendil-works/pi-coding-agent` resolves within the Decision 8 ranges — see the drift rule below (readiness-r1-4). `shasum package-lock.json` before and after a second `npm install` prints the same digest (LOCKFILE-STABILITY).'\n1.7 Verified, append: 'Then prove the development-checks \"Install does not dirty the tree\" scenario on the committed tree: `npm install` followed by `git status --short` prints nothing.'"
+    },
+    {
+      "finding_id": "readiness-r1-4",
+      "disposition": "propose_fix",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 1.3 Verified (version assertion and drift rule)",
+      "rationale": "Valid: 1.3 asserts exact versions that caret ranges do not promise before the lockfile exists. The design chose ranges deliberately (R7: community's current choice; the lockfile fixes the resolution the first install produces), so drift within range is accepted by design and must not send the coder pinning. The acceptance for a drifted resolution is the chain itself (5.1); if the chain fails on a drifted version, that is a consult, not a coder decision. Measured today: the registry still resolves exactly the measured tree, so the live likelihood of drift at implement time is low but nonzero.",
+      "evidence": "`npm view` today: vitest 5.1.0, typescript 7.0.2, @earendil-works/pi-coding-agent 1.5.2, @biomejs/biome 2.6.7, @types/node@22 → 22.20.5 — identical to the measured lockfile (michael-resolve-s3-r1.json critic-r1-2). design.md Decision 5 / R7: ranges stay; lockfile fixes the resolution.",
+      "required_change": "Replace 1.3's `npm ls` sentence with: '`npm ls typescript vitest @biomejs/biome @earendil-works/pi-coding-agent` resolves `@biomejs/biome` to exactly `2.6.7` and the other three within their Decision 8 ranges (`^7.0.2`, `^5.1.0`, `^1.5.2`); the measured tree was `7.0.2`, `5.1.0`, `1.5.2`. Record the resolved versions in the task report. Drift rule: a newer version inside a range is accepted — the committed lockfile fixes it (Decision 5) and `npm run check` in 5.1 is its acceptance. Do not pin or edit a range. If 5.1 fails on a version that differs from the measured tree, stop and report the failing version to the conductor; that is a design question, not a coder choice.'"
+    },
+    {
+      "finding_id": "readiness-r1-5",
+      "disposition": "contest",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — tasks 2.1 and 5.1 Verified ('No fixes applied')",
+      "rationale": "Inaccurate: Biome 2.6.7's read-only `biome check` and `biome lint` both print 'Checked N files in Xms. No fixes applied.' on a clean run; that string was measured repeatedly in the council and Stage 3 rounds and again today. The oracle is correct as written. Exit code 0 is additionally asserted by `npm run check` in 5.1.",
+      "evidence": "michael-council-rulings.json ruling 2/3 evidence: read-only `biome check src tests` → 'Checked 22 files in 3ms. No fixes applied.'; michael-resolve-s3-r1.json critic-r1-1: read-only `npx biome check .` after the pass → 'Checked 24 files in 3ms. No fixes applied.'; today: read-only `npx biome lint a.test.ts` → 'Checked 1 file in 6ms. No fixes applied.'",
+      "required_change": ""
+    },
+    {
+      "finding_id": "readiness-r1-6",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 3.9 Verified",
+      "rationale": "Minor and correct (same as structural-r1-2): `git log --oneline -1` prints hash and subject only. Recorded wording: replace with `git show --stat --oneline HEAD` lists the eight paths (the test plus the seven handler files).",
+      "evidence": "tasks.md:106; git semantics; tasks 1.7, 2.2, 4.4 already use `git show --stat --oneline HEAD`.",
+      "required_change": ""
+    },
+    {
+      "finding_id": "readiness-r1-7",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 4.1 (test body)",
+      "rationale": "Minor and correct: 4.1's '3 tests passed' and 4.2's 'exactly the (10, 10) expectation failing while the other two pass' hold only with three `test` blocks. Recorded file text (imports only what is used, no `describe`, measured style):\n\n```ts\nimport { expect, test } from \"vitest\";\nimport { shouldArchive } from \"../../src/domain/archived-output.js\";\n\ntest(\"one below the threshold is not archived\", () => {\n\texpect(shouldArchive(9, 10)).toBe(false);\n});\n\ntest(\"exactly at the threshold is archived\", () => {\n\texpect(shouldArchive(10, 10)).toBe(true);\n});\n\ntest(\"one above the threshold is archived\", () => {\n\texpect(shouldArchive(11, 10)).toBe(true);\n});\n```\n\nApply with the fixes above so 4.1's and 4.2's oracles are consistent with the file.",
+      "evidence": "tasks.md:110–116; michael-council-rulings.json ruling 5 measured the three cases and the `>=`→`>` mutation; today's measurement that an unused `describe` import is a Biome warning.",
+      "required_change": ""
+    },
+    {
+      "finding_id": "readiness-r1-8",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — tasks 6.1 (recipe), 6.2/6.3 (undo), 6.4 (record and cd back)",
+      "rationale": "Minor and correct (same as structural-r1-3): `<repo>` is an unsubstituted placeholder, the recipe `cd`s into `$D` and never back, and 6.4 names no destination for the result. Recorded wording: in 6.1 insert `R=$(pwd)` as the first line of the recipe; in 6.2 and 6.3 use `git -C \"$R\" archive HEAD | tar -x -C \"$D\"`; in 6.4 begin with `cd \"$R\"` then `rm -rf \"$D\"` then `git status --short`; record `pi --version` and the three observations in Derek's task report to the conductor.",
+      "evidence": "tasks.md:155–178; michael-resolve-s3-r2.json critic-r2-3 measurement used the repository path explicitly for the re-extract undo.",
+      "required_change": ""
+    },
+    {
+      "finding_id": "codebase-r1-1",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — File Boundary rows for `package.json`, `tsconfig.json`, `biome.json`",
+      "rationale": "Minor and correct: the three root JSON files are created in §1 and re-touched (tabs; `files.includes` collapsed) by 2.1, which the 2.2 seven-path commit shows. Recorded wording: append to each of the three rows 'then formatter whitespace in 2.1 (Decision 3)', mirroring the `tool-call.ts` row.",
+      "evidence": "tasks.md:9,11,12 vs tasks.md:64 seven-path list; michael-resolve-s3-r1.json critic-r1-1 and BIOME-JSON-FORMAT.",
+      "required_change": ""
+    },
+    {
+      "finding_id": "structural-r1-1",
+      "disposition": "propose_fix",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 1.3 vs 1.7",
+      "rationale": "Valid; deduplicated with readiness-r1-3, whose required change resolves both the commit contradiction and the unsatisfiable clean-tree sentence. Listed separately so the structural lens sees its finding closed.",
+      "evidence": "See readiness-r1-3.",
+      "required_change": "Apply readiness-r1-3's required change; no further edit."
+    },
+    {
+      "finding_id": "structural-r1-2",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 3.9 Verified",
+      "rationale": "Duplicate of readiness-r1-6; minor; wording recorded there.",
+      "evidence": "tasks.md:106.",
+      "required_change": ""
+    },
+    {
+      "finding_id": "structural-r1-3",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — §6 recipe",
+      "rationale": "Duplicate of readiness-r1-8; minor; wording recorded there (`R=$(pwd)`, `git -C \"$R\"`, `cd \"$R\"` before 6.4's status check).",
+      "evidence": "tasks.md:155–178.",
+      "required_change": ""
+    },
+    {
+      "finding_id": "structural-r1-4",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 1.4 Verified, second sentence",
+      "rationale": "Minor and correct: `tsconfig.json` is created in 1.5, so 1.4 cannot see findings in it. Recorded wording: 'Formatting findings under `src/` and in `package.json` are expected at this step (and in `tsconfig.json` once 1.5 creates it); 2.1 clears them.'",
+      "evidence": "tasks.md:46 vs tasks.md:48.",
+      "required_change": ""
+    },
+    {
+      "finding_id": "structural-r1-5",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/foundation-and-packaging/tasks.md — task 5.2 Verified, parenthetical",
+      "rationale": "Minor and correct: critic-r1-1's seven errors spanned three root configs and four `src/` files. Recorded wording: 'Biome 2.6.7 reported seven formatting errors across the unformatted root configs and four `src/` files before any reflow (`michael-resolve-s3-r1.json` critic-r1-1).'",
+      "evidence": "michael-resolve-s3-r1.json critic-r1-1 evidence lists biome.json, package.json, tsconfig.json and the four src files.",
+      "required_change": ""
+    }
+  ],
+  "settled_findings": [
+    "readiness-r1-5: Biome 2.6.7 read-only `biome check`/`biome lint` print 'Checked N files in Xms. No fixes applied.' on a clean run (measured in council R2/R3, s3-r1 critic-r1-1, and today). The oracle in 2.1/5.1 is correct; do not re-open.",
+    "REGISTRY-TODAY: npm registry resolves vitest 5.1.0, typescript 7.0.2, pi-coding-agent 1.5.2, biome 2.6.7, @types/node@22 → 22.20.5 — identical to the measured lockfile. Drift within range is accepted by design (R7, Decision 5); the chain in 5.1 is its acceptance.",
+    "UNUSED-DESCRIBE: an unused `describe` import is a Biome `recommended` `noUnusedImports` warning (check exit 0, but a diagnostic); both test files import only `{ expect, test }`. Recorded in readiness-r1-2 and readiness-r1-7.",
+    "S5-TIDY (minor wording, apply in the same Bambadjan pass as the four propose_fix items): 3.9 `git show --stat --oneline HEAD` (readiness-r1-6/structural-r1-2); 4.1 three-`test` file text (readiness-r1-7); §6 `R=$(pwd)`, `git -C \"$R\"`, `cd \"$R\"` before 6.4, record destination (readiness-r1-8/structural-r1-3); File Boundary rows for the three root JSON files note the 2.1 re-touch (codebase-r1-1); 1.4 drop/qualify `tsconfig.json` (structural-r1-4); 5.2 citation file set (structural-r1-5). None changes a decision or config value; fresh rounds should not re-open them."
+  ],
+  "owner_decisions": []
+}
