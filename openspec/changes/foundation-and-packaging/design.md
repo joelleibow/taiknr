@@ -21,6 +21,8 @@ Constraints that bind the design, all recorded in `michael-orientation.md` §1�
 
 Michael's eleven rulings (R1–R11) settle every open question the council raised, and Joel ruled the last knob. This design carries those rulings rather than re-arguing them; where a ruling measured a value, the value below cites it.
 
+**Citation key.** `D1–D7`: binding decisions, `michael-orientation.md` §1. `Trap 1–9`: measured traps, `michael-orientation.md` §3. `S1–S8`: settled items, `michael-orientation.md` §5. `R1–R11`: Michael's council rulings 1–11 in `michael-council-rulings.json`. `OD-1`: the owner decision in `council.md`, answered in `owner-rulings.md` 'Biome line width'. Council lens findings: `CR-n` critic, `F-n` structural, `R-nn` readiness, `CAT-n` catalyst, `C-n` comprehension, `ZO-n` zoom-out, `CC-n` codebase, each in `council-<lens>.md`. `Chidi §n` / `Chidi addendum §n` / `Eleanor §n`: `research-chidi.md` / `research-eleanor.md`. Where an ID is used as authority below, the operative content is stated in place.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -60,7 +62,7 @@ No new `src/` module. Every new file is either root tooling configuration or a t
 | File | Single responsibility | Layer |
 |---|---|---|
 | `tests/app/extension/taiknr.test.ts` | Assert that the entry's default export registers exactly the seven event names, with no Pi runtime | Mirrors `src/app/extension/`; imports inward through `taiknr.js` |
-| `tests/domain/archived-output.test.ts` | Assert `shouldArchive`'s threshold behavior through the `.js` specifier chain | Mirrors `src/domain/`; imports inward, no Pi types anywhere in the chain |
+| `tests/domain/archived-output.test.ts` | Assert `shouldArchive(rawTextLength: number, minCharsToArchive: number): boolean` (src/domain/archived-output.ts, body `rawTextLength >= minCharsToArchive`) through the `.js` specifier chain: `shouldArchive(9, 10)` is `false`, `shouldArchive(10, 10)` is `true` (at the threshold archives), `shouldArchive(11, 10)` is `true`. Mutation that must turn it red: `>=` → `>` (R5). | Mirrors `src/domain/`; imports inward, no Pi types anywhere in the chain |
 
 Two files, not one, because the two assertions belong to different layers and only one of them may touch Pi types (D3). A single file under `tests/app/` would pull the Pi-typed entry into the same module as the domain assertion, and the point of the domain test is that it runs in plain Node (ADR 0001 Consequences; R5).
 
@@ -188,14 +190,25 @@ The lockfile fixes the exact resolution of every tool the checks run, which matt
 - **In-repo guard:** `tests/app/extension/taiknr.test.ts` invokes the default export with a Proxy fake whose only member is `on` (any other member access throws) and asserts the sorted list of registered names equals exactly the seven. It runs inside `npm run check`, needs no Pi runtime (every Pi import in `src/` is `import type`), goes red against `HEAD`'s throwing stubs and green after the no-op edit, and catches a valid-but-wrong event name that `tsc` accepts (R6).
 - **Manual load check**, run against a throwaway agent directory and asserting on text, never on an exit code:
 
+  Prerequisites (measured environment): Node 26.8.1, npm 11.19.0, Pi 1.5.2 on PATH (`pi --version` must print `1.5.2`), `rg`. No `npm install` is needed for this check: Pi loads host packages from its own copies.
+
   ```
   D=$(mktemp -d)
-  printf '{"packages":["<abs repo path>"]}' > "$D/settings.json"
-  PI_CODING_AGENT_DIR=$D pi --no-session --help 2>&1 | rg 'Failed to load extension|Host-provided extension packages'
-  rm -rf "$D"
+  printf '{"packages":[%s]}' "$(node -p 'JSON.stringify(process.argv[1])' "$PWD")" > "$D/settings.json"
+  PI_CODING_AGENT_DIR="$D" pi --no-session --help > "$D/out.txt" 2>&1
+  head -1 "$D/out.txt"
+  rg -c 'Failed to load extension|Host-provided extension packages' "$D/out.txt"
   ```
 
-  The command must print nothing. Discovery is proven by two negative controls, each run once and reverted: with one handler's `throw` temporarily restored, the same command prints `Failed to load extension … Not implemented`; with the Pi package temporarily moved to `dependencies`, it prints the `Host-provided extension packages` warning. `pi --version` is recorded with the result (R6).
+  Pass rule, all three: (1) `head -1` prints Pi's usage header, `pi - AI coding assistant …` (proof Pi ran; a missing or failing `pi` prints something else or nothing); (2) `rg -c` prints nothing and exits 1 (no match); (3) both negative controls below print a count of 1. Any other output is a failure. `$D` is removed after the controls (`rm -rf "$D"`), not before.
+
+  Discovery is proven by two negative controls, run after the positive run, each on a clean tree (`git status --short` empty) and each reverted with `git checkout -- <file>` before the next step, whether or not it passed:
+
+  - Control A (load error): in `src/infra/pi-event-handlers/session-tree.ts`, replace the body line `_pi.on("session_tree", () => {});` with `throw new Error("Not implemented: registerSessionTreeHandler");`. Re-run the `pi` line and `rg -c 'Failed to load extension' "$D/out.txt"` → prints `1`. Revert: `git checkout -- src/infra/pi-event-handlers/session-tree.ts`.
+  - Control B (dependency placement): add `"dependencies": { "@earendil-works/pi-coding-agent": "*" }` to `package.json`, leaving `peerDependencies` and `devDependencies` as they are. Do not run `npm install`: Pi reads the manifest's `dependencies` object directly at load, so the lockfile and `node_modules/` are untouched. Re-run the `pi` line and `rg -c 'Host-provided extension packages' "$D/out.txt"` → prints `1`. Revert: `git checkout -- package.json`.
+
+  After both: `git status --short` is empty, then `rm -rf "$D"`. Record `pi --version` with the result.
+- **Domain guard:** `tests/domain/archived-output.test.ts` as specified in the test table. `test` and `expect` are imported from `vitest` (no globals, Decision 7). It is shown to catch a mistake once, by the `>=` → `>` scratch mutation, then the mutation is reverted.
 
 **Alternatives weighed.** Relying on the `--help` exit code — measured 0 whether or not an extension failed to load, so it cannot fail (R6). Passing `-ne` on the packages route — `-ne` disables configured packages, and with it a throwing stub produced no error at all, which makes the command vacuous; that is why the readiness review's literal `pi -ne --help` form is rejected (R6). A non-interactive run (`--mode json`) — exits 1 on load failure but costs a model call (R6). Relying on `tsc` for the event names — it accepts `session_before_tree`, a real Pi event, so it cannot catch a wrong registration (R6). Treating the in-repo guard as the production mechanism — it is a test; the entry still calls `.on` and nothing else (R6).
 
@@ -247,9 +260,9 @@ This makes the development-checks invariant true as written — the test command
 
 | Field | Source |
 |---|---|
-| `name: "pi-taiknr"` | S1; npm needs a name to write a lockfile, which his consult measurement of a version-less manifest confirms it takes from this field |
-| `"type": "module"` | S1; D6 |
-| `pi.extensions: ["./src/app/extension/taiknr.ts"]` | S1; R11; Chidi §1, §4 |
+| `name: "pi-taiknr"` | S1 (settled package shape: name `pi-taiknr`, `"type": "module"`, `pi.extensions` naming the single entry, peer `*` + dev `^1.5.2`, no `dependencies`); npm takes the lockfile root name from this field (consult measurement of a version-less manifest) |
+| `"type": "module"` | S1; D6 (the source at HEAD is ESM with `.js` specifiers on `.ts` files — 47 relative imports — so the package must be `"type": "module"`) |
+| `pi.extensions: ["./src/app/extension/taiknr.ts"]` | S1; R11 (manifest scenario reworded to what the repository controls); Chidi §1, §4 (Pi loads only the manifest's listed entries) |
 | `lint: "biome check ."` | R2 — read-only, and the `files.includes` allowlist makes the `.` safe |
 | `typecheck: "tsc --noEmit"` | S2; Chidi addendum §5 |
 | `test: "vitest run"` | Chidi addendum §5 — observed in `pi-omlx`, `pi-pretty`, `pi-subagents`, `rpiv-mono` and Pi's own root; R10 |
@@ -266,9 +279,9 @@ No `engines`: R7 rules it out, and nothing breaks without it.
 
 ### 9. Publishing metadata is omitted, deliberately
 
-`version`, `keywords`, `description`, `license`, `files`, `private` and `engines` are not written. Nothing in this change reads any of them: Pi identifies a local package by resolved absolute path and inspects only `dependencies` for its warning (Chidi §1); npm writes a lockfile from a version-less manifest (Michael's consult measurement of exactly this field set in a `git archive` copy: `npm install` exit 0, lockfile root `{"name":"pi-taiknr"}`, no warning at `--loglevel=warn`, and Pi 1.5.2 loaded the package through a `packages` entry with empty stderr); and the `pi-package` keyword only makes an npm-*published* package eligible for the pi.dev gallery, which Pi's loader never reads (Chidi §1). The publishing card adds them with real values — the licence is Joel's to choose, not a placeholder this change invents.
+`version`, `keywords`, `description`, `license`, `files`, `private` and `engines` are not written. Nothing in this change reads any of them: Pi identifies a local package by resolved absolute path and inspects only `dependencies` for its warning (Chidi §1); npm writes a lockfile from a version-less manifest (Michael's consult measurement of exactly this field set in a `git archive` copy: `npm install` exit 0, lockfile root `{"name":"pi-taiknr"}`, no warning at `--loglevel=warn`, and Pi 1.5.2 loaded the package through a `packages` entry with empty stderr); and the `pi-package` keyword only makes an npm-*published* package eligible for the pi.dev gallery, which Pi's loader never reads (Chidi §1). The publishing card adds them with real values. The licence is already chosen: the repository's first commit carries an MIT `LICENSE` (owner-rulings.md, "Repository and package name"), which is the one home for that fact in this change; `"license": "MIT"` is written into `package.json` by the publishing card together with `version`, because nothing in this change reads the field.
 
-This supersedes S1's `"keywords": ["pi-package"]`, which Michael's consult corrected: keeping the keyword while omitting `version` would be inconsistent, since both serve the same consumer — npm publishing — and that consumer is a later card.
+This supersedes one item of S1 — S1 had listed `"keywords": ["pi-package"]` in the package shape — which Michael's consult corrected: keeping the keyword while omitting `version` would be inconsistent, since both serve the same consumer — npm publishing — and that consumer is a later card.
 
 **Alternatives weighed.** `"version": "0.0.0"` and `"private": true` as placeholders — the shape earlier measurements used, but a value no ruling supplies and a version that would have to be corrected; the version-less manifest is measured to install and load (see above). Keeping only `keywords` — the inconsistency above. `"files"`/`.npmignore` — nothing is published, so there is nothing to narrow.
 
@@ -290,7 +303,7 @@ This supersedes S1's `"keywords": ["pi-package"]`, which Michael's consult corre
 }
 ```
 
-Every key is S2's, and that exact set measured `tsc --noEmit` exit 0 with zero errors on this tree (Trap 2), under both TypeScript 5.9.3 and 7.0.2 (R7). The config serves `tsc` only — the installed Pi's loader ignores it (Chidi §2).
+Every key is S2's (S2: `module`/`moduleResolution: nodenext`, `strict`, `noEmit`, `skipLibCheck`, `types: ["node"]`, `include` of `src/**/*.ts` and `tests/**/*.ts`, root PoC excluded), and that exact set measured `tsc --noEmit` exit 0 with zero errors on this tree (Trap 2), under both TypeScript 5.9.3 and 7.0.2 (R7). The config serves `tsc` only — the installed Pi's loader ignores it (Chidi §2).
 
 The proof-of-concept exclusion is carried by `include`, not by `exclude`: `jev-context-poc.ts` sits at the root and matches neither pattern, so adding an `exclude` entry would state the same fact twice (feature-spec standard §1). `vitest.config.ts` is outside the program for the same reason it is in Biome's list by name: S2's `include` covers `src/` and `tests/`, and widening it is a measured change nobody asked for.
 
@@ -304,7 +317,7 @@ node_modules/
 .DS_Store
 ```
 
-S3's three entries and no more. No `.pi/` entry, because it is excluded locally through `.git/info/exclude` and the conductor owns what lives there (Trap 5). No `package-lock.json` entry, because the lockfile is committed (R4).
+S3's three entries (`node_modules/`, `*.tgz`, `.DS_Store`) and no more. No `.pi/` entry, because it is excluded locally through `.git/info/exclude` and the conductor owns what lives there (Trap 5). No `package-lock.json` entry, because the lockfile is committed (R4).
 
 **Alternatives weighed.** Ignoring the lockfile (R4, rejected above). Adding `.pi/` "just in case" — re-decides a local, uncommitted exclusion the change is told not to touch (Trap 5). Adding `coverage/` or editor directories — nothing in this change produces them, and a setting exists only when something sets it differently (zoom-out standard §3).
 
@@ -324,7 +337,7 @@ C5 left one wording open: whether the test requirement should read "no live mode
 
 1. **A new top-level source directory is silently unlinted.** Someone adds `scripts/…` later; `biome check .` skips it and no scenario notices. → The six `files.includes` entries are written in this document and in the development-checks lint requirement, and the "A new source file is inside the scope" scenario keeps `src/` and `tests/` covered without an edit; a new top-level root is a one-line config change with a spec-visible reason.
 2. **The settings entry is active while the checkout is behind this change.** Every Pi session in every project prints `Failed to load extension … Not implemented: registerSessionStartHandler`; interactive sessions continue, but `--print` and `--mode json` runs exit 1. → Migration Plan steps 3–4: remove the entry before reverting or checking out an earlier commit.
-3. **`pi --help` exits 0 on a failed load.** A green exit code could be read as a good load. → The manual check asserts on stderr text, and the in-repo guard turns red inside `npm run check` (Decision 6).
+3. **`pi --help` exits 0 on a failed load.** A green exit code could be read as a good load. → The manual check asserts on stderr text, and the in-repo guard turns red inside `npm run check` (Decision 6). The manual check requires Pi's usage header as positive proof that Pi ran, because a filtered pipeline is silent on a missing command too.
 4. **A handler registers a valid-but-wrong event name.** `session_before_tree` exists in Pi 1.5.2's types, so `tsc` passes while Pi never invokes the handler. → The entry test compares the sorted list against exactly seven names, and was measured red on that exact substitution (R6).
 5. **The format pass hides a behavior change.** Whitespace and stub edits land together; review can no longer see the second. → Format commit first, its diff reviewed as whitespace-only, handler edits second (Decision 3); the ordering is a task sequence, not a migration step.
 6. **The format pass shifts line-level blame on four files.** `git blame` attributes their parameter lists to this change. → Accepted: four files, all parameter-list collapses, with `.git-blame-ignore-revs` recorded as an open, unadopted option (Decision 12).
@@ -350,4 +363,4 @@ Joel's Q2(a) puts the settings edit outside the repository and outside this chan
 
 1. **`.git-blame-ignore-revs`.** Offered by the catalyst lens (CAT-2) and not adopted here (Decision 12) without being rejected: adopting it later changes no requirement and no check, since it only points at the format commit's hash.
 2. **The mechanism for the import-boundary lint.** Deferred (S7). Whether it lands as one Biome rule override or a separate check is the later card's choice; nothing here depends on which.
-3. **The publishing metadata values.** `version`, `description`, `license` and `files` are the publishing card's to write with real values (Decision 9); the licence choice is Joel's.
+3. **The publishing metadata values.** `version`, `description` and `files` are the publishing card's to write with real values (Decision 9). `license` is settled as MIT (the root `LICENSE` file); the publishing card copies it into `package.json`.
