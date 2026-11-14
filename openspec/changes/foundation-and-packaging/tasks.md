@@ -47,7 +47,7 @@ The order is the design's: root tooling first, then the one-time format pass as 
 
 - [ ] 1.5 Create `tsconfig.json` with the Decision 10 content: `module` and `moduleResolution` `nodenext`, `strict`, `noEmit`, `skipLibCheck`, `types: ["node"]`, and `include` of `src/**/*.ts` and `tests/**/*.ts` with no `exclude` key.
   - Failing behavioral test: none — configuration only; the check it configures is verified here, boundary cases: none.
-  - Verified: `npx tsc --noEmit` exits 0 with no output on the stub tree (Trap 2; R7). `npx tsc --noEmit --listFiles | rg -c 'jev-context-poc'` prints nothing and exits 1, which is the development-checks "Proof of concept excluded" scenario. `npx tsc --noEmit --listFiles` names `tests/**` files once they exist, checked again in 5.1.
+  - Verified: `npx tsc --noEmit` exits 0 with no output on the stub tree (Trap 2; R7). `npx tsc --noEmit --listFiles | rg -c 'jev-context-poc'` prints nothing and exits 1, which is the development-checks "Proof of concept excluded" scenario. `npx tsc --noEmit --listFiles` names `tests/**` files once they exist, proven in 5.3, whose type error is reported in a `tests/` file.
 
 - [ ] 1.6 Create `vitest.config.ts` with the Decision 7 content and nothing else.
   - Failing behavioral test: none yet — `tests/` is empty at this step, so the include has nothing to collect; its behaviour is verified in 3.1 when the first test file exists (development-checks "Tests under `tests/` are found"). Boundary cases: a test outside `tests/` must not be collected, checked in 4.3.
@@ -61,15 +61,15 @@ The order is the design's: root tooling first, then the one-time format pass as 
 
 - [ ] 2.1 Run `npx biome check --write .` — scoped by `files.includes` to `src/**`, `tests/**` and the four root config files — and read the diff as whitespace alone (Decision 3).
   - Failing behavioral test: none — formatter output only, and no behaviour changes; boundary cases: none. The guard is that the pass is whitespace alone, which the diff check below proves.
-  - Verified: run immediately after `npx biome check --write .` and before the commit. Whitespace-only proof, binding: for each of the four `src/` paths the committed file at `HEAD` and the working-tree file are identical once spaces, tabs, newlines and commas are removed —
+  - Verified: run immediately after `npx biome check --write .` and before the commit. Whitespace-only proof, binding: for each of the seven paths the committed file at `HEAD` and the working-tree file are identical once spaces, tabs, newlines and commas are removed —
 
 ```
-for f in src/infra/adapters/pi-archive-adapter.ts src/infra/adapters/pi-jev-scorer-adapter.ts src/infra/pi-event-handlers/tool-call.ts src/use-cases/commit-archived-batch.ts; do
+for f in src/infra/adapters/pi-archive-adapter.ts src/infra/adapters/pi-jev-scorer-adapter.ts src/infra/pi-event-handlers/tool-call.ts src/use-cases/commit-archived-batch.ts package.json tsconfig.json biome.json; do
 	[ "$(git show HEAD:$f | tr -d ' \t\n,')" = "$(tr -d ' \t\n,' < "$f")" ] && echo "whitespace-only: $f" || echo "CONTENT CHANGED: $f"
 done
 ```
 
-prints `whitespace-only` four times and `CONTENT CHANGED` never. The comparison is order-independent, since the left side is the committed `HEAD` file and the right side the working tree, so it measures the same thing before and after the commit. The pass joins parameter and import lists onto one line and drops their trailing commas, so `git show -w` is not empty for these files and is not the oracle (measured: 21 changed lines remain under `-w`); read the diff with `git show --word-diff=plain -- src/` to see the joins. Secondary: `npm run typecheck` exits 0. `npx biome check .` afterwards reports "No fixes applied" and zero errors, and `npm run typecheck` still exits 0.
+prints `whitespace-only` seven times and `CONTENT CHANGED` never. Run before the commit, while `HEAD` still holds the pre-format files; this is the same pre-format-versus-post-format comparison round 2 measured (WHITESPACE-ORACLE), and it is vacuous if run after 2.2. The pass joins parameter and import lists onto one line and drops their trailing commas; read the joins while the tree is uncommitted with `git diff --word-diff=plain -- src/`; after 2.2 the same view is `git show --word-diff=plain -- src/`, and `git show -w -- src/` keeps the measured 21 changed lines, which is why `-w` is not the oracle. Secondary: `npm run typecheck` exits 0. `npx biome check .` afterwards reports "No fixes applied" and zero errors, and `npm run typecheck` still exits 0.
 
 - [ ] 2.2 Commit the pass by itself, with no other change staged, so a reviewer can read the whitespace apart from the stub edits (Decision 3; Risks 5).
   - Failing behavioral test: none — a commit step; boundary cases: none.
