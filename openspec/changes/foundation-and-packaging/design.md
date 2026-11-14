@@ -190,30 +190,7 @@ The lockfile fixes the exact resolution of every tool the checks run, which matt
 ### 6. The load path gets two guards, and neither is production code
 
 - **In-repo guard:** `tests/app/extension/taiknr.test.ts` invokes the default export with a Proxy fake whose only member is `on` (any other member access throws) and asserts the sorted list of registered names equals exactly the seven. It runs inside `npm run check`, needs no Pi runtime (every Pi import in `src/` is `import type`), goes red against `HEAD`'s throwing stubs and green after the no-op edit, and catches a valid-but-wrong event name that `tsc` accepts (R6).
-- **Manual load check**, run against a throwaway copy of the committed tree and asserting on text, never on an exit code:
-
-  Prerequisites unchanged (Node 26.8.1, npm 11.19.0, Pi 1.5.2 via `pi --version`, `rg`). The check runs against a throwaway copy of the committed tree, never the live checkout, so it needs no clean-tree precondition and no revert; commit the stub edits first.
-
-  ```
-  D=$(mktemp -d)
-  git archive HEAD | tar -x -C "$D"
-  cd "$D"
-  printf '{"packages":[%s]}' "$(node -p 'JSON.stringify(process.argv[1])' "$D")" > "$D/settings.json"
-  PI_CODING_AGENT_DIR="$D" pi --no-session --help > out.txt 2>&1
-  head -1 out.txt
-  rg -c 'Failed to load extension|Host-provided extension packages' out.txt
-  ```
-
-  (`$D` is both the package root Pi loads and the throwaway agent directory; Pi reads only `settings.json` from the agent directory and only `package.json` and `pi.extensions` from the package, so sharing one directory is safe.)
-
-  Pass rule unchanged, all three: usage header printed; `rg -c` prints nothing and exits 1; both controls print `1`. In detail: (1) `head -1` prints Pi's usage header, `pi - AI coding assistant …` (proof Pi ran; a missing or failing `pi` prints something else or nothing); (2) `rg -c` prints nothing and exits 1 (no match); (3) both negative controls below print a count of 1. Any other output is a failure.
-
-  Discovery is proven by two negative controls, run after the positive run, each inside `$D` and each undone by re-extracting the archive before the next step, whether or not it passed:
-
-  - Control A (load error): in `$D/src/infra/pi-event-handlers/session-tree.ts` replace `_pi.on("session_tree", () => {});` with `throw new Error("Not implemented: registerSessionTreeHandler");`, re-run the `pi` line, `rg -c 'Failed to load extension' out.txt` → `1`. Undo by re-extracting: `git -C <repo> archive HEAD | tar -x -C "$D"`.
-  - Control B (dependency placement): in `$D/package.json` add `"dependencies": { "@earendil-works/pi-coding-agent": "*" }`; no `npm install` (Pi reads the manifest's `dependencies` object directly at load, so the lockfile and `node_modules/` are untouched); re-run the `pi` line, `rg -c 'Host-provided extension packages' out.txt` → `1`. Undo by re-extracting as above.
-
-  Cleanup: `rm -rf "$D"`. Pi loads the package only from the copy, and its project directory is the copy; the live checkout is never modified. Record `pi --version` with the result.
+- **Manual load check**, asserting on text, never on an exit code. Prerequisites (measured environment): Node 26.8.1, npm 11.19.0, Pi 1.5.2 on `PATH` (`pi --version` prints `1.5.2`), `rg`. The check verifies the committed tree, never the live checkout: a `git archive HEAD` copy in a `mktemp -d` directory serves as both the package Pi loads (via a `settings.json` `packages` entry naming the copy) and `PI_CODING_AGENT_DIR`, and Pi runs with the copy as its working directory. Commit the stub edits first, and no `npm install` is needed (Pi maps host packages to its own copies). Pass is three observations on captured, unfiltered output of `pi --no-session --help`: Pi's usage header is present (proof Pi ran — a filtered pipeline is silent on a missing command too); neither `Failed to load extension` nor `Host-provided extension packages` appears; and two negative controls, each applied inside the copy and undone by re-extracting the archive, each produce their diagnostic — a restored `throw` in one handler produces the load error, and the host package added to `dependencies` (no install) produces the warning. Never assert on the exit code: `--help` exits 0 whether or not an extension loaded (R6). Record `pi --version` with the result. The literal command sequence lives in `tasks.md`'s acceptance task.
 - **Domain guard:** `tests/domain/archived-output.test.ts` as specified in the test table. `test` and `expect` are imported from `vitest` (no globals, Decision 7). It is shown to catch a mistake once, by the `>=` → `>` scratch mutation, then the mutation is reverted.
 
 **Alternatives weighed.** Relying on the `--help` exit code — measured 0 whether or not an extension failed to load, so it cannot fail (R6). Passing `-ne` on the packages route — `-ne` disables configured packages, and with it a throwing stub produced no error at all, which makes the command vacuous; that is why the readiness review's literal `pi -ne --help` form is rejected (R6). A non-interactive run (`--mode json`) — exits 1 on load failure but costs a model call (R6). Relying on `tsc` for the event names — it accepts `session_before_tree`, a real Pi event, so it cannot catch a wrong registration (R6). Treating the in-repo guard as the production mechanism — it is a test; the entry still calls `.on` and nothing else (R6).
