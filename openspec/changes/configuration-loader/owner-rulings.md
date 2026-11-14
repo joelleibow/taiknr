@@ -42,3 +42,10 @@ Answering `michael-orientation.md` §4 Q1 (what happens when a config file is pr
 
 - **Q1 → (b), loud and closed.** A present-but-malformed or invalid config file is reported clearly (naming the file and the field), and taiknr does nothing for that session until the file is fixed. It does not fall back to defaults.
 - **Deferred, not in this change:** the dependency on OpenRouter as the classifier provider. Joel will address that abstraction once a version works locally as well as he wants.
+
+## Orientation Q1b and Q2 — unknown keys and layering (2026-11-14)
+
+> "Q1b, reject it. Q2, defaults first, overlayed with user file, then overlayed with the project. Closest settings file to the working directory wins w/ its overrides, otherwise it inherits the user level setting, followed by the default."
+
+- **Q1b → reject.** An unknown top-level key is a config error, handled under Q1(b).
+- **Q2 → field-level layering:** defaults, then the user (agent-level) file over them, then the project file over that. For each field, the project file's value wins when it sets one; otherwise the user file's; otherwise the default.
