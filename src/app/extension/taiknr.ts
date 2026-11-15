@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { DEFAULT_TAIKNR_CONFIG } from "../../config/taiknr-config.js";
+import { createSessionConfig } from "../../config/session-config.js";
 import type { ArchivedToolOutput } from "../../domain/archived-output.js";
 import { InMemoryArchiveStore } from "../../infra/adapters/pi-archive-adapter.js";
 import { registerAgentBeforeSettleHandler } from "../../infra/pi-event-handlers/agent-before-settle.js";
@@ -10,13 +10,15 @@ import { registerSessionTreeHandler } from "../../infra/pi-event-handlers/sessio
 import { registerToolCallHandler } from "../../infra/pi-event-handlers/tool-call.js";
 import { registerTurnEndHandler } from "../../infra/pi-event-handlers/turn-end.js";
 import type { RecallCache } from "../../use-cases/recall-relevant-context.js";
+import { createGatedPi } from "./handler-gate.js";
 
 /**
  * Taiknr Pi extension entry point.
  * Wires config, session state, adapters, use cases, and Pi lifecycle handlers.
  */
 export default function taiknr(pi: ExtensionAPI): void {
-	const config = DEFAULT_TAIKNR_CONFIG;
+	const session = createSessionConfig();
+	const gatedPi = createGatedPi(pi, session);
 	const store = new InMemoryArchiveStore();
 	const argsByCallId = new Map<string, string>();
 	const pendingOutputs: ArchivedToolOutput[] = [];
@@ -24,23 +26,23 @@ export default function taiknr(pi: ExtensionAPI): void {
 	const recallCache: RecallCache = { lastPromptKey: "", lastRecalledIds: [] };
 
 	// Handlers stay thin Pi event bridges; adapters translate Pi DTOs to domain contracts.
-	registerSessionStartHandler(pi, store);
-	registerSessionTreeHandler(pi, store);
-	registerSessionCompactHandler(pi, store);
-	registerToolCallHandler(pi, argsByCallId);
-	registerTurnEndHandler(pi, {
-		config,
+	registerSessionStartHandler(pi, store, session);
+	registerSessionTreeHandler(gatedPi, store);
+	registerSessionCompactHandler(gatedPi, store);
+	registerToolCallHandler(gatedPi, argsByCallId);
+	registerTurnEndHandler(gatedPi, {
+		config: session,
 		argsByCallId,
 		pendingOutputs,
 		originalContentByEntryId,
 	});
-	registerAgentBeforeSettleHandler(pi, {
+	registerAgentBeforeSettleHandler(gatedPi, {
 		store,
 		pendingOutputs,
 		originalContentByEntryId,
 	});
-	registerContextHandler(pi, {
-		config,
+	registerContextHandler(gatedPi, {
+		config: session,
 		store,
 		notifier: {
 			notifyOnce: () => {

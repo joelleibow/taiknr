@@ -1,0 +1,18 @@
+{
+  "owner_decisions": [],
+  "resolutions": [
+    {
+      "disposition": "decline",
+      "evidence": "`design.md` L69: '`src/app/extension/` imports the holder's factory and the loader from `src/config/`'; L71 grants `session-start.ts` only 'the holder's type' plus the two host helpers. D5 steps 1–3 call `resolve(getAgentDir(), CONFIG_FILE_NAME)`, `loadTaiknrConfig(…)` and catch `TaiknrConfigError` inside the session-start handler; the Files table's `taiknr.ts` row is 'create the holder and the gate, pass them to the registrars' with no loader call. Dependency direction (infra → config inward) is unchanged either way.",
+      "finding_id": "structural-r4-1",
+      "rationale": "Minor and correct: the paragraph puts the loader edge on the composition root, which has no call site for it in this change, and omits the three `src/config/` value imports the session-start body needs. D5, D10 and the Files table are the operative statements and are unambiguous; the direction of every edge is right, only the unit holding the loader edge is misnamed. Wording.",
+      "required_change": "Suggested wording (not blocking): L69 → '`src/app/extension/` imports the holder's factory (`createSessionConfig`) from `src/config/` — the gate imports only the holder's type — and the registrars from `src/infra/pi-event-handlers/`; it imports the host as types only.' L71, second sentence → '`session-start.ts` also imports `loadTaiknrConfig`, `CONFIG_FILE_NAME` and `TaiknrConfigError` from `src/config/` as values, and the host's `getAgentDir` and `CONFIG_DIR_NAME` as values — the boundary `ARCHITECTURE.md` §5 draws for host imports, and the reason those two path builds live there rather than in `src/config/` (ruling 10).'",
+      "target_artifact": "openspec/changes/configuration-loader/design.md ('Dependency direction', paragraphs 2 and 3)"
+    }
+  ],
+  "round_status": "clean",
+  "settled_findings": [
+    "structural-r4-1 — 'Dependency direction' names the loader edge on `src/app/extension/` instead of `session-start.ts` and omits that file's three `src/config/` value imports; declined with exact wording; D5 and the Files table govern. Do not re-open unless D5's body or the Files table changes.",
+    "Critic round 4: zero findings; both reviewers verified every round-1 to round-3 propose_fix and declined wording item applied. No unsettled blocking or major finding remains; Stage 3 is clean."
+  ]
+}

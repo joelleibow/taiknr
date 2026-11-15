@@ -1,0 +1,82 @@
+{
+  "requirements": [
+    {
+      "status": "met",
+      "requirement": "Tasks 0.1, 9.1, 9.6 & Contract adherence — Base commit `85ef6a5`, exact 12-path File Boundary commit + trailing `tasks.md` tick commit, untouched tooling/PoC/domain/use-case files",
+      "evidence": "Checked `git log 85ef6a5^..HEAD` and `git diff --name-status`: commit `1e54542` touches exclusively the 12 File Boundary paths (`A` x7, `M` x5, no `D`/`R`), and trailing commit `16442a0` ticks the 23 checkboxes in `openspec/changes/configuration-loader/tasks.md` with zero prose edits and zero other Markdown files modified. `git status --short` in the checkout is empty."
+    },
+    {
+      "requirement": "Spec `configuration` (Host-resolved paths, no parent search) & Owner rulings D3, Q2 clarification; Design D5 step 1, D12; Task 7.1/7.2/9.4",
+      "evidence": "Read `src/config/taiknr-config.ts:12` (`CONFIG_FILE_NAME = \"pi-taiknr.json\"`), `src/infra/pi-event-handlers/session-start.ts:14-15` (`resolve(getAgentDir(), CONFIG_FILE_NAME)` and `ctx.isProjectTrusted() ? resolve(ctx.cwd, CONFIG_DIR_NAME, CONFIG_FILE_NAME) : undefined`), and `tests/infra/pi-event-handlers/session-start.test.ts:87-131,179-199`. Re-ran `git grep -n -e '\\.pi\\b' -e '~/\\.pi' HEAD -- src` (empty); mutation M11 replacing `resolve` with `join` failed `a relative agent directory still yields an absolute agent path`. Parent-directory malformed files at `<tmp>/pi-taiknr.json` and `<tmp>/<CONFIG_DIR_NAME>/pi-taiknr.json` are ignored in `:120-131`.",
+      "status": "met"
+    },
+    {
+      "requirement": "Spec `configuration` (Field-level layering: default -> agent -> trusted project) & Owner ruling Q2; Design D4; Tasks 2.1–2.3",
+      "status": "met",
+      "evidence": "Read `src/config/taiknr-config.ts:63-88` (`loadTaiknrConfig` and `layered` walking `[agentDocument, projectDocument]` over `DEFAULT_TAIKNR_CONFIG` per known key with `Object.hasOwn`, never spreading). Verified `tests/config/taiknr-config.test.ts:65-121` and `tests/infra/pi-event-handlers/session-start.test.ts:110-118`. Mutation M3 reversing `documents` failed `a trusted project file wins over the agent file`."
+    },
+    {
+      "status": "met",
+      "evidence": "Read `src/config/taiknr-config.ts:29-60,124-157`: `TaiknrConfigError` formats `<filePath>: <field>: <reason>` or `<filePath>: <reason>`; `stripByteOrderMark` strips one leading `\\uFEFF`; `validateDocument` checks plain-object root (`typeof !== \"object\" || null || Array.isArray`), walks `Object.keys(document)` checking `Object.hasOwn(FIELD_RULES, field)` (`unknown field` for `decisionTreshold`, `toString`, `__proto__`, integer-like keys first) and every pinned reason in `FIELD_RULES`, validating agent completely before reading project. Verified 47 loader tests pass; mutations M6 (`in` instead of `Object.hasOwn`) and M8 (no BOM strip) failed 2 and 1 tests respectively.",
+      "requirement": "Spec `configuration` (Per-field validation, BOM strip, unknown-key rejection, host-neutral error format) & Owner rulings Q1b, D8; Council rulings 7, 11, 12; Design D4, D7, D13; Tasks 3.1–3.2"
+    },
+    {
+      "evidence": "Read `src/config/taiknr-config.ts:93-122`: only `layer === \"project\" && errno === \"ENOTDIR\"` and `errno === \"ENOENT\" && !entryExists(filePath)` (`lstatSync` also `ENOENT`) return `undefined`; dangling symlinks, `ENOTDIR` on agent path, `EISDIR`, `EACCES`, and non-`ENOENT` `lstatSync` errors throw `TaiknrConfigError` with `field: undefined` and `cannot be read: <errno>`. Verified `tests/config/taiknr-config.test.ts:225-285` (including `EACCES` running unskipped under uid 501); mutation M7 (`entryExists` returning `false`) failed `a dangling symlink at the agent path is a rejection, not an absence`.",
+      "requirement": "Spec `configuration` (Unreadable file classification: dangling symlink, EISDIR, EACCES, ENOTDIR) & Owner ruling Q1(b); Council ruling 8; Design D6; Tasks 4.1–4.2",
+      "status": "met"
+    },
+    {
+      "requirement": "Spec `configuration` (Present-but-invalid stops session loudly, recovery message, silent valid off & silent absence) & Owner rulings Q1(b), O7; Council rulings 5, 13, 14, 18; Design D5, D8, D10; Tasks 7.1–7.2",
+      "evidence": "Read `src/infra/pi-event-handlers/session-start.ts:12-27`: synchronous handler assigns `{ status: \"ready\", config }` or catches `TaiknrConfigError`, assigns `{ status: \"rejected\", error }`, and throws `new Error(\\`${error.message}; fix the file, then run /reload or start a new session\\`, { cause: error })` with no `ctx.ui.notify` and no `console.*`. Verified `tests/infra/pi-event-handlers/session-start.test.ts:133-152,201-236` (including console spies proving silence on valid `enabled: false` and missing files); mutations M2 (skip ready assign) and M10 (throw before rejected assign) failed 8 and 3 tests respectively.",
+      "status": "met"
+    },
+    {
+      "requirement": "Spec `configuration` (Project file honoured only when trusted; malformed untrusted file ignored unread) & Council rulings 2, 3; Design D2; Tasks 2.1, 7.1–7.2",
+      "evidence": "Read `src/config/taiknr-config.ts:22-26,67-70` and `src/infra/pi-event-handlers/session-start.ts:15`: `projectConfigPath` is `undefined` when `!ctx.isProjectTrusted()`, and `loadTaiknrConfig` never reads an undefined `projectConfigPath`. Verified `tests/config/taiknr-config.test.ts:112-121` and `tests/infra/pi-event-handlers/session-start.test.ts:98-108` (malformed untrusted project file never read, causes no rejection).",
+      "status": "met"
+    },
+    {
+      "requirement": "Spec `configuration` (Re-read at every `session_start`, per-session isolation, `/taiknr` command seam `setEnabled`) & Owner rulings On/off switch, `/taiknr` command; Council rulings 1, 15; Design D1, D9; Tasks 5.1–5.2, 7.1",
+      "evidence": "Read `src/config/session-config.ts:1-36`: host-free and Node-free per-factory closure over `{ status: \"unresolved\" } | { status: \"ready\", config } | { status: \"rejected\", error }`; `assign` replaces whole state, `isActive()` checks `ready && config.enabled`, `setEnabled` returns `false` unless `ready` and otherwise assigns a fresh `{ ...state.config, enabled }` object returning `true`. Verified `tests/config/session-config.test.ts` (10 cases) and `session-start.test.ts:154-177,201-213`; mutations M4 (`setEnabled` returning `true` outside `ready`), M5 (`isActive` ignoring `enabled`), and M9 (in-place mutation in `setEnabled`) failed 2, 2, and 2 tests respectively.",
+      "status": "met"
+    },
+    {
+      "requirement": "Spec `configuration` (`enabled` switch turns taiknr fully off; session config reaches handlers) & Owner ruling Q3; Council rulings 4, 16, 17; Design D3; Tasks 6.1–6.2, 8.1–8.2, 9.2",
+      "status": "met",
+      "evidence": "Read `src/app/extension/handler-gate.ts:1-21` and `src/app/extension/taiknr.ts:19-56`: `createGatedPi` intercepts only `\"on\"` via `Proxy` with the single recorded cast `(target.on as unknown as LooseOn)(event, wrapper)` (`rg '\\bas\\b' src/` verified no other host-typing bypass), returning `undefined` while `!session.isActive()` and forwarding other members via `Reflect.get`; `taiknr.ts` passes raw `pi` to `registerSessionStartHandler` and `gatedPi` to the other six registrars, and passes `session` as `config` to `turn-end` and `context`. Verified `tests/app/extension/handler-gate.test.ts` (7 cases) and unchanged `tests/app/extension/taiknr.test.ts`; mutation M1 (unconditional wrapper) failed 4 gate tests, and Pi 1.5.2 `loader.js:217-234` confirms `api.on` uses closure capture with no `this` dependency."
+    },
+    {
+      "requirement": "Spec `extension-packaging` (Signatures unchanged except the 3 enumerated items; host import boundary holds in `src/domain/`, `src/use-cases/`, and `src/config/`) & ADR 0001; Council ruling 6; Tasks 8.1, 9.3, 9.4",
+      "status": "met",
+      "evidence": "Checked `git diff 85ef6a5..1e54542 -- src/infra/pi-event-handlers src/config/taiknr-config.ts src/infra/adapters src/domain src/use-cases` and `git grep -n '@earendil-works/pi-' HEAD -- src/config src/domain src/use-cases` (all empty; control `git grep` over `src/infra` returned 11 hits). Only the 3 enumerated contract changes appear (`registerSessionStartHandler(pi, _store, session)`, `turn-end`/`context` `deps.config: SessionConfig`, `ConfigPaths.projectConfigPath: string | undefined`); the 4 other handlers, `pi-jev-scorer-adapter.ts`, `src/domain/`, and `src/use-cases/` have zero diff."
+    },
+    {
+      "evidence": "Checked test layout (`tests/config/taiknr-config.test.ts`, `tests/config/session-config.test.ts`, `tests/app/extension/handler-gate.test.ts`, `tests/infra/pi-event-handlers/session-start.test.ts`, uncollected `tests/support/fake-pi.ts`, untouched `tests/app/extension/taiknr.test.ts`), explicit `vitest` imports, `.js` specifiers, suppression search over `git diff 85ef6a5..HEAD` (0 hits), and TODO/placeholder search (0 hits). Re-ran in a clean `mktemp -d` `git archive HEAD` repo (removed after): `npm ci` + `npm run check` (`biome check .` 33 files / 0 warnings, `tsc --noEmit` 0 errors, `vitest run` 6 files / 78 passed); `npm install && git status --short` empty; 9.5 load check under Pi 1.5.2 (`PI_CODING_AGENT_DIR` isolated: clean run printed header and `rg` exit 1, control throw in `session-start.ts` printed `1` hit for `Failed to load extension`, restored archive printed header and `rg` exit 1). Verified Derek's report accurately lists all 7 stale sentences in `ARCHITECTURE.md` and `AGENTS.md` for Bambadjan.",
+      "status": "met",
+      "requirement": "Spec `configuration` (Mirrored host-free tests), ADR 0003 & `development-checks` spec, Task 1.1 & 9.5, and Derek's standing engineering/mechanical/docs-handoff bar"
+    }
+  ],
+  "not_covered": [
+    "`test-jev-poc.mjs`, `jev-context-poc.ts`, and any live model or OpenRouter classifier call (forbidden by brief and `AGENTS.md`).",
+    "Interactive TUI rendering and RPC `extension_error` framing in a live multi-turn Pi session (print/JSON error surfacing was measured during council ruling 5, and extension load + `session-start.ts` host value imports were verified via 9.5 `pi --no-session --help` under Pi 1.5.2).",
+    "The `lstatSync` non-`ENOENT` race branch in `entryExists` (`src/config/taiknr-config.ts:110-118`), the non-errno `\"unknown\"` fallback in `errnoCode` (`:121`), and the non-`TaiknrConfigError` defect-propagation branch in `registerSessionStartHandler` (`src/infra/pi-event-handlers/session-start.ts:22`), all unreachable without injecting filesystem races or internal defects (explicitly excluded in `tasks.md` 4.2 and 7.2).",
+    "Root-user (`uid === 0`) skip path of the `chmod 000` `EACCES` test (`tests/config/taiknr-config.test.ts:249`); the test ran unskipped here under `uid 501`."
+  ],
+  "verdict": "approve",
+  "findings": [
+    {
+      "required_change_ran": true,
+      "required_change": "Change line 96 from `agentConfigPath: configFile(tempDirectory(), '{\"decisionThreshold\":0.9}'),` to `agentConfigPath: configFile(tempDirectory(), '{\"enabled\":true,\"decisionThreshold\":0.9}'),` (matching `design.md` D4's worked example) so `tests/config/taiknr-config.test.ts` directly witnesses same-field project-over-agent precedence in isolation.",
+      "location": "tests/config/taiknr-config.test.ts:96",
+      "finding": "In `tests/config/taiknr-config.test.ts`, neither layering test sets the same field in both the agent file and the project file (`:87-88` uses `decisionThreshold` vs `minCharsToArchive`, and `:96-97` sets `{\"decisionThreshold\":0.9}` in the agent file while `{\"enabled\":false}` in the project file overrides the built-in default `true` rather than an explicit agent value). Full `npm run test` still catches a reversed merge order via `tests/infra/pi-event-handlers/session-start.test.ts:110` (measured: M3 failed 1 test in `session-start.test.ts`), so whole-suite coverage holds, but running `tests/config/taiknr-config.test.ts` in isolation stays green under a reversed `layered()` walk.",
+      "severity": "minor"
+    }
+  ],
+  "later_gates": [
+    "Bambadjan's post-gate documentation pass to update the stale statements Derek catalogued in `ARCHITECTURE.md` (lines 13, 38, 42, 49, 85) and `AGENTS.md` (lines 3, 23).",
+    "Judge Gen / Validate verification pass over the integrated branch and spec scenarios.",
+    "Archive and recall board cards to verify the two deferred behavioural `enabled: false` scenarios (`A project file turns taiknr off for one project` and `Stubs made before the switch stay stubbed`) once the six gated handlers gain non-empty bodies (ruling 17; Trap 12).",
+    "Status readout and `/taiknr` command board card to wire `/taiknr on|off` through `session.setEnabled(boolean)`, handle off-to-on store hydration, and expose any untrusted/disabled status readout (rulings 14, 15).",
+    "Recall board card to construct `createPiJevScorerAdapter(ctx, config)` inside the context handler from `session.state.config` (ruling 16)."
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "owner_decisions": [],
+  "resolutions": [
+    {
+      "disposition": "propose_fix",
+      "evidence": "`specs/extension-packaging/spec.md` scenario 'Signatures unchanged': 'WHEN the seven handler files and `src/config/taiknr-config.ts` are compared with HEAD … THEN the differences are the three listed above … and nothing else'. `design.md` 'Types and signatures' block adds `enabled`, `CONFIG_FILE_NAME`, `TaiknrConfigError` and writes `export type TaiknrConfig = {`. HEAD: `rg -n '^export (type|interface)' src` → 13 `interface`, 0 `type` aliases for object shapes, including `taiknr-config.ts:1,15`.",
+      "finding_id": "critic-r1-1",
+      "rationale": "Valid and deduplicated with structural-r1-1. The scenario added `taiknr-config.ts` to the HEAD comparison for `ConfigPaths` (ruling 6) but then forbids every other change the design plans for that file, so it has no passing outcome. The clause's subject is registrar signatures and adapter/port contracts; the loader's contents are the `configuration` spec's. The `interface`→`type` rewrite is a gratuitous diff against house convention (13/13 object shapes are `interface`). The `_pi`→`pi` rename is not a signature change (the clause protects names, parameter order, types and return types, not parameter names) and follows from the parameter being used.",
+      "required_change": "(1) `specs/extension-packaging/spec.md`, scenario 'Signatures unchanged': WHEN becomes 'the seven handler files are compared with `HEAD`, and `ConfigPaths` in `src/config/taiknr-config.ts` is compared with `HEAD`'; THEN becomes 'the differences are the three listed above, each stub body replaced by its implementation (a used parameter may drop its `_` prefix), and formatter whitespace — and nothing else. The rest of `src/config/taiknr-config.ts` is governed by the `configuration` spec.' In the requirement's 'Everything else SHALL be unchanged' sentence, after `createPiJevScorerAdapter(ctx, config: TaiknrConfig)` add '(its signature; `TaiknrConfig` itself gains `enabled` under the `configuration` spec)'. (2) `design.md` 'Types and signatures': write `export interface TaiknrConfig {…}`, `export interface ConfigPaths {…}` and `export interface SessionConfig {…}`; keep `type` only for the two unions `ResolvedSessionConfig` and `SessionConfigState`. Add one sentence under the `taiknr-config.ts` block: 'Differences against HEAD in this file: `enabled` on `TaiknrConfig` and `DEFAULT_TAIKNR_CONFIG` (owner-rulings \"An on/off switch\"), the new exports `CONFIG_FILE_NAME` and `TaiknrConfigError`, `ConfigPaths.projectConfigPath` (extension-packaging item 3), and the loader body; the `interface` keyword is kept.' (3) The session-start signature block: name the parameters `pi` and `store` and note 'HEAD's `_pi`/`_store` lose the prefix because the body now uses them; not a signature change'.",
+      "target_artifact": "openspec/changes/configuration-loader/specs/extension-packaging/spec.md (requirement text and scenario 'Signatures unchanged'); openspec/changes/configuration-loader/design.md ('Types and signatures')"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "Same evidence as critic-r1-1; structural additionally notes the design's `pi`/`_pi` rename and the `TaiknrConfig` field growth behind `createPiJevScorerAdapter`'s 'unchanged' claim.",
+      "finding_id": "structural-r1-1",
+      "rationale": "Duplicate of critic-r1-1 (same scenario, same unenumerated differences). Resolved by the same change; the structural lens's two extra observations (parameter rename, adapter's parameter type gaining a field) are covered by items (1) and (3) of that change.",
+      "required_change": "As critic-r1-1. No separate edit.",
+      "target_artifact": "openspec/changes/configuration-loader/specs/extension-packaging/spec.md; openspec/changes/configuration-loader/design.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "`design.md` D5 step 4 'Rethrow on rejection' and the message paragraph ('ending with `fix the file, then run /reload or start a new session`'); the 'Files' table says `src/config/taiknr-config.ts` is host-free; `specs/configuration/spec.md` L144–147 asserts the recovery instruction on 'the message'; D10 says the Status card calls `loadTaiknrConfig` directly.",
+      "finding_id": "critic-r1-2",
+      "rationale": "Valid. 'Rethrow' means the `TaiknrConfigError` carries the `/reload` line, which puts Pi command vocabulary in the host-free layer that `cli/`/`mcp/` roots and the Status card's re-validation call; building it in the handler instead leaves `session.state.error.message` without the recovery step the spec asserts. Two correct implementations behave differently, so Derek would be choosing. Host vocabulary belongs at the edge (the handler); the error class stays host-neutral.",
+      "required_change": "`design.md` D5: replace step 4 with '4. On rejection, throw `new Error(`${error.message}; fix the file, then run /reload or start a new session`, { cause: error })`. Then the hydration slot a later card fills, only when `session.isActive()`.' In the message paragraph state: '`TaiknrConfigError.message` is host-neutral: `<absolute file path>: <field>: <reason>`, or `<absolute file path>: <reason>` when `field` is undefined. The recovery line is appended only by the session-start handler's throw, because `/reload` is Pi vocabulary and `src/config/` has none; the holder's `rejected.error` carries the host-neutral message.' `specs/configuration/spec.md` scenario 'The report names the field and the recovery step' (L144–147): change 'the message reads' to 'the session-start handler's thrown error reads', and in the following scenario (L152) say 'the thrown message carries the absolute path and the reason, then the recovery instruction'. Files table, `session-start.ts` row: 'rethrow on rejection' → 'throw the report on rejection'.",
+      "target_artifact": "openspec/changes/configuration-loader/design.md (D5, Files table); openspec/changes/configuration-loader/specs/configuration/spec.md (scenarios at L144–152)"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "Measured against the installed Pi 1.5.2 in a `mktemp -d` dir (removed): with `PI_CODING_AGENT_DIR=agent`, `getAgentDir()` → `agent`; `join(getAgentDir(), \"pi-taiknr.json\")` → `agent/pi-taiknr.json`; `resolve(getAgentDir(), \"pi-taiknr.json\")` → `/private/var/…/agent/pi-taiknr.json`. `normalizePath` (`utils/paths.js`) expands `~` and `file://` but does not resolve relative paths.",
+      "finding_id": "critic-r1-4",
+      "rationale": "Reviewer rated it minor; I weigh it as a contract gap because `specs/configuration/spec.md` L147/L152 assert `<absolute file path>` and D5 step 1 builds the path with `join`, which the measurement shows does not deliver it. The fix is one identifier.",
+      "required_change": "`design.md` D5 step 1: `agentConfigPath = resolve(getAgentDir(), CONFIG_FILE_NAME)` and `projectConfigPath = ctx.isProjectTrusted() ? resolve(ctx.cwd, CONFIG_DIR_NAME, CONFIG_FILE_NAME) : undefined`, importing `resolve` from `node:path`; add the clause 'because `getAgentDir()` returns `PI_CODING_AGENT_DIR` as given, relative when the user set it relative (measured), and the spec asserts an absolute path'. Add one row to the session-start test description in the Files table: 'a relative `PI_CODING_AGENT_DIR` still yields an absolute agent path'.",
+      "target_artifact": "openspec/changes/configuration-loader/design.md (D5 step 1; Files table, session-start test row)"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "`design.md` D1: '`setEnabled` succeeds only from `ready`'; D9 says what it refuses and how long it lasts, not whether it replaces or mutates or what it returns for an unchanged value. `TaiknrConfig`'s fields are not `readonly` in the types block; `ResolvedSessionConfig.config` is `readonly` but that is the reference, not the object.",
+      "finding_id": "critic-r1-6",
+      "rationale": "Reviewer rated it minor; I weigh it as a design choice left to Derek on the one seam ruling 15 hands to the Status card: in-place mutation changes what an in-flight async handler holding `config` sees, replacement does not, and the return value for an already-held value decides whether `/taiknr off` twice reports success. Two correct implementations differ observably.",
+      "required_change": "`design.md` D1 (after '`setEnabled` succeeds only from `ready`'): 'From `ready` it replaces the state with `{ status: \"ready\", config: { ...config, enabled } }` — a new object, so a handler already holding the previous `config` is unaffected — and returns `true`, including when the value is unchanged. From `unresolved` or `rejected` it returns `false` and changes nothing.' Files table, `tests/config/session-config.test.ts` row: add 'including `setEnabled` with the already-held value returning `true` and producing a new config object'.",
+      "target_artifact": "openspec/changes/configuration-loader/design.md (D1; Files table holder-test row)"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "`design.md` D4: 'The first violation found is the one reported'; ruling 12 fixes the check mechanism (`Object.hasOwn`/`Set`, iterate names, never spread) but not the iteration order or the file order. `specs/configuration/spec.md` 'Each rejection class has its own case' requires tests to assert the named field.",
+      "finding_id": "critic-r1-8",
+      "rationale": "Reviewer rated it minor; I weigh it as a choice left to Derek that tests must pin: for `{\"decisionTreshold\":0.9,\"enabled\":\"no\"}` a known-key walk reports `enabled`, a parsed-key walk reports `decisionTreshold`, and with both files broken either file may be named. One sentence fixes it and keeps ruling 12 intact (checking each parsed key against the known `Set` is `hasOwn`-safe).",
+      "required_change": "`design.md` D4, after 'The first violation found is the one reported': 'Deterministically: the agent file is read and validated before the project file; within a file, each key of `Object.keys(parsed)` is visited in source order and checked as unknown-or-rule, so the first failing key in the file is the one named. Layering runs only after both files validate.' Add the two-key example as a test row in the `tests/config/taiknr-config.test.ts` Files-table description.",
+      "target_artifact": "openspec/changes/configuration-loader/design.md (D4; Files table loader-test row)"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "`design.md` D4 table cites 'D8' for the ranges (design D8 = 'Nothing is emitted'); Non-Goals cites 'D10' (design D10 = 'No separate orchestrator'); Migration Plan cites 'D7' and 'D4'. The orientation's D-table is in `michael-orientation.md` §1.",
+      "finding_id": "critic-r1-3",
+      "rationale": "Duplicate of structural-r1-3. Minor traceability defect in prose; the remedy is a citation prefix. Record the exact wording for Bambadjan to apply while editing.",
+      "required_change": "Suggested wording (not blocking): prefix every orientation citation as 'orientation D4/D5/D7/D8/D10' at: Non-Goals '(D10; rulings 15, 14)' → '(orientation D10; …)', '(D4; S9, S15)' → '(orientation D4; …)'; Files 'Unchanged' line '(…; D5, D7)' → '(…; orientation D5, D7)'; D4 table 'D8' → 'orientation D8' (two cells); Migration Plan '(D7; ruling 12)' → '(orientation D7; ruling 12)' and 'Docs pass (D4)' → 'Docs pass (orientation D4)'. Add to Context: 'Codes `Trap N`, `S N` and `orientation D N` refer to `michael-orientation.md` and its addendum; bare `D N` refers to this document's Decisions.'",
+      "target_artifact": "openspec/changes/configuration-loader/design.md (Context; Non-Goals; Files 'Unchanged'; D4 table; Migration Plan)"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "As critic-r1-3.",
+      "finding_id": "structural-r1-3",
+      "rationale": "Duplicate of critic-r1-3; same wording applies.",
+      "required_change": "As critic-r1-3.",
+      "target_artifact": "openspec/changes/configuration-loader/design.md"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "`design.md` D6: 'if the read failed `ENOTDIR` — `<cwd>/<CONFIG_DIR_NAME>` is not a directory — the file is absent too' with no path restriction; `specs/configuration/spec.md` 'An unreadable file is a rejection, not an absence' limits ENOTDIR-absence to `<cwd>/<CONFIG_DIR_NAME>`. Measured earlier: a dangling parent symlink gives read `ENOENT` and lstat `ENOENT` on the child path.",
+      "finding_id": "critic-r1-5",
+      "rationale": "Minor. The spec is the tighter and correct statement (an agent dir that is a regular file breaks Pi itself and is a rejection like any other read failure); D6 should match it, and the broken-parent-symlink case is an accepted limit worth one Risks line. Both are wording.",
+      "required_change": "Suggested wording (not blocking): D6 — 'if the read of the *project* path failed `ENOTDIR` — `<cwd>/<CONFIG_DIR_NAME>` is not a directory — the project file is absent; an `ENOTDIR` on the agent path is a rejection like any other read failure (spec \"An unreadable file is a rejection\")'. Risks — add: '**A dangling symlink *above* the file is treated as absent.** If `<cwd>/.pi` or the agent directory is itself a link whose target is gone, the read and the `lstat` both report `ENOENT` on the file path, so the layer is silently absent. → Accepted: distinguishing it would mean walking parents; the user's own tree shows the broken link (ruling 8).'",
+      "target_artifact": "openspec/changes/configuration-loader/design.md (D6; Risks)"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "`design.md` D5 step 3: 'it propagates unassigned and the holder stays `unresolved`'. Files table: the session-start test drives 'the re-read on a second call with a different working directory' on one holder. Pi loads a new runtime, hence a new holder, before every `session_start` (`docs/extensions.md` L376–392; `loader.js` L519).",
+      "finding_id": "critic-r1-7",
+      "rationale": "Minor and accurate: the claim holds in production (one `session_start` per holder) and is false only in the design's own two-call test. Wording only; no code change.",
+      "required_change": "Suggested wording (not blocking): D5 step 3 last sentence → 'Should anything else escape (a defect), it propagates unassigned and the holder keeps its prior state — `unresolved` in production, because Pi loads a new runtime, and so a new holder, before every `session_start` (`docs/extensions.md` L376–392); the two-call session-start test exercises the re-read, not this path.'",
+      "target_artifact": "openspec/changes/configuration-loader/design.md (D5 step 3)"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "`design.md` D9 has no 'Alternatives weighed' paragraph; ruling 15 recorded the rejected alternative (a bare writable `enabled`) and why.",
+      "finding_id": "critic-r1-9",
+      "rationale": "Minor: the trade-off exists in ruling 15 and belongs in D9 for a reader of the design alone. Prose only.",
+      "required_change": "Suggested wording (not blocking): append to D9 — '*Alternative weighed.* A writable `enabled` on the ready config as the seam: a write from `rejected` or `unresolved` could not be refused, so a fixed-but-unreloaded rejection could be un-rejected and the Status card would mutate a value typed as plain data (ruling 15; CR-6).'",
+      "target_artifact": "openspec/changes/configuration-loader/design.md (D9)"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "`design.md` Files table, `tests/support/fake-pi.ts` row: 'shared by the holder, gate and session-start tests'; `createSessionConfig()` takes no `pi` and no `ctx` (types block).",
+      "finding_id": "structural-r1-2",
+      "rationale": "Minor and correct: the holder is host-free and its test needs no fake. Wording only.",
+      "required_change": "Suggested wording (not blocking): change the clause to 'shared by the gate and session-start tests (the context stub by the session-start test alone)'.",
+      "target_artifact": "openspec/changes/configuration-loader/design.md (Files table, `tests/support/fake-pi.ts` row)"
+    }
+  ],
+  "round_status": "needs_fixes",
+  "settled_findings": [
+    "critic-r1-3 / structural-r1-3 — orientation D-number citations: declined as minor with exact prefix wording; do not re-open.",
+    "critic-r1-5 — ENOTDIR scope and broken-parent-symlink: declined as minor with wording aligning D6 to the spec; do not re-open unless D6's classification changes.",
+    "critic-r1-7 — 'holder stays unresolved' holds per production lifetime; declined with wording; do not re-open.",
+    "critic-r1-9, structural-r1-2 — prose completeness (D9 alternative; fake-pi 'shared by'); declined with wording.",
+    "Critic assumption 'Object.hasOwn type-checks under the committed tsconfig': measured TSC_OK in a `git archive HEAD` copy with a probe using `Object.hasOwn` and a `\\uFEFF` regex; not a finding."
+  ]
+}
