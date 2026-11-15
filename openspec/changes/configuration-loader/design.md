@@ -66,9 +66,9 @@ Unchanged: the four other handler files under `src/infra/pi-event-handlers/`, `s
 
 `src/config/` imports only Node built-ins and its own members, so any composition root — `cli/`, `mcp/` — can call the loader and create the holder with its own paths (ADR 0001; ruling 2).
 
-`src/app/extension/` imports the holder's factory and the loader from `src/config/`, and the registrars from `src/infra/pi-event-handlers/`; it imports the host as types only.
+`src/app/extension/` imports the holder's factory (`createSessionConfig`) from `src/config/` — the gate imports only the holder's type — and the registrars from `src/infra/pi-event-handlers/`; it imports the host as types only.
 
-`src/infra/pi-event-handlers/session-start.ts`, `turn-end.ts` and `context.ts` import the holder's type from `src/config/`, in the same direction `turn-end.ts:2` and `context.ts:2` already import `TaiknrConfig`. `session-start.ts` also imports the host's `getAgentDir` and `CONFIG_DIR_NAME` as values — the boundary `ARCHITECTURE.md` §5 draws for host imports, and the reason those two path builds live there rather than in `src/config/` (ruling 10).
+`src/infra/pi-event-handlers/session-start.ts`, `turn-end.ts` and `context.ts` import the holder's type from `src/config/`, in the same direction `turn-end.ts:2` and `context.ts:2` already import `TaiknrConfig`. `session-start.ts` also imports `loadTaiknrConfig`, `CONFIG_FILE_NAME` and `TaiknrConfigError` from `src/config/` as values, and the host's `getAgentDir` and `CONFIG_DIR_NAME` as values — the boundary `ARCHITECTURE.md` §5 draws for host imports, and the reason those two path builds live there rather than in `src/config/` (ruling 10).
 
 This change adds no `src/infra/` → `src/app/` edge. Nothing written anywhere forbids one — ADR 0001 forbids only Pi imports in `src/domain/` and `src/use-cases/`, and `ARCHITECTURE.md` §8 and ADR 0003 record that boundary as review-held, not checked (`research-eleanor.md` addendum) — but the graph has no such edge at HEAD and this change does not create the first, so the holder sits inward where `RecallCache` sits.
 
