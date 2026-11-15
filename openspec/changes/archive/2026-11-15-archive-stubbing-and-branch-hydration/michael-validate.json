@@ -1,0 +1,58 @@
+{
+  "verdict": "approve",
+  "findings": [
+    {
+      "severity": "minor",
+      "required_change_ran": false,
+      "finding": "`specs/archive-stubbing/spec.md` scenario 'The original output is still there' (navigating to a branch preceding a settled `context_edit` restores the original output in model context, Judge Gen Verification WARNING 1) relies on `archive-session.test.ts:173-179` proving the raw `toolResult` entry is unmutated plus Pi's own `buildSessionProjection` semantics and Joel's manual check `12.1`, rather than a post-settlement `navigateTree` assertion in `archive-session.test.ts`.",
+      "location": "tests/app/extension/archive-session.test.ts:249-286",
+      "required_change": "Optional follow-up in `tests/app/extension/archive-session.test.ts`: after a settled run stubs `BIG_TEXT`, call `await session.navigateTree(userEntryId)` and assert the pre-edit branch projects `BIG_TEXT` again. Non-blocking; ships as-is (`12.1` also checks this live)."
+    },
+    {
+      "required_change_ran": false,
+      "location": "src/domain/archived-output.ts:23; src/infra/adapters/pi-archive-adapter.ts:64; src/infra/pi-event-handlers/session-start.ts:29; src/infra/pi-event-handlers/agent-before-settle.ts:52",
+      "severity": "minor",
+      "required_change": "Optional cleanup when these files are next touched: drop the trailing `(Trap N)` parentheticals while keeping the explanatory sentences. Non-blocking; ships as-is.",
+      "finding": "Four source comments end with `(Trap 2)`, `(Trap 5)`, `(Trap 6)`, and `(Trap 8)` parentheticals (Judge Gen PR Review Nice to have 1), which reference `michael-orientation.md` in the change archive rather than the unnumbered Traps section of `AGENTS.md`, although each comment already states the reason in words."
+    },
+    {
+      "required_change_ran": false,
+      "location": "src/domain/archived-output.ts:24-25",
+      "finding": "`LINE_SEPARATOR` and `LINE_SEPARATOR_ALL` duplicate the `/\\r\\n|\\r|\\n|\\u2028|\\u2029|\\u0085/` pattern differing only by `/g` (Judge Gen PR Review Nice to have 4). Verified in Node 26.8.1 that a single `/g` RegExp behaves identically for both `.split()` and `.replace()`.",
+      "required_change": "Optional cleanup when `src/domain/archived-output.ts` is next touched: collapse `LINE_SEPARATOR` and `LINE_SEPARATOR_ALL` into one module-private `/\\r\\n|\\r|\\n|\\u2028|\\u2029|\\u0085/g` constant (settled as non-blocking in `ST-S5-R1-6`).",
+      "severity": "minor"
+    }
+  ],
+  "not_covered": [
+    "Live LLM or Jev classifier execution (`tasks.md` 12.1, `jev-context-poc.ts`, and `test-jev-poc.mjs` not run, per brief).",
+    "Visual interactive TUI rendering of a `context_edit`-stubbed `toolResult` retaining an `ImageContent` block (`design.md` Open Questions).",
+    "Hosted-provider KV prompt-cache accounting across settled `context_edit` turns (`design.md` Open Questions)."
+  ],
+  "later_gates": [
+    "Joel's live check in his own Pi session (`tasks.md` 12.1, deliberately unticked until he runs and records it).",
+    "`openspec archive` before merging PR #3, promoting `specs/archive-stubbing/spec.md` and `specs/branch-hydration/spec.md` into `openspec/specs/` (noted in Judge Gen's PR review process note).",
+    "Recall card and Status card follow-ups: end-to-end recall over hydrated `InMemoryArchiveStore` (`context.ts`), the recall half of `configuration`'s deferred `enabled: false` scenarios (`D5`), and the off -> `/tree` -> on stale-store handoff (`CR-12`)."
+  ],
+  "requirements": [
+    {
+      "status": "met",
+      "evidence": "Checked `judge-verify.md` and ran `npm run check` at `cb9d234` (43 files linted clean, `tsc --noEmit` 0 errors, 16 test files / 220 tests passing in 600 ms). All 13 ADDED requirements (9 in `archive-stubbing`, 4 in `branch-hydration`) and `design.md` Decisions 1–12 are implemented and coherent; 38/39 tasks complete with only `12.1` (Joel's live check) expected open.",
+      "requirement": "OpenSpec completeness, correctness, and design coherence (`judge-verify.md`; 13 ADDED requirements; Decisions 1–12; `tasks.md` 0.1–11.4)"
+    },
+    {
+      "requirement": "Adjudication of Judge Gen OpenSpec Verification warnings and suggestions (`judge-verify.md`)",
+      "evidence": "Reproduced and adjudicated Judge Gen Verification WARNING 1, WARNING 2, SUGGESTION 1, and SUGGESTION 2 against approved artifacts: WARNING 1 is recorded as `minor` (raw non-mutation is already asserted at `archive-session.test.ts:173-179` and `12.1` checks `/tree` restoration live); WARNING 2 and SUGGESTION 1 are already closed compositionally by `pi-archive-adapter.test.ts:249-269`, `agent-before-settle.test.ts:52-77`, `hydrate-archive-store.test.ts:74-90`, and `session-{start,tree,compact}.test.ts` because `taiknr(pi)`'s store is closure-private until the recall card implements `context.ts` and prototype spies are forbidden (`CR-S3-R3-1`, `ST-S5-R3-1`); SUGGESTION 2 (`engines` for `toWellFormed()`) is ruled out by `foundation-and-packaging` R7 and `D8` (`package.json` untouched; Pi 1.5.2 already requires Node >= 22.19.0).",
+      "status": "met"
+    },
+    {
+      "evidence": "Reproduced and adjudicated Judge Gen PR Review items (`judge-pr-review.md` reported zero Must-fix and zero Should-fix items): Nice to have 1 (`Trap N` comment parentheticals, verified via `rg 'Trap [0-9]+' src`) and Nice to have 4 (paired regex constants in `archived-output.ts:24-25`, verified via `node -e`) are recorded as `minor` non-blocking nits; Nice to have 2 (exporting `ContentBlock` and retyping `originalContentByEntryId` from `Map<string, unknown[]>`) and Nice to have 3 (attaching Pi `content` blocks to `ToolOutputCandidate` or changing `toToolOutputCandidates`) are rejected because their proposed fixes violate `D6` (`ADR 0001` Pi-free domain) and `D7` (`openspec/specs/extension-packaging/spec.md` 'Signatures unchanged', `M6`/`M7`).",
+      "requirement": "Adjudication of Judge Gen PR Review items against locked architecture and contract boundaries (`judge-pr-review.md`; `D6`, `D7`, `M6`, `M7`)",
+      "status": "met"
+    },
+    {
+      "requirement": "Post-gate documentation pass accuracy and ADR immutability (`cb9d234`: `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, `docs/adr/0004..0006`; `design.md` Migration Plan; `S6`, `M11`)",
+      "evidence": "Inspected commit `cb9d234` (`git diff --name-status ae7cedc..cb9d234`) and read `README.md`, `AGENTS.md`, `ARCHITECTURE.md`, and `docs/adr/0004..0006` in full. Accepted ADRs `0001`–`0003` are untouched (`0006` narrows `0002`'s 8-char parenthetical without editing `0002`), no source/test/config file moved, and all six `design.md` Migration Plan hand-offs (`AGENTS.md`/`ARCHITECTURE.md` status update, `C-3` non-redaction notice, `C-6` runtime-only carry-forward, `CR-12` off->`/tree`->on gap, `CR-13` sub-400 threshold warning, and `M3`/Q2 2x JSONL + unbounded branch growth inputs for archive-scaling) are accurately documented.",
+      "status": "met"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`pi-taiknr` is a Clean Architecture Pi extension that replaces large tool outputs with deterministic one-line stubs and recalls the raw blocks at the tail of a user message. Configuration loading works; the archive, recall and status behavior behind the other six handlers is still a stub.
+`pi-taiknr` is a Clean Architecture Pi extension that replaces large tool outputs with deterministic one-line stubs and recalls the raw blocks at the tail of a user message. Configuration loading and stubbing work end to end: staging, settlement, the `taiknr-side-store` record and branch hydration. Recall, the status readout and the `/taiknr` commands are still stubs, and so is the `context` handler.
 
 The current shape is in `ARCHITECTURE.md`. Decisions are in `docs/adr/`. Usage and the config file's fields are in `README.md`. None of the three is restated here.
 
@@ -23,6 +23,9 @@ The current shape is in `ARCHITECTURE.md`. Decisions are in `docs/adr/`. Usage a
 - A handler registers exactly its one lifecycle event, in `src/infra/pi-event-handlers/`, and keeps the parameter name it already has. The public signatures are fixed for the cards implementing behind them, with one enumerated exception: the `session_start` registration takes the session's config holder as a third parameter, and so uses its `pi`. Nothing else may be added to them.
 - Handlers read the session's config from the holder at event time. The factory runs before any session start, so a `TaiknrConfig` captured there is the state from before the files were read.
 - Decisions live in `docs/adr/`, one per file, numbered in the order they were accepted. An accepted record's body is never edited: narrow it in a new record, or supersede it.
+- A handler finishes its reads and builds every value before it mutates anything, so an unexpected throw reaches Pi's extension error channel with no partial state.
+- Hydration reads `sessionManager.getBranch()`, the raw root-to-leaf path, and never the compaction-bounded projection: the whole branch is what keeps pre-compaction outputs archived.
+- Text that has to be one line goes through the one domain helper that turns line separators into spaces and never cuts a surrogate pair. A local `slice` or `replace` beside it drifts.
 
 ## Traps
 
@@ -33,6 +36,12 @@ The current shape is in `ARCHITECTURE.md`. Decisions are in `docs/adr/`. Usage a
 - **The lockfile is committed on purpose.** Ignoring `package-lock.json` lets the compiler and the test runner drift majors under a green check.
 - **The manifest has no `version`.** Packing is the publishing card's job; `npm pack` has nothing to name a tarball with until that card writes the metadata. Loading the package from this checkout does not need it.
 - **`jev-context-poc.ts` and `test-jev-poc.mjs` call a live model.** They are outside the type-check program and the test include for that reason. Run them by hand and expect to spend a model call.
-- **The gate hides a handler from a careless test.** The six non-`session_start` handlers register through a gated `pi` that calls a handler only while the session's config is ready and `enabled`. A test that registers through it and fires the event sees nothing until it assigns a ready state to the holder.
+- **The gate hides a handler from a careless test.** The six non-`session_start` handlers register through a gated `pi` that calls a handler only while the session's config is ready and `enabled`. A test that registers through it and fires the event sees nothing until it assigns a ready state to the holder. Inertness lives in that gate and nowhere else, so no handler tests `enabled` itself.
 - **`session_start` stays on the raw host API.** Registering it through the gate would leave a session that started rejected or turned off with no way back, because no gated handler runs while the session is inactive.
 - **The loader does not check trust.** It reads whatever paths the caller hands it, so passing `projectConfigPath: undefined` is the only thing that keeps a project file in an untrusted project from being opened. The trust check belongs to the caller that builds the paths.
+- **`event.entries` at a boundary holds only what earlier handlers returned.** Pi dispatches a boundary's handlers one at a time in load order, so a `context_edit` proposed by an extension registered after taiknr is invisible to taiknr: that edit wins in model context while the unedited item stays in the store and in the `taiknr-side-store` record.
+- **A tool result that is off the branch, or that already carries a `context_edit`, is off limits.** Settling either would overwrite another extension's redaction or resurrect a result Pi omitted during retry recovery with a null replacement, so both drop silently (ADR 0005).
+- **The results of one turn pair with their entries by `toolCallId`, not by position.** `toolResultEntryIds` is `flatMap`-filtered, so a positional read attaches a stub to the neighbouring result; use position only when both lengths agree. An id itself is opaque, eight hex characters or a 36-character UUID, so never slice it or match a pattern (ADR 0006).
+- **A `tool_call` handler may never throw.** Pi turns its throw into an error tool result and the user's call never runs, and `event.input` arrives mutable from earlier handlers, so a `BigInt`, a circular reference or a throwing `toJSON` has to record `""` instead.
+- **A settlement's store write is not persistence.** Pi commits a boundary after every handler returns, with no callback and no transaction, and one throwing draft discards the whole boundary, so a green test of the store says nothing about what reached the JSONL.
+- **A session-level test has to isolate `PI_CODING_AGENT_DIR` and `cwd`.** The suite that drives a real `AgentSession` otherwise reads the developer's own `~/.pi/agent/pi-taiknr.json` and stops being repeatable.

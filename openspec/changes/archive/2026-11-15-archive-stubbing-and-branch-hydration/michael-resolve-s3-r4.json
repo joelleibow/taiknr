@@ -1,0 +1,35 @@
+{
+  "settled_findings": [
+    "CC-6: minor — Decision 4 and Decision 5 already specify storing '' for undefined top-level tool_call input, and '' vs absent yields identical argsSummary at turn_end.",
+    "CC-7 / critic-r1-CR-S3-6: minor — accepted diagnostic limitation under M11 that an all-dropped settlement writes no taiknr-side-store entry; counters/status belong to the Status card.",
+    "critic-r1-CR-S3-2: minor — M7 settled last-match toolCallId pairing through contextEntries over positional indexing.",
+    "critic-r1-CR-S3-3: minor — missing originalContentByEntryId fallback to [] in toSettlementDrafts keeps isolated text-only calls total while turn-end.test.ts and archive-session.test.ts pin image preservation.",
+    "critic-r1-CR-S3-5: minor — M4 and specs/archive-stubbing/spec.md ('A boundary Pi discards') already accept optimistic-cache divergence until the next hydration event.",
+    "structural-r2-structural-r2-ST-S3-5: minor — malformed side-store skipping scenarios live in specs/branch-hydration/spec.md; wording drift in design.md Risks is non-blocking.",
+    "structural-r2-structural-r2-ST-S3-6: minor — 36-char UUID entryId scenario is owned by specs/archive-stubbing/spec.md and mapped in tasks.md during Stage 5.",
+    "critic-r3-CR-S3-R3-2: minor — composition-root gatedPi wiring for hydration handlers is only end-to-end readable without spies once the recall card wires context.ts (D5).",
+    "structural-r3-structural-r3-ST-S3-1: minor — session-start.test.ts has six enabled:true cases (eight ready total); fixture-first ordering in Decision 12 stands.",
+    "critic-r4-CR-S3-R4-1: minor — low keepRecentTokens in SettingsManager.inMemory plus one queued fauxAssistantMessage summary belongs in tasks.md (Stage 5) rather than design.md.",
+    "critic-r4-CR-S3-R4-2: minor — pre-compaction side-store retention scenario in specs/branch-hydration/spec.md maps onto session-compact.test.ts in tasks.md (Stage 5)."
+  ],
+  "resolutions": [
+    {
+      "finding_id": "critic-r4-CR-S3-R4-1",
+      "evidence": "node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.js:2338-2375; ~/.pi/agent/skills/conductor-janet/standards/zoom-out-standard.md §4; openspec/changes/archive-stubbing-and-branch-hydration/design.md:89,134",
+      "rationale": "Minor task-level test-fixture detail belonging to `tasks.md` (Stage 5) rather than `design.md` (`zoom-out-standard.md` §4). Verified in `agent-session.js:2338-2352` that `prepareCompaction` runs before `session_before_compact`, so Stage 5's `archive-session.test.ts` task will pass a low `keepRecentTokens` in `SettingsManager.inMemory` plus one queued `fauxAssistantMessage` summary when calling `session.compact()`.",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/design.md",
+      "required_change": ""
+    },
+    {
+      "disposition": "decline",
+      "rationale": "Minor test-table terseness nit: `specs/branch-hydration/spec.md` ('Outputs archived before a compaction stay in the archive') already owns that scenario, and as the reviewer notes, Stage 5 (`tasks.md`) maps every spec scenario onto `session-compact.test.ts` and `pi-archive-adapter.test.ts` without expanding `design.md`'s high-level summary row.",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/design.md",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/specs/branch-hydration/spec.md:39-57; openspec/changes/archive-stubbing-and-branch-hydration/design.md:81,88",
+      "finding_id": "critic-r4-CR-S3-R4-2",
+      "required_change": ""
+    }
+  ],
+  "owner_decisions": [],
+  "round_status": "clean"
+}

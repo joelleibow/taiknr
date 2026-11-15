@@ -1,0 +1,52 @@
+{
+  "not_covered": [
+    "Live LLM or Jev classifier execution (`jev-context-poc.ts`, `test-jev-poc.mjs`, and `tasks.md` 12.1 were not run, per brief).",
+    "Visual terminal rendering in Pi's interactive TUI of a `context_edit`-stubbed `toolResult` retaining an `ImageContent` block (`design.md` Open Questions).",
+    "Provider-side KV prompt-cache hit accounting across settled `context_edit` turns (`design.md` Open Questions)."
+  ],
+  "findings": [],
+  "later_gates": [
+    "Validate phase (Judge Gen independent PR review and behavioral verification report).",
+    "Joel's manual live check in his own Pi session (`tasks.md` 12.1, left unticked for him).",
+    "Bambadjan's post-approval documentation pass (`README.md:3`, `AGENTS.md:3`, `ARCHITECTURE.md:5,42`, and `design.md` Migration Plan user notes).",
+    "Recall card and Status card follow-ups: end-to-end recall verification of hydrated `InMemoryArchiveStore` contents (`context.ts`), the recall half of `configuration`'s deferred `enabled: false` scenarios (`D5`), and the off -> `/tree` -> on stale-store handoff (`CR-12`)."
+  ],
+  "requirements": [
+    {
+      "status": "met",
+      "evidence": "Checked `git status --short` (clean), `git log 4e951a2..ae7cedc`, `git diff --name-status 75736f9...ae7cedc` (exact 14 Modify + 10 Create File Boundary paths plus `tasks.md`; `taiknr.ts`, recall modules, config modules, and root tooling files untouched), `tasks.md` ticks (`0.1`–`11.4` ticked, `12.1` unticked for Joel), and audited all six entries under 'Your calls' in `derek-report.md` against `tasks.md` and `design.md`.",
+      "requirement": "Contract adherence & File Boundary (`tasks.md` Groups 0, 1, 11, 12; `D7`, `D8`, `D10`)"
+    },
+    {
+      "status": "met",
+      "evidence": "Read `src/domain/archived-output.ts:24-54` and `tests/domain/archived-output.test.ts:1-162`; ran `npm run check`. `shouldArchive` and its three existing tests are byte-identical; `summarizeSingleLine` and `buildStub` preserve `candidate.rawText` verbatim, split lines on `/\\r\\n|\\r|\\n|\\u2028|\\u2029|\\u0085/`, cap preview at 3 lines / 180 code units and `toolName`/`argsSummary` at 120 code units without splitting surrogate pairs (`.toWellFormed()`), and produce strictly single-line stubs.",
+      "requirement": "Deterministic single-line, surrogate-safe stub formatting (`specs/archive-stubbing/spec.md` 'The stub is one line...'; `design.md` Decision 4; `M9`; `tasks.md` Group 2)"
+    },
+    {
+      "evidence": "Read `src/use-cases/stage-tool-outputs.ts:14-27`, `src/infra/adapters/pi-archive-adapter.ts:49-91`, `src/infra/pi-event-handlers/tool-call.ts:4-19`, `src/infra/pi-event-handlers/turn-end.ts:7-32`, and their mirrored test suites (`stage-tool-outputs.test.ts`, `pi-archive-adapter.test.ts`, `tool-call.test.ts`, `turn-end.test.ts`). Verified `completed`/`aborted`/`error` outcomes all stage, opaque 36-char UUID `entryId`s stay intact, `toolCallId` last-match pairing with length-checked fallback skips unresolved results silently, empty/image-only/all-empty multi-block results yield `rawText: ''` and are rejected in `stageToolOutputs`, whitespace-only text counts by length, `tool_call` skips `parentToolCallId` and wraps `JSON.stringify` in `try/catch` (`undefined`, `BigInt`, circular, throwing `toJSON` -> `''`), and `originalContentByEntryId` records staged IDs only.",
+      "status": "met",
+      "requirement": "Turn-boundary staging, no-empty-text eligibility seam, and total `tool_call` summarization (`specs/archive-stubbing/spec.md` first two requirements; Joel Q1 -> a; `design.md` Decisions 1–6, 11; `M6`–`M9`; `tasks.md` Groups 3, 5.1–5.2, 6, 7)"
+    },
+    {
+      "status": "met",
+      "evidence": "Read `src/use-cases/commit-archived-batch.ts:5-11`, `src/infra/adapters/pi-archive-adapter.ts:97-118`, `src/infra/pi-event-handlers/agent-before-settle.ts:7-53`, `tests/use-cases/commit-archived-batch.test.ts`, `tests/infra/pi-event-handlers/agent-before-settle.test.ts`, and `tests/app/extension/archive-session.test.ts:199-307`. Re-ran two scratch mutations in a `mktemp -d` copy: removing `...event.entries` from `editedTargetIds` failed both `agent-before-settle.test.ts` and `archive-session.test.ts`, and removing `branchToolResultIds.has(item.id)` failed `archive-session.test.ts` with a collected boundary error on `abort -> /tree -> settle`. Verified `taiknr-side-store`-first draft ordering, non-text block preservation in order, build-before-mutate sequencing, full `ArchivedToolOutput` persistence, and `originalContentByEntryId` release on both drop and commit.",
+      "requirement": "Settlement replacement, carry-forward, branch/edit conflict filtering, draft ordering, and auxiliary-map release (`specs/archive-stubbing/spec.md` settlement & side-store requirements; Joel Q1 -> a; `design.md` Decisions 7–9; `M1`, `M3`–`M6`; `tasks.md` Groups 4.1–4.2, 5.3–5.4, 8, 10.1–10.3)"
+    },
+    {
+      "status": "met",
+      "requirement": "Branch hydration across `session_start`, `session_tree`, and `session_compact`, pre-compaction retention, and malformed-entry guard (`specs/branch-hydration/spec.md`; Joel Q2 -> a; `design.md` Decisions 9, 10, 12; `M1`, `M2`, `M10`; `tasks.md` Groups 4.3–4.4, 5.5–5.6, 9, 10.4)",
+      "evidence": "Read `src/use-cases/hydrate-archive-store.ts:5-7`, `src/infra/adapters/pi-archive-adapter.ts:121-148`, `src/infra/pi-event-handlers/{session-start,session-tree,session-compact}.ts`, and `tests/{use-cases/hydrate-archive-store,infra/adapters/pi-archive-adapter,infra/pi-event-handlers/session-start,infra/pi-event-handlers/session-tree,infra/pi-event-handlers/session-compact,app/extension/archive-session}.test.ts`. Re-ran `9.2`'s `sessionManager` removal mutation in `mktemp -d` (9 active `session_start` cases failed with `TypeError`, 7 non-hydrating cases stayed green). Verified whole-branch `getBranch()` retention across compaction (`sideStoreIndex < firstKeptIndex` in `archive-session.test.ts` + `session-compact.test.ts`), whole-entry skipping on malformed batches, extra-property tolerance, and branch-last-wins duplicate-ID folding."
+    },
+    {
+      "requirement": "Inertness when `enabled: false` or config is rejected, plus mid-session toggle boundaries (`specs/archive-stubbing/spec.md` & `specs/branch-hydration/spec.md` inertness requirements; `openspec/specs/configuration/spec.md` `D3`–`D5`; `design.md` Context & Decision 10; `tasks.md` 7.1, 8.1, 9.1–9.5, 10.5)",
+      "evidence": "Checked `src/infra/pi-event-handlers/{tool-call,turn-end,agent-before-settle,session-tree,session-compact}.ts` (none checks `enabled` per handler; all gated through `createGatedPi` in `taiknr.ts`), `src/infra/pi-event-handlers/session-start.ts:30` (`if (!session.isActive()) return;` — re-ran removal mutation in `mktemp -d`, caught by `session-start.test.ts`), `turn-end.test.ts:199-219`, `agent-before-settle.test.ts:198-215`, `session-tree.test.ts:166-177`, `session-compact.test.ts:141-152`, and `archive-session.test.ts:329-351` (project-file `enabled: false` vs `enabled: true`).",
+      "status": "met"
+    },
+    {
+      "evidence": "Ran `npm run check` (`biome check .` 43 files clean, `tsc --noEmit` 0 errors, `vitest run` 16 files / 220 passed in 616 ms); ran `git grep '@earendil-works/pi-' HEAD -- src/domain src/use-cases` (0 matches), `git grep 'console\\.' HEAD -- src` (0 matches), suppression grep over `git diff 4e951a2...HEAD -- src tests` (0 matches), and `git diff --name-status 75736f9...HEAD -- '*.md'` (only `tasks.md`). Verified `pi --no-session --help` (Pi 1.5.2) in a `mktemp -d` `git archive HEAD` copy with a throwaway `PI_CODING_AGENT_DIR` `packages` entry: clean load, zero errors or duplicate-dependency warnings. Checked `derek-report.md` 'Docs for Bambadjan' lists all outdated doc lines accurately.",
+      "status": "met",
+      "requirement": "Architecture boundary, preserved signatures, extension load check, zero suppressions/console output, and docs hand-off (`openspec/specs/{extension-packaging,development-checks}/spec.md`; ADR 0001, ADR 0003; `D2`, `D6`–`D8`, `M11`)"
+    }
+  ],
+  "verdict": "approve"
+}

@@ -1,0 +1,35 @@
+{
+  "resolutions": [
+    {
+      "finding_id": "readiness-s5r3-RD-S5-R3-1",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:157-165,208-216",
+      "rationale": "Minor prose nit on `10.3`'s Failing behavioural test description: `8.1` already provides the red-then-green unit proof for `event.entries` conflict dropping, `10.3` lands in Group 10 after `7.2` and `8.2` exist (where removing `8.2`'s `event.entries` check turns the first case red), and `10.3`'s second case goes red against `BASE`. Recorded without blocking convergence.",
+      "required_change": ""
+    },
+    {
+      "rationale": "Minor preamble-mapping nit: as the reviewer confirms, all constituent behaviors of 'A boundary Pi discards' are already pinned across `4.3`, `8.1-8.2`, and `9.3-9.5`, so nothing blocks implementation.",
+      "disposition": "decline",
+      "required_change": "",
+      "finding_id": "structural-s5r3-ST-S5-R3-1",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:109-114,157-185; openspec/changes/archive-stubbing-and-branch-hydration/specs/archive-stubbing/spec.md:122-135"
+    },
+    {
+      "rationale": "Minor preamble wording nit: `tasks.md` states `design.md` is the authority, and transcribing concrete rules into task steps is required by the zero-decision rule (`implementation-readiness-standard.md` §1).",
+      "finding_id": "structural-s5r3-ST-S5-R3-2",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "disposition": "decline",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:3-4; ~/.pi/agent/skills/conductor-janet/standards/implementation-readiness-standard.md §1",
+      "required_change": ""
+    }
+  ],
+  "owner_decisions": [],
+  "settled_findings": [
+    "readiness-s5r3-RD-S5-R3-1: minor — 10.3's second case is red at BASE and its first case guards 8.2's event.entries check alongside 8.1's unit red/green.",
+    "structural-s5r3-ST-S5-R3-1: minor — 'A boundary Pi discards' is compositionally pinned by 4.3, 8.1-8.2, and 9.3-9.5.",
+    "structural-s5r3-ST-S5-R3-2: minor — tasks.md preamble authority wording is non-blocking."
+  ],
+  "round_status": "clean"
+}

@@ -1,0 +1,64 @@
+# Proposal
+
+Citation key: bare `D N`, `S N`, `O N` and `Trap N` codes refer to `michael-orientation.md`; `Chidi §n` and `Eleanor §n` to `research-chidi.md` and `research-eleanor.md`; Joel's own words by section in `owner-rulings.md`.
+
+## Why
+
+taiknr's whole reason to exist is that a large tool output should leave the model's context as a one-line stub and stay recoverable afterwards. At `main` `4e951a2` none of it happens: the three translation functions in the archive adapter throw `Not implemented`, the domain stub builder throws `Not implemented`, and six of the seven handlers register and return (`Eleanor` §1). Only configuration works. A user who installs the package today gets a loaded extension and no behaviour.
+
+ADR 0002 wrote the mechanism down, but it was drafted in the same pass as the board card and rests on a Pi behaviour that was never checked: settlement at `agent_before_settle`, `context_edit` as whole-content replacement, hydration from the raw branch. `michael-orientation.md` measured those against Pi 1.5.2 and found one premise broken (a run aborted with `Escape` never reaches `agent_before_settle`, Trap 3) and one ask that needed an owner's answer (whether archived outputs survive compaction, Q2). Joel ruled both: carry staged items forward to the next settled run (Q1 → (a)), and keep the whole branch recallable (Q2 → (a)). This change implements the archive half on those rulings: staging, the stub, settlement, the side-store entry, and hydration.
+
+## What Changes
+
+- **Staging at the turn boundary, whatever the turn's outcome.** Every tool result Pi has persisted that carries text meeting the session's `minCharsToArchive` (default 600, comparison `>=`) is staged as a candidate the moment its turn ends, whether that turn completed, aborted or failed (Joel's "Orientation Q1" → (a); S1; D9; `Chidi` §1; `Eleanor` §1). The candidate's id is the persisted tool-result entry's own id, used opaquely: never sliced to eight characters, never matched against a hex pattern, because Pi's `generateId` falls back to a 36-character UUID (S1; Trap 6). A `tool_call` records the call's argument summary keyed by tool-call id so the later candidate can render it; a call that was never recorded still stubs, with an empty argument summary, as the proof of concept did (`Eleanor` §3).
+- **A tool result with no text is not a large tool output.** A result whose text is empty is never staged, whatever `minCharsToArchive` says, so `minCharsToArchive: 0` — a valid setting under the `configuration` spec — cannot attach an empty stub to an image-only or empty result (Trap 7; `configuration`). Several text blocks join with one newline, and a result whose text blocks are all empty carries no text rather than a lone newline; text that is only whitespace counts as text (M8).
+- **The stub, as the proof of concept rendered it.** One line, `[archived <id>] <toolName>(<argsSummary>) status=<ok|error> (<raw length> chars, <line count> lines) preview: <preview>`, with a preview of at most the first three lines joined by ` | ` and at most 180 characters, and an argument summary of the call's input as JSON truncated to 120 characters (S2; `Eleanor` §3; `ARCHITECTURE.md` §11 as read in `Eleanor` §5). It carries no line break: a `\r\n`, a bare `\r` or a newline reaching the preview or the argument summary would break the one-line contract (Trap 8; M9). One shared domain helper, used inside `buildStub` on the argument summary and the tool name and by the `tool_call` summarizer, replaces every line separator — `\r\n`, `\r`, a bare newline, U+2028, U+2029, U+0085 — with a space, and its cuts never split a surrogate pair (M9).
+- **Settlement at the settled boundary, as whole-content replacement.** At `agent_before_settle` each committed item's tool result is replaced by one text block holding its stub, followed by every non-text block the result carried, because `context_edit` replaces the entire content array and Pi documents no per-block form (S3; Trap 7; `Chidi` §3). Drafts taiknr proposes are appended to whatever another extension already proposed for that boundary, never returned in place of them (Trap 5). The raw entry is untouched, so navigating to a branch that precedes the replacement reveals the original output (`Chidi` §3).
+- **Carry-forward, then filter against the live branch.** An item staged in a run that never settled — because `Escape` skipped the boundary — waits for the next settled run rather than dying with the run (Joel's "Orientation Q1" → (a); Trap 3). Before anything is committed, pending items are filtered: one whose target entry is not on the active branch, or whose target already carries a `context_edit` — null or not, from any author — on the active branch or among the entries already proposed at that boundary, is dropped, and the drop is silent (Joel's "Orientation Q1" → (a); M5; Trap 3–5). Without that filter a single `/tree` jump after an abort makes Pi reject every draft in the settlement while the in-memory store has already been written (Trap 3, closing risk).
+- **Nothing when nothing commits.** A settled run with no eligible item leaves the boundary exactly as it found it, so ordinary conversational turns are not littered with empty `taiknr-side-store` entries (Trap 5).
+- **One side-store entry per committed batch.** Items committed in one settlement are recorded together in a session entry of type `taiknr-side-store`, whose data is the batch, appended only when the batch is non-empty (S3; D9; `Chidi` §4). Custom entries are never sent to the model, so the record costs no context (`Chidi` §4).
+- **Hydration on three events, from the whole active branch.** `session_start` (only while the session is active), `session_tree` and `session_compact` rebuild the in-memory archive from every `taiknr-side-store` entry on the active branch, replacing the store's contents whole (S4; D3–D5; Joel's "Orientation Q2" → (a); `Chidi` §5). Replacement is what makes `/tree` navigation correct — the branch the user left is dropped — and idempotence is what lets `session_compact` run the same path harmlessly.
+- **Pre-compaction outputs stay in the archive.** Hydration reads the active branch, not the compaction-bounded view, so an output archived before `/compact` is still archived after it and stays recallable by the next card (Joel's "Orientation Q2" → (a); `Chidi` §5). The cost Joel accepted is that the recall payload grows with the branch until the archive-caps card lands (Joel's "Orientation Q2" → (a)).
+- **A bad side-store entry never breaks a session start.** An entry of another custom type, or one whose data is not a batch of well-formed items, is skipped rather than allowed to poison the store or throw (O3, behaviour only; the validation's home is the design's).
+- **Inert while off or rejected, verified through the gate.** With `enabled: false` or a rejected config file there is no staging, no settlement and no hydration, and outputs stubbed earlier stay stubbed (Joel's standing "Q3, everything stops" and "Q1"; D3–D5; `configuration` spec). The two `configuration` scenarios that name this card and the recall card — a project file turning taiknr off for one project, and stubs made before the switch staying stubbed — are verified from the archive side here, through the composition-root gate rather than a per-handler check (D4, D5).
+- **Tests, including a session-level one.** Layer tests mirror the layer they exercise, and the change adds at least one session-level check driving real entries through the harness, with no model call and no network (M10; Trap 10 measured at ~35 ms). Both harness levels are used: a real `InMemoryArchiveStore`, `SessionManager.inMemory` and per-handler fixtures for the layer tests, and a zero-network session-level test driving `createAgentSession` with `SessionManager.inMemory` and `fauxProvider`, imported from `@earendil-works/pi-ai` behind a one-line `shortcut:` comment (M10). The existing `tests/support/fake-pi.ts` context stub and `tests/infra/pi-event-handlers/session-start.test.ts` must grow a branch and a real store, or `session_start` hydration crashes eight existing cases (Trap 1). `tests/app/extension/taiknr.test.ts` stays unchanged (D7; `configuration` spec).
+- **The docs pass follows the implementation and blocks nothing.** `AGENTS.md` and `ARCHITECTURE.md` still describe every handler beyond configuration as a stub; they are corrected after Michael approves the implementation (S6; D2).
+
+**Deliberately not in this change** (D10 unless noted):
+
+- Classifier scoring, `<recalled_context>` tail injection and the scorer adapter. The recall card owns `src/domain/recall.ts`, `src/use-cases/recall-relevant-context.ts`, `src/infra/adapters/pi-{context,jev-scorer,notifier}-adapter.ts` and `src/infra/pi-event-handlers/context.ts`, and none of them is touched here (orientation §2; D10).
+- The `/taiknr` command and any status readout. `SessionConfig` and its `setEnabled` seam stay untouched (orientation §2; D10).
+- Archive caps and pruning. Nothing is deleted from the archive or from a branch, and hydration has no ceiling (D10; Joel's "Orientation Q2").
+- Any change to `biome.json` — including a rule enforcing ADR 0001's boundary, which `development-checks` keeps deferred (Trap 9).
+- The OpenRouter-provider abstraction behind the classifier, which Joel deferred (Joel's standing "I don't want to tangent down").
+- Serving a repeated tool call from the archive, which Joel recorded as a future card, not this one (Joel's "A future idea, not in this change").
+- Rewriting a tool result at `turn_end` instead of settling, which would hide raw output from the model mid-loop and invalidate the run's prefix cache (Q1 → (d); `Chidi` §3).
+- Any writer of Markdown other than the docs pass (S6).
+
+## Capabilities
+
+### New Capabilities
+
+- `archive-stubbing`: which tool outputs get staged, what their stub says, how a staged item is settled into the session and its store record, and what the archive does while taiknr is off.
+- `branch-hydration`: how the in-memory archive is rebuilt from the active branch on session start, tree navigation and compaction, and what it does while taiknr is off.
+
+### Modified Capabilities
+
+None. The archive behaviour is new, and the `configuration` scenarios this change is named in already say what happens; verifying them adds no requirement there. The branch and content handling stays inside the existing adapter exports, so no `extension-packaging` modification follows either (M7, settling O4).
+
+## Impact
+
+- `src/infra/adapters/pi-archive-adapter.ts`: the three `Not implemented` bodies — candidate translation, settlement drafts, branch batch reading.
+- `src/domain/archived-output.ts`: the stub builder's `Not implemented` body.
+- `src/use-cases/`: the staging, commit and hydration use cases — `stage-tool-outputs.ts`, `commit-archived-batch.ts` and `hydrate-archive-store.ts`, whose current bodies `Eleanor` §1 did not read.
+- `src/infra/pi-event-handlers/`: `tool-call.ts`, `turn-end.ts`, `agent-before-settle.ts`, `session-start.ts`, `session-tree.ts` and `session-compact.ts` gain bodies. `context.ts` and the four adapters the recall card owns stay untouched (orientation §2).
+- `src/app/extension/taiknr.ts`: wiring only, keeping all seven `register*Handler` calls and their signatures (D7; Trap 9).
+- Tests under `tests/infra/adapters/`, `tests/use-cases/`, `tests/domain/`, `tests/infra/pi-event-handlers/` and a session-level test, plus the two shared fakes Trap 1 names. No tooling file needs an edit (D7, D8).
+- Untouched: `src/domain/` and `src/use-cases/` stay free of `@earendil-works/pi-*` imports (D6); `package.json`, `package-lock.json`, `biome.json`, `tsconfig.json`, `vitest.config.ts`, `.gitignore`, `jev-context-poc.ts`, `test-jev-poc.mjs`, `~/.pi/agent/` and the dotfiles.
+- Markdown outside this change directory: only in the docs pass, after approval (S6).
+
+## Open Questions
+
+**None open.** O1–O6 were put to the council and every one is settled; `council.md` § Michael's Rulings carries each ruling as M1–M11 with what decided it, and `design.md` carries the design that follows. For the record, what was open: line-break normalization, `undefined` tool input and nested calls (O1); how several text blocks join, the image-only boundary and result-to-entry pairing (O2); where the branch filter runs and where a side-store entry's data shape is validated (O3); whether the branch and content work needs a new adapter export and an `extension-packaging` delta (O4); which session-level harness (O5); and how archive state is observed with no logger (O6). Sources: M1, M5, M7, M8, M9, M10, M11.
+
+Settled, and not reopened here: the item id (S1), the stub template and argument summary (S2), non-text preservation and the side-store draft (S3), the three hydration events and `replaceAll` (S4), inertness enforcement (S5), and the docs pass (S6).

@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 
 export interface RegisteredHandler {
 	event: string;
@@ -30,7 +30,15 @@ export function createFakePi(): FakePi {
 	return { pi, registered, onReturn, marker };
 }
 
-/** A context stub carrying only the two members the session-start bridge reads. */
-export function createContextStub(options: { cwd: string; trusted: boolean }): ExtensionContext {
-	return { cwd: options.cwd, isProjectTrusted: () => options.trusted } as unknown as ExtensionContext;
+/** A context stub carrying the members the archive handlers read, with an empty branch by default. */
+export function createContextStub(options: {
+	cwd: string;
+	trusted: boolean;
+	branch?: SessionEntry[];
+}): ExtensionContext {
+	return {
+		cwd: options.cwd,
+		isProjectTrusted: () => options.trusted,
+		sessionManager: { getBranch: () => options.branch ?? [] },
+	} as unknown as ExtensionContext;
 }

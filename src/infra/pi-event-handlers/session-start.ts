@@ -2,14 +2,16 @@ import { resolve } from "node:path";
 import { CONFIG_DIR_NAME, type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { SessionConfig } from "../../config/session-config.js";
 import { CONFIG_FILE_NAME, loadTaiknrConfig, TaiknrConfigError } from "../../config/taiknr-config.js";
+import { hydrateArchiveStore } from "../../use-cases/hydrate-archive-store.js";
 import type { ArchiveStore } from "../../use-cases/ports.js";
+import { readArchiveBatchesFromBranch } from "../adapters/pi-archive-adapter.js";
 
 /**
  * Resolve this session's config at `session_start` (design D5): build both paths from the event's
  * context and the host's helpers, load, record the outcome on the holder, and report a rejection by
  * throwing after the holder carries it.
  */
-export function registerSessionStartHandler(pi: ExtensionAPI, _store: ArchiveStore, session: SessionConfig): void {
+export function registerSessionStartHandler(pi: ExtensionAPI, store: ArchiveStore, session: SessionConfig): void {
 	pi.on("session_start", (_event, ctx) => {
 		const agentConfigPath = resolve(getAgentDir(), CONFIG_FILE_NAME);
 		const projectConfigPath = ctx.isProjectTrusted() ? resolve(ctx.cwd, CONFIG_DIR_NAME, CONFIG_FILE_NAME) : undefined;
@@ -23,5 +25,9 @@ export function registerSessionStartHandler(pi: ExtensionAPI, _store: ArchiveSto
 			session.assign({ status: "rejected", error });
 			throw new Error(`${error.message}; fix the file, then run /reload or start a new session`, { cause: error });
 		}
+
+		// The archive is only current for a session that is on, and only after its config resolved.
+		if (!session.isActive()) return;
+		hydrateArchiveStore(readArchiveBatchesFromBranch(ctx.sessionManager.getBranch()), store);
 	});
 }
