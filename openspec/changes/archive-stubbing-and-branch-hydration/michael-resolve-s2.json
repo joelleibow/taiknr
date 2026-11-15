@@ -1,0 +1,66 @@
+{
+  "owner_decisions": [],
+  "resolutions": [
+    {
+      "finding_id": "CC-1",
+      "disposition": "propose_fix",
+      "required_change": "1. In `design.md` Decision 4 (and the `src/domain/archived-output.ts` row of Module & File Placement), state the one-line stub format `[archived <id>] <toolName>(<argsSummary>) status=<ok|error> (<n> chars, <m> lines) preview: <preview>` once (citing `specs/archive-stubbing/spec.md` 'The stub is one line naming the output and previewing it' as canonical owner without duplicating its scenarios), and name the exported domain helper `summarizeSingleLine(text: string, maxUnits: number): string` (replaces `/\\r\\n|\\r|\\n|\\u2028|\\u2029|\\u0085/g` with `' '`, cuts at `maxUnits` UTF-16 code units or `maxUnits - 1` when splitting a surrogate pair, then `.toWellFormed()`, called with `120` in `tool-call.ts` on `(JSON.stringify(event.input) ?? '')` and with `120` in `buildStub` on `candidate.argsSummary` and `candidate.toolName`).\n2. In `design.md` Decision 7, specify each `ContextEditEntryDraft`'s replacement as `{ type: 'context_edit', targetId: item.id, replacement: { content: [{ type: 'text', text: item.stub }, ...nonTextBlocks] } }`, where `nonTextBlocks` preserves in original relative order every block in `originalToolResultsByEntryId.get(item.id) ?? []` whose `type !== 'text'` (such as `ImageContent`) and drops all original `type === 'text'` blocks regardless of position.",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/design.md",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/design.md:57,103,109; specs/archive-stubbing/spec.md:71-75,103-116; src/domain/archived-output.ts:24-26; src/infra/adapters/pi-archive-adapter.ts:48-51; council.md M4, M9",
+      "rationale": "Genuine comprehension and readiness gap: `design.md` Decision 4 uses `<n>`, `<m>`, and `<preview>` without ever showing the stub format string they plug into, leaves the new exported domain helper unnamed, and Decision 7 never specifies how `toSettlementDrafts` constructs `replacement.content` when text and non-text blocks are interleaved (e.g. `[text, image, text]`)."
+    },
+    {
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/design.md:9,23,115; src/config/session-config.ts:3-35; src/app/extension/handler-gate.ts:10-20; src/app/extension/taiknr.ts:20-52; openspec/specs/configuration/spec.md:235-268",
+      "required_change": "Add a concise 3-4 sentence summary in `design.md` Context (citing `src/config/session-config.ts`, `src/app/extension/handler-gate.ts`, `src/app/extension/taiknr.ts`, and `openspec/specs/configuration/spec.md` rather than restating configuration requirements): `SessionConfig` starts `{ status: 'unresolved' }`, is assigned `{ status: 'ready', config }` or `{ status: 'rejected', error }` at `session_start`, flips `config.enabled` in memory via `setEnabled(boolean)` only from `ready`, and defines `session.isActive()` as `state.status === 'ready' && state.config.enabled`. `taiknr.ts` registers `session_start` on raw `pi` (so a later session start can re-read files and recover from `rejected` or `enabled: false`) and registers all six other lifecycle events through `createGatedPi(pi, session)`, whose `on` wrapper checks `session.isActive()` at event dispatch time and returns `undefined` without calling the handler while inactive. Reference this summary in Decision 10 for the mid-session re-enable flow.",
+      "rationale": "Genuine comprehension gap for a reader of `design.md`: `SessionConfig`, `createGatedPi`, `session.isActive()`, and why `session_start` alone bypasses the gate are relied on throughout `design.md` without summarizing their states and wiring from the existing codebase.",
+      "disposition": "propose_fix",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/design.md",
+      "finding_id": "CC-2"
+    },
+    {
+      "rationale": "Valid comprehension and zero-decision gap: `design.md` Decision 2 and Decision 6 state the happy-path pairing and lookup, leaving unresolved what happens when `entryId` cannot be paired, when `argsByCallId` lacks a `toolCallId`, when `toolResults` repeats a `toolCallId`, or when `originalToolResultsByEntryId` has no entry at settlement.",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/design.md:99,105,107,109; specs/archive-stubbing/spec.md:88-90; jev-context-poc.ts:48-51; council.md M7",
+      "required_change": "1. In `design.md` Decision 2, state explicitly that inside `toToolOutputCandidates(event, argsByCallId)`: (a) when neither the `contextEntries` last-match lookup by `toolCallId` nor the length-checked `event.toolResultEntryIds[i]` fallback yields a non-empty `entryId`, that `toolResult` is skipped silently without failing the turn; (b) `argsSummary` defaults via `argsByCallId.get(tr.toolCallId) ?? ''` when the call was never recorded.\n2. In `design.md` Decision 6, state that `turn-end.ts` matches each staged `ToolOutputCandidate.toolCallId` to the last matching `ToolResultMessage` in `event.toolResults` (mirroring Decision 2's last-match rule), and in Decision 7 state that `toSettlementDrafts` defaults `originalToolResultsByEntryId.get(item.id) ?? []` so a missing map entry yields `[stubTextBlock]` rather than throwing.",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/design.md",
+      "disposition": "propose_fix",
+      "finding_id": "CC-3"
+    },
+    {
+      "required_change": "In `design.md` Decision 8 and the competing-`context_edit` bullet of Risks / Trade-offs, explain Pi's sequential load-order dispatch in `ExtensionRunner.emitBoundary` (`runner.js:773-797`): (1) drafts from handlers registered *before* taiknr appear in `event.entries`, so Decision 8 drops the staged item and writes neither a stub nor a `taiknr-side-store` record for that target; (2) handlers registered *after* taiknr run after taiknr returns, so taiknr cannot see their drafts — if a later handler appends `[...event.entries, itsEdit(targetId)]`, its `context_edit` still wins in model context under `buildSessionProjection`'s latest-edit-wins rule (`session-manager.js:264`), while taiknr's `taiknr-side-store` entry and `InMemoryArchiveStore` retain the unedited raw item (and if a later handler replaces `event.entries` without spreading, taiknr's drafts are dropped under Decision 7's optimistic-cache rule).",
+      "disposition": "propose_fix",
+      "rationale": "Valid calibrated-claims and comprehension gap (`feature-spec-standard.md` §6): `design.md` claims same-boundary `context_edit`s cannot be overwritten without explaining Pi's sequential handler order in `ExtensionRunner.emitBoundary`, where `event.entries` only holds drafts from handlers that ran *before* taiknr.",
+      "finding_id": "CC-4",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/design.md:111,126; node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/runner.js:773-797; node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js:264; council.md M5",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/design.md"
+    },
+    {
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/design.md:109,117; council.md M4, M11",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/design.md",
+      "disposition": "propose_fix",
+      "rationale": "Valid internal contradiction in `design.md`: Decision 7 literally places `return [...event.entries, ...]` before draining into `store` and mutates `pendingOutputs`/`originalContentByEntryId` before `toSettlementDrafts`, contradicting Decision 11's statement that drafts are built before mutating state.",
+      "required_change": "1. Rewrite the step sequence in `design.md` Decision 7 so all pure reads and draft construction precede every state mutation and `return` is last: (1) read `ctx.sessionManager.getBranch()` and `event.entries`, build the active-branch `toolResult` ID `Set` and existing-`context_edit` `targetId` `Set`, and partition `pendingOutputs` non-mutatingly into `committable` and `dropped`; (2) if `committable.length === 0`, remove `dropped` items from `pendingOutputs` in place, delete their `originalContentByEntryId` keys, and return `undefined`; (3) call `const drafts = toSettlementDrafts(committable, originalContentByEntryId)` (`[sideStoreDraft, ...contextEditDrafts]`) before mutating `pendingOutputs`, `originalContentByEntryId`, or `store` (so any throw leaves all three untouched); (4) remove `dropped` items from `pendingOutputs` in place and delete their `originalContentByEntryId` keys, then call `commitArchivedBatch(pendingOutputs, store)` (draining the remaining `committable` items into `store`) and delete the committed keys from `originalContentByEntryId`; (5) return `{ entries: [...event.entries, ...drafts] }`.\n2. In `design.md` Decision 11, state the matching build-before-mutate failure boundary for the other handlers: `turn_end` computes `candidates` and `staged` before pushing to `pendingOutputs` or writing `originalContentByEntryId`; `session_start`, `session_tree`, and `session_compact` finish `readArchiveBatchesFromBranch(ctx.sessionManager.getBranch())` before `hydrateArchiveStore` calls `store.replaceAll`; any unexpected throw propagates to Pi's extension error channel without partial mutation.",
+      "finding_id": "CC-5"
+    },
+    {
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/design.md",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/design.md:80,103,105; specs/archive-stubbing/spec.md:88-90",
+      "disposition": "decline",
+      "finding_id": "CC-6",
+      "required_change": "",
+      "rationale": "Minor wording nit in the `tool-call.test.ts` table row: Decision 4 (`(JSON.stringify(event.input) ?? '')`) and Decision 5 (skip only `event.parentToolCallId !== undefined`, record top-level calls) already specify storing `''` for `event.input === undefined` rather than the literal string `'undefined'`, and `CC-1`/`CC-3` already pin both `summarizeSingleLine` and `argsByCallId.get(...) ?? ''`."
+    },
+    {
+      "required_change": "",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/design.md:109,117; council.md M11",
+      "disposition": "decline",
+      "rationale": "Minor diagnostic prose nit: Decision 7 already states an all-dropped settlement emits no `taiknr-side-store` entry, and M11 already accepted that silent drops have no dedicated log or counter in this change before the Status card lands.",
+      "finding_id": "CC-7",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/design.md"
+    }
+  ],
+  "round_status": "needs_fixes",
+  "settled_findings": [
+    "CC-6: minor — Decision 4 and Decision 5 already specify storing '' for undefined top-level tool_call input (not the string 'undefined'), and '' vs absent yields identical argsSummary at turn_end.",
+    "CC-7: minor — accepted diagnostic limitation under M11 that an all-dropped settlement writes no taiknr-side-store entry; counters/status belong to the Status card."
+  ]
+}

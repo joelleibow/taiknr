@@ -1,0 +1,142 @@
+{
+  "owner_decisions": [],
+  "settled_findings": [
+    "readiness-s5r1-RD-S5-R1-3: minor — 5.2 iterates event.toolResults without deduplicating entryId; 7.2 uses findLast.",
+    "readiness-s5r1-RD-S5-R1-4: minor — testing an event.entries conflict alongside a second committable item in 8.1 is local test fixture setup.",
+    "readiness-s5r1-RD-S5-R1-5 / structural-s5r1-ST-S5-R1-3: minor — narrowing filtered non-text blocks to TurnEndEvent['toolResults'][number]['content'][number][] inside toSettlementDrafts is a local private cast.",
+    "readiness-s5r1-RD-S5-R1-6 / structural-s5r1-ST-S5-R1-4: minor — Group 11 *.md diff timing relative to the conductor's trailing tick commit is non-blocking.",
+    "readiness-s5r1-RD-S5-R1-7 / structural-s5r1-ST-S5-R1-5: minor — assertion granularity nits in 7.1/8.1/9.1/10.x already covered by Stage 3 settled test boundaries.",
+    "structural-s5r1-ST-S5-R1-6: minor — private separator regex sharing inside archived-output.ts is a local implementation choice."
+  ],
+  "round_status": "needs_fixes",
+  "resolutions": [
+    {
+      "finding_id": "readiness-s5r1-RD-S5-R1-1",
+      "evidence": "tests/infra/pi-event-handlers/session-start.test.ts:87-251; live `npx vitest run` at `4e951a2` (`Test Files 6 passed (6), Tests 80 passed (80)`, `session-start.test.ts` `Tests 11 passed (11)`, 6 resolving `ready` with `enabled: true`); openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:45,84,90,94,167,242",
+      "required_change": "In `tasks.md`: (1) in `0.1`, have Derek run `npm run test` once at `BASE` and record the baseline count (`6` files, `80` tests) alongside `BASE` in the task report; (2) in the File Boundary row for `tests/infra/pi-event-handlers/session-start.test.ts` and in `1.1`, `1.2`, and `9.2`, change `twelve` to `eleven` (11 existing cases) and `eight` to `six` (the 6 existing cases resolving `ready` with `enabled: true`); (3) in `1.1` and `11.4`, replace `51` with `80 (the baseline count recorded at 0.1)` (`1.1`: same 6 files and 80 cases as recorded at `0.1`; `11.4`: 16 test files — 6 existing plus 10 `Create` — and a total case count above `BASE`'s 80).",
+      "disposition": "propose_fix",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "rationale": "Verified by running `vitest` against `4e951a2`: `session-start.test.ts` has 11 cases (not 12), 6 of which resolve `ready` with `enabled: true` (not 8), and full `npm run test` runs 6 files / 80 cases once `taiknr-config.test.ts`'s `test.each` tables expand (not 51). Hardcoded wrong counts in Verification lines would stall Derek under rule 2/3."
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "src/domain/archived-output.ts:1-17; src/infra/pi-event-handlers/turn-end.ts:5-14; openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:145-153",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "required_change": "In `tasks.md` `7.2` (and `7.1` boundary cases): state explicitly that (1) if `deps.config.state.status !== \"ready\"`, the callback returns `undefined` immediately with no side effects; (2) for each `item` in `staged`, look up `const candidate = candidates.findLast((c) => c.entryId === item.id)`, then look up the last `ToolResultMessage` in `event.toolResults` whose `toolCallId === candidate.toolCallId`, defaulting `content` to `[]` if either lookup misses; and (3) the callback returns `undefined`.",
+      "finding_id": "readiness-s5r1-RD-S5-R1-2",
+      "rationale": "Valid zero-decision gap (`implementation-readiness-standard.md` §1): `ArchivedToolOutput` returned by `stageToolOutputs` has `id` (`candidate.entryId`) and no `toolCallId`, yet `7.2` references 'the candidate's' `toolCallId` without naming the `entryId === item.id` join, its miss fallback, or the non-`ready` guard return."
+    },
+    {
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "disposition": "decline",
+      "rationale": "Minor edge nit on an artificial duplicate-`toolCallId` fixture; `5.2` already specifies iterating `event.toolResults` without deduplication, and `7.2`'s `findLast` handles duplicate `entryId`s deterministically.",
+      "finding_id": "readiness-s5r1-RD-S5-R1-3",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:116-127; michael-resolve-s3-r1.json critic-r1-CR-S3-2",
+      "required_change": ""
+    },
+    {
+      "required_change": "",
+      "rationale": "Minor fixture wording nit in `8.1`: testing an `event.entries` conflict alongside a second committable item so the returned `{ entries }` array is asserted is a local test-fixture setup detail.",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:157-166",
+      "finding_id": "readiness-s5r1-RD-S5-R1-4",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "disposition": "decline"
+    },
+    {
+      "required_change": "",
+      "finding_id": "readiness-s5r1-RD-S5-R1-5",
+      "rationale": "Minor local TypeScript narrowing detail inside `toSettlementDrafts` (casting the filtered non-text slice to `TurnEndEvent[\"toolResults\"][number][\"content\"][number][]` using already-imported `TurnEndEvent`). Not promoted above its reported minor severity.",
+      "evidence": "src/infra/adapters/pi-archive-adapter.ts:1,48-51; openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:133-136; ~/.pi/agent/skills/conductor-janet/standards/implementation-readiness-standard.md §1",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md"
+    },
+    {
+      "rationale": "Minor commit-timing wording nit in Group 11 verification commands; recorded without blocking convergence.",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "finding_id": "readiness-s5r1-RD-S5-R1-6",
+      "required_change": "",
+      "disposition": "decline",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:62,231-241"
+    },
+    {
+      "finding_id": "readiness-s5r1-RD-S5-R1-7",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:145-166,199-227; michael-resolve-s3-r3.json critic-r3-CR-S3-R3-1, critic-r3-CR-S3-R3-2",
+      "required_change": "",
+      "disposition": "decline",
+      "rationale": "Minor assertion-granularity nits on test points already settled in Stage 3 (`CR-S3-R3-1` and `CR-S3-R3-2`)."
+    },
+    {
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "evidence": "Measured in a `git archive HEAD` copy under `mktemp -d` (`npm run check` green in ~35 ms): `ModelRuntime.create({ authPath: join(agentDir, \"auth.json\"), modelsPath: null, allowModelNetwork: false, refreshOnCreate: false })` + `registerNativeProvider(faux.provider)` needs no `setRuntimeApiKey`; `pi.registerTool` in `helperExtension` works with `let activeSession: AgentSession | undefined`; `void activeSession?.abort()` in `execute` needs 1 `toolUse` response while settled `10.1` needs 2 (`toolUse` + `stop`); `keepRecentTokens: 0` with `compaction.enabled: false` after a second short prompt places `taiknr-side-store` at branch index 7 before `firstKeptEntryId` at index 10 and consumes 2 summary responses (`isSplitTurn === true`); openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:187-227",
+      "rationale": "Valid zero-decision failure (`implementation-readiness-standard.md` §1): Group 10 leaves five harness mechanics marked 'not found ... confirm and ask' (plus `10.1` queues only the `toolUse` turn without the follow-up `stop` turn, and `10.4` queues 1 summary response after 1 prompt where `keepRecentTokens: 0` actually places `firstKeptEntryId` before `taiknr-side-store` and requires 2 summary responses). Every one of those mechanics was measured against Pi 1.5.2 in a `mktemp -d` copy and can be fixed verbatim in `tasks.md`.",
+      "finding_id": "readiness-s5r1-RD-S5-R1-8",
+      "disposition": "propose_fix",
+      "required_change": "Remove the 'not found ... confirm and ask' branches in `tasks.md` Group 10 and pin the measured recipes directly:\n1. Group 10 intro: pass `authPath: join(agentDir, \"auth.json\")` to `ModelRuntime.create({ authPath: join(agentDir, \"auth.json\"), modelsPath: null, allowModelNetwork: false, refreshOnCreate: false })`, omit `setRuntimeApiKey` (verified unnecessary for `faux.provider`), and pass `noSkills: true, noPromptTemplates: true, noThemes: true` alongside `noExtensions: true` on `DefaultResourceLoader`.\n2. `10.1`: register the tool via `pi.registerTool({ name: \"big_out\", label: \"Big Out\", description: \"Returns big output\", parameters: { type: \"object\", properties: {} } as never, execute: async () => ... })` inside `helperExtension`, holding `let activeSession: AgentSession | undefined` assigned right after `createAgentSession(...)`, and queue two responses for the settled tool run: `[fauxAssistantMessage([fauxToolCall(\"big_out\", {}, { id: \"call-1\" })], { stopReason: \"toolUse\" }), fauxAssistantMessage([fauxText(\"done\")], { stopReason: \"stop\" })]`.\n3. `10.2`: when a test-local `abortInTool` boolean is `true`, `execute` calls `void activeSession?.abort()` before returning the large tool result, and the test queues only the single `[fauxAssistantMessage([fauxToolCall(\"big_out\", {}, { id: \"call-1\" })], { stopReason: \"toolUse\" })]` response for the aborted `session.prompt(...)` (verified: no second provider call is made, `turn_end` stages the persisted result, and `agent_before_settle` is skipped).\n4. `10.3`: pass `extensionFactories: [competitor, taiknr, helperExtension]` for the before-taiknr redaction case and `[taiknr, competitor, helperExtension]` for the after-taiknr survival case, with `competitor` reading `ctx.sessionManager.getBranch().findLast((e) => e.type === \"message\" && e.message.role === \"toolResult\")?.id`.\n5. `10.4`: use `SettingsManager.inMemory({ compaction: { enabled: false, keepRecentTokens: 0 } })` (keeping auto-compaction off during prompts), run one settled `big_out` prompt followed by one short text prompt (`[fauxAssistantMessage([fauxText(\"done 2\")], { stopReason: \"stop\" })]`) so `taiknr-side-store` precedes `firstKeptEntryId` on `getBranch()`, then queue two summary responses (`[fauxAssistantMessage([fauxText(\"history summary\")], { stopReason: \"stop\" }), fauxAssistantMessage([fauxText(\"turn prefix summary\")], { stopReason: \"stop\" })]`, required because `keepRecentTokens: 0` splits the tail turn) before `await session.compact()`, and assert `sideStoreIndex < firstKeptIndex` on `getBranch()` and `errors` empty."
+    },
+    {
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "required_change": "Apply the exact count updates in `tasks.md` specified under `readiness-s5r1-RD-S5-R1-1` (record `6` files / `80` tests at `0.1`; `eleven` and `six` in the File Boundary row, `1.1`, `1.2`, and `9.2`; `80` recorded at `0.1` in `1.1` and `11.4`).",
+      "finding_id": "codebase-s5r1-CB-1",
+      "rationale": "Same verified baseline-count error in `tasks.md` as `RD-S5-R1-1` (`session-start.test.ts` has 11 cases with 6 `enabled: true`, and `vitest` runs 80 cases at `BASE`, not 51). Historical `research-eleanor.md` is not edited; fixing `tasks.md` closes all four verification steps.",
+      "disposition": "propose_fix",
+      "evidence": "tests/infra/pi-event-handlers/session-start.test.ts:87-251; live `npx vitest run` at `4e951a2` (`6` files, `80` tests; `11` in `session-start.test.ts`, `6` `enabled: true`); openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:45,84,90,94,167,242"
+    },
+    {
+      "disposition": "decline",
+      "finding_id": "codebase-s5r1-CB-2",
+      "required_change": "",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "rationale": "Reported as minor and already closed by `propose_fix` on `readiness-s5r1-RD-S5-R1-2` and `structural-s5r1-ST-S5-R1-2`.",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:150-153; src/domain/archived-output.ts:1-17"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "tests/infra/pi-event-handlers/session-start.test.ts:87-251; live `npx vitest run` at `4e951a2` (`6` files, `80` tests; `11` in `session-start.test.ts`, `6` `enabled: true`); openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:45,84,90,94,167,242",
+      "required_change": "Apply the exact count updates in `tasks.md` specified under `readiness-s5r1-RD-S5-R1-1` (record `6` files / `80` tests at `0.1`; `eleven` and `six` in the File Boundary row, `1.1`, `1.2`, and `9.2`; `80` recorded at `0.1` in `1.1` and `11.4`).",
+      "finding_id": "structural-s5r1-ST-S5-R1-1",
+      "rationale": "Same verified baseline-count error in `tasks.md` as `RD-S5-R1-1` and `CB-1` (note live `vitest run` reports 80 tests, not 79).",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "rationale": "Same missing `item.id -> candidate.entryId -> candidate.toolCallId` join and miss-fallback in `tasks.md` `7.2` as `RD-S5-R1-2`.",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "required_change": "Apply the exact `7.2` (and `7.1`) update in `tasks.md` specified under `readiness-s5r1-RD-S5-R1-2`.",
+      "evidence": "src/domain/archived-output.ts:1-17; openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:150-153",
+      "finding_id": "structural-s5r1-ST-S5-R1-2"
+    },
+    {
+      "required_change": "",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "rationale": "Minor local TypeScript narrowing detail inside `toSettlementDrafts` (converges with `RD-S5-R1-5`). Not promoted above its reported minor severity.",
+      "evidence": "src/infra/adapters/pi-archive-adapter.ts:1,48-51; openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:133-136; ~/.pi/agent/skills/conductor-janet/standards/implementation-readiness-standard.md §1",
+      "finding_id": "structural-s5r1-ST-S5-R1-3",
+      "disposition": "decline"
+    },
+    {
+      "required_change": "",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:62,231-241",
+      "rationale": "Minor commit-timing wording nit in Group 11 verification commands (converges with `RD-S5-R1-6`).",
+      "finding_id": "structural-s5r1-ST-S5-R1-4",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md"
+    },
+    {
+      "finding_id": "structural-s5r1-ST-S5-R1-5",
+      "rationale": "Minor vacuous-clause nit in `9.1`: any append call against `fake-pi.ts` throws immediately, and `9.3`/`9.5`/`10.x` pin `getEntries().length` on real `SessionManager` instances.",
+      "required_change": "",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:162-165",
+      "disposition": "decline",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md"
+    },
+    {
+      "finding_id": "structural-s5r1-ST-S5-R1-6",
+      "target_artifact": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md",
+      "evidence": "openspec/changes/archive-stubbing-and-branch-hydration/tasks.md:99-103; ~/.pi/agent/skills/conductor-janet/standards/implementation-readiness-standard.md §1",
+      "disposition": "decline",
+      "rationale": "Minor module-private constant style suggestion inside `src/domain/archived-output.ts`, explicitly left to implementation under `implementation-readiness-standard.md` §1.",
+      "required_change": ""
+    }
+  ]
+}
