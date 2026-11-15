@@ -48,7 +48,7 @@ Codes `Trap N`, `S N` and `orientation D N` refer to `michael-orientation.md` an
 | `src/infra/pi-event-handlers/session-start.ts` | Modified | The session-time bridge: build the two paths from the event context, gate on trust, call the loader, assign the holder, throw the report on rejection. |
 | `src/infra/pi-event-handlers/turn-end.ts` | Modified (type only) | The `config` member of the deps object becomes the holder; the registrar's parameters and the object's other members are unchanged. |
 | `src/infra/pi-event-handlers/context.ts` | Modified (type only) | Same as turn-end. |
-| `tests/config/taiknr-config.test.ts` | New | The host-free loader: layering, every rejection class, the read-error classification, the boundary values, and the two-key file `{"decisionTreshold":0.9,"enabled":"no"}`, whose first failing key in source order is named. |
+| `tests/config/taiknr-config.test.ts` | New | The host-free loader: layering, every rejection class, the read-error classification, the boundary values, and the two-key file `{"decisionTreshold":0.9,"enabled":"no"}`, whose first failing key in `Object.keys` order is named; `minCharsToArchive: -1` and `"600"` both name `must be an integer >= 0`; `decisionThreshold: 1e999` names `must be a number`. |
 | `tests/config/session-config.test.ts` | New | The holder's three states and its three operations, including `setEnabled` with the already-held value returning `true` and producing a new config object. |
 | `tests/app/extension/handler-gate.test.ts` | New | The gate invokes a registered handler only while active, and forwards everything else untouched. |
 | `tests/infra/pi-event-handlers/session-start.test.ts` | New | Paths from a fake context, the trust gate, the assign-then-throw order, the re-read on a second call with a different working directory, and a relative `PI_CODING_AGENT_DIR` still yielding an absolute agent path. |
@@ -191,15 +191,15 @@ The key stays required, so the caller has to state the trust decision; `undefine
 
 `loadTaiknrConfig` reads each path, strips a leading U+FEFF, parses, checks the root is a plain JSON object, then walks the parsed object's keys against the known-key set — rejecting unknown keys and checking each field's rule — and finally layers the three sources field by field in this order: the built-in default, overlaid by the agent file's value, overlaid by the trusted project file's value — for each field the project file wins when it sets one, otherwise the agent file, otherwise the default (owner-rulings "Orientation Q1b and Q2"). Example: agent file `{"enabled": true, "decisionThreshold": 0.9}`, trusted project file `{"enabled": false}` → resolved `enabled: false`, `decisionThreshold: 0.9`, defaults elsewhere. The rules and their provenance:
 
-| Field | Rule | Source of the value |
-|---|---|---|
-| `decisionThreshold` | `Number.isFinite` then `0 <= x <= 1` | The comparand is a probability (`src/domain/recall.ts:13`; ADR 0002 mechanism 3; orientation D8) |
-| `minCharsToArchive` | `Number.isInteger` then `>= 0` | The comparand is a text length, 0 meaning archive everything (`src/domain/archived-output.ts:20`; orientation D8) |
-| `defaultDecisionModel`, `defaultDecisionModelProvider` | strings with `trim().length > 0` | Only non-emptiness is checkable here; registry resolution is the classifier card's (Trap 10; ruling 12) |
-| `enabled` | `typeof === "boolean"` | Joel's suggested field and default (`owner-rulings.md` "An on/off switch"; Trap 16) |
-| any key outside the known-field list | rejected, naming the key | `Object.hasOwn` / a `Set`, so `toString` and `__proto__` are rejected (ruling 12) |
+| Field | Rule | Reason | Source of the value |
+|---|---|---|---|
+| `decisionThreshold` | not a finite number, then finite and `0 <= x <= 1` | not a finite number (any non-number, `"0.5"`, `1e999`) → `must be a number`; finite and `< 0` → `must be >= 0`; finite and `> 1` → `must be <= 1` | The comparand is a probability (`src/domain/recall.ts:13`; ADR 0002 mechanism 3; orientation D8) |
+| `minCharsToArchive` | `Number.isInteger(x) && x >= 0` | anything failing it (non-number, `"600"`, `1.5`, `-1`, `1e999`) → `must be an integer >= 0` | The comparand is a text length, 0 meaning archive everything (`src/domain/archived-output.ts:20`; orientation D8) |
+| `defaultDecisionModel`, `defaultDecisionModelProvider` | strings with `trim().length > 0` | non-string or `trim().length === 0` → `must be a non-empty string` | Only non-emptiness is checkable here; registry resolution is the classifier card's (Trap 10; ruling 12) |
+| `enabled` | `typeof === "boolean"` | non-boolean → `must be a boolean` | Joel's suggested field and default (`owner-rulings.md` "An on/off switch"; Trap 16) |
+| any key outside the known-field list | rejected, naming the key | `unknown field` | `Object.hasOwn` / a `Set`, so `toString` and `__proto__` are rejected (ruling 12) |
 
-The reasons this change uses, pinned so a test can assert them: `unknown field`, `must be <= 1`, `must be >= 0`, `must be an integer >= 0`, `must be a number`, `must be a non-empty string`, `must be a boolean`, `root must be an object`, `cannot be parsed: <parser message>`, `cannot be read: <errno>`. The first violation found is the one reported. Deterministically: the agent file is read and validated before the project file; within a file, each key of `Object.keys(parsed)` is visited in source order and checked as unknown-or-rule, so the first failing key in the file is the one named. Layering runs only after both files validate. One field per error is the smallest sufficient report. `TaiknrConfigError`'s `field` is `undefined` for parse, root and read failures, so "names the file, and the field where one applies" is true by type (ruling 5, 12; CB-3; CC-3).
+The reasons this change uses, pinned so a test can assert them: `unknown field`, `must be <= 1`, `must be >= 0`, `must be an integer >= 0`, `must be a number`, `must be a non-empty string`, `must be a boolean`, `root must be an object`, `cannot be parsed: <parser message>`, `cannot be read: <errno>`. Each input class maps to exactly one reason in the table above. The first violation found is the one reported. Deterministically: the agent file is read and validated before the project file; within a file, each key of `Object.keys(parsed)` is visited in that order (insertion order, integer-like keys first) and checked as unknown-or-rule, so the first failing key in that order is the one named. Layering runs only after both files validate. One field per error is the smallest sufficient report. `TaiknrConfigError`'s `field` is `undefined` for parse, root and read failures, so "names the file, and the field where one applies" is true by type (ruling 5, 12; CB-3; CC-3).
 
 *Alternatives weighed.* typebox: a new `peerDependencies` entry, a message formatter still needed for its two-entry unknown-key output, and a host-mapped import inside the layer that must be callable with no Pi runtime, which a future `cli/` or `mcp/` entry point would not resolve (ruling 12; Trap 9; R12). Spreading the parsed objects into a defaults object: `__proto__` survives a spread as an own key, so the unknown-key check and the merge both iterate names instead (ruling 12).
 
@@ -210,7 +210,16 @@ The session-start handler's body is four steps, in this order:
 1. Build `agentConfigPath = resolve(getAgentDir(), CONFIG_FILE_NAME)` and `projectConfigPath = ctx.isProjectTrusted() ? resolve(ctx.cwd, CONFIG_DIR_NAME, CONFIG_FILE_NAME) : undefined`, importing `resolve` from `node:path`, because `getAgentDir()` returns `PI_CODING_AGENT_DIR` as given, relative when the user set it relative (measured), and the spec asserts an absolute path.
 2. Call `loadTaiknrConfig({ agentConfigPath, projectConfigPath })` inside try/catch.
 3. `session.assign(...)` — `{ status: "ready", config }` on success, `{ status: "rejected", error }` on a `TaiknrConfigError`. The loader converts every `fs` and parse failure into a `TaiknrConfigError`, so this branch is the only error branch. Should anything else escape (a defect), it propagates unassigned and the holder keeps its prior state — `unresolved` in production, because Pi loads a new runtime, and so a new holder, before every `session_start` (`docs/extensions.md` L376–392); the two-call session-start test exercises the re-read, not this path.
-4. On rejection, throw `` `new Error(`${error.message}; fix the file, then run /reload or start a new session`, { cause: error })` ``. Then the hydration slot a later card fills, only when `session.isActive()`.
+4. On rejection, throw the error below.
+
+   ```ts
+   throw new Error(
+   	`${error.message}; fix the file, then run /reload or start a new session`,
+   	{ cause: error },
+   );
+   ```
+
+   Then the hydration slot a later card fills, only when `session.isActive()`.
 
 There is no `ctx.ui.notify`, and nothing else is emitted. `TaiknrConfigError.message` is host-neutral: `<absolute file path>: <field>: <reason>`, or `<absolute file path>: <reason>` when `field` is undefined. The recovery line is appended only by the session-start handler's throw, because `/reload` is Pi vocabulary and `src/config/` has none; the holder's `rejected.error` carries the host-neutral message. The host already prefixes the extension path, so the message carries no `pi-taiknr:` prefix. (Ruling 5; CR-7; CB-2; R10; CC-1.)
 
@@ -271,7 +280,7 @@ An unknown top-level key is a rejection naming the file and the key with the rea
 - **An in-flight classifier call is not cancelled by turning off.** → Mitigation: out of scope by ruling; the Status card owns the toggle's full semantics, and the gate stops new events, not work already started (R4 caveat).
 - **The gate is the only inertness mechanism, and it is invisible in the handler files.** A later card could add a handler that bypasses the gated `pi`. → Mitigation: the gate is created in `taiknr.ts` and every non-session-start registration takes the gated value; the spec's enabled requirement says a handler other than session-start does not run while inert, and the gate test asserts it (ruling 4, 17).
 - **The one cast over `pi.on` could hide a host-typing change.** → Mitigation: it is recorded here, lives in one line of `handler-gate.ts`, and the entry test still asserts the exact seven events through the gated value.
-- **Two `lstat` calls per session start on a missing file**, and a synchronous read of up to two small files. → Mitigation: none needed; the critic measured the cost as two small synchronous reads per session start, and `enabled: false` removes classifier spend.
+- **Two `lstat` calls per session start on a missing file**, and a synchronous read of up to two small files. → Mitigation: none needed; the council critic assessed the cost as two small synchronous reads per session start, and `enabled: false` removes classifier spend.
 
 ## Migration Plan
 
