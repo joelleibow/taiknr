@@ -57,23 +57,22 @@ function projectedEntryId(contextEntries: readonly ProjectedSessionEntry[], tool
 	return match?.sourceEntry.id ?? "";
 }
 
+/** The persisted entry id of `event.toolResults[index]`, or "" when nothing trustworthy pairs it. */
+function entryIdAt(event: TurnEndEvent, index: number): string {
+	const contextEntries = event.context?.contextEntries;
+	if (contextEntries !== undefined) return projectedEntryId(contextEntries, event.toolResults[index].toolCallId);
+	// Position is a pairing key only when Pi resolved every id, which its `flatMap` does not guarantee (Trap 6).
+	const positionsAgree = event.toolResultEntryIds.length === event.toolResults.length;
+	return positionsAgree ? event.toolResultEntryIds[index] : "";
+}
+
 /** Translate Pi TurnEndEvent tool results into domain ToolOutputCandidates. */
 export function toToolOutputCandidates(
 	event: TurnEndEvent,
 	argsByCallId: ReadonlyMap<string, string>,
 ): ToolOutputCandidate[] {
-	const contextEntries = event.context?.contextEntries;
-	// Position is a pairing key only when Pi resolved every id, which `flatMap` does not guarantee (Trap 6).
-	const positionIsTrustworthy =
-		contextEntries === undefined && event.toolResultEntryIds.length === event.toolResults.length;
-
 	return event.toolResults.flatMap((result, index) => {
-		const entryId =
-			contextEntries === undefined
-				? positionIsTrustworthy
-					? (event.toolResultEntryIds[index] ?? "")
-					: ""
-				: projectedEntryId(contextEntries, result.toolCallId);
+		const entryId = entryIdAt(event, index);
 		if (entryId.length === 0) return [];
 
 		const textBlocks = result.content.filter(isTextBlock);
@@ -126,7 +125,7 @@ function batchOf(entry: SessionEntry): ArchivedToolOutput[] | undefined {
 	return data.every(isWellFormedItem) ? (data as ArchivedToolOutput[]) : undefined;
 }
 
-/** One item shape, consumed by the write side and by read-back alike; unknown properties are tolerated. */
+/** The item shape a persisted batch must carry: read-back's one definition, extra properties tolerated. */
 function isWellFormedItem(value: unknown): boolean {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
 	const item = value as Record<string, unknown>;

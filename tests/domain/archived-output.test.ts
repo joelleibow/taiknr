@@ -126,6 +126,12 @@ test("every line separator becomes one space", () => {
 	}
 });
 
+test("a separator sitting exactly at the cut boundary becomes a space inside the limit", () => {
+	for (const separator of ["\r\n", "\r", "\n", "\u2028", "\u2029", "\u0085"]) {
+		expect(summarizeSingleLine(`${"a".repeat(119)}${separator}b`, 120)).toBe(`${"a".repeat(119)} `);
+	}
+});
+
 test("text already within the limit is returned unchanged", () => {
 	expect(summarizeSingleLine("no breaks here", 14)).toBe("no breaks here");
 });
