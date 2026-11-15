@@ -151,6 +151,20 @@ test("a rejected file leaves the holder rejected and throws the report", () => {
 	expect((thrown as Error).cause).toBe(error);
 });
 
+test("a rejected trusted project file does not fall back to the agent file", () => {
+	agentConfigFile('{"decisionThreshold":0.9}');
+	const projectPath = projectConfigFile(workDirectory, '{"minCharsToArchive":-1}');
+	const session = createSessionConfig();
+	const fake = register(session);
+
+	expect(() => startSession(fake, createContextStub({ cwd: workDirectory, trusted: true }))).toThrow();
+
+	const error = rejectedError(session.state);
+	expect(error.filePath).toBe(projectPath);
+	expect(error.field).toBe("minCharsToArchive");
+	expect(session.isActive()).toBe(false);
+});
+
 test("a second session start re-reads, so an in-memory flip ends", () => {
 	agentConfigFile('{"decisionThreshold":0.9,"enabled":true}');
 	projectConfigFile(workDirectory, '{"minCharsToArchive":100}');
