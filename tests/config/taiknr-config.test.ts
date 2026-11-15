@@ -91,6 +91,15 @@ test("each field layers default, then agent file, then project file", () => {
 	expect(config).toEqual({ ...DEFAULT_TAIKNR_CONFIG, decisionThreshold: 0.9, minCharsToArchive: 100 });
 });
 
+test("the project file wins when both layers set the same field", () => {
+	const config = loadTaiknrConfig({
+		agentConfigPath: configFile(tempDirectory(), '{"decisionThreshold":0.9}'),
+		projectConfigPath: configFile(tempDirectory(), '{"decisionThreshold":0.2}'),
+	});
+
+	expect(config.decisionThreshold).toBe(0.2);
+});
+
 test("a project file stating one field keeps the agent file's other values", () => {
 	const config = loadTaiknrConfig({
 		agentConfigPath: configFile(tempDirectory(), '{"decisionThreshold":0.9}'),
