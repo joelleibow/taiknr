@@ -1,7 +1,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { CONFIG_DIR_NAME, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import {
+	CONFIG_DIR_NAME,
+	type ExtensionContext,
+	type SessionEntry,
+	SessionManager,
+} from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
 	createSessionConfig,
@@ -14,8 +19,9 @@ import {
 	type TaiknrConfig,
 	TaiknrConfigError,
 } from "../../../src/config/taiknr-config.js";
+import type { ArchivedToolOutput } from "../../../src/domain/archived-output.js";
+import { InMemoryArchiveStore, TAIKNR_SIDE_STORE_TYPE } from "../../../src/infra/adapters/pi-archive-adapter.js";
 import { registerSessionStartHandler } from "../../../src/infra/pi-event-handlers/session-start.js";
-import type { ArchiveStore } from "../../../src/use-cases/ports.js";
 import { createContextStub, createFakePi } from "../../support/fake-pi.js";
 
 let originalAgentDir: string | undefined;
@@ -57,11 +63,23 @@ function projectConfigFile(cwd: string, text: string): string {
 	return path;
 }
 
-/** Register the bridge on a fresh fake `pi`. */
-function register(session: SessionConfig) {
+/** Register the bridge on a fresh fake `pi`, against the case's own store. */
+function register(session: SessionConfig, store = new InMemoryArchiveStore()) {
 	const fake = createFakePi();
-	registerSessionStartHandler(fake.pi, {} as ArchiveStore, session);
+	registerSessionStartHandler(fake.pi, store, session);
 	return fake;
+}
+
+/** An archived item carrying just the id this file asserts on. */
+function item(id: string): ArchivedToolOutput {
+	return { id, toolName: "bash", argsSummary: "", isError: false, stub: `[archived ${id}]`, rawText: "x" };
+}
+
+/** A real branch carrying one side-store entry per batch handed to it. */
+function branchWith(...batches: ArchivedToolOutput[][]): SessionEntry[] {
+	const manager = SessionManager.inMemory();
+	for (const batch of batches) manager.appendCustomEntry(TAIKNR_SIDE_STORE_TYPE, batch);
+	return manager.getBranch();
 }
 
 /** Fire the recorded `session_start` handler with a context stub. */
@@ -89,7 +107,7 @@ test("an agent file under the agent directory reaches the holder", () => {
 	const session = createSessionConfig();
 	const fake = register(session);
 
-	startSession(fake, createContextStub({ cwd: workDirectory, trusted: false }));
+	startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: [] }));
 
 	expect(fake.registered.map(({ event }) => event)).toEqual(["session_start"]);
 	expect(readyConfig(session.state)).toEqual({ ...DEFAULT_TAIKNR_CONFIG, decisionThreshold: 0.9 });
@@ -101,7 +119,7 @@ test("an untrusted project file is never read", () => {
 	const session = createSessionConfig();
 	const fake = register(session);
 
-	expect(() => startSession(fake, createContextStub({ cwd: workDirectory, trusted: false }))).not.toThrow();
+	expect(() => startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: [] }))).not.toThrow();
 
 	expect(readyConfig(session.state)).toEqual({ ...DEFAULT_TAIKNR_CONFIG, decisionThreshold: 0.9 });
 });
@@ -112,7 +130,7 @@ test("a trusted project file wins over the agent file", () => {
 	const session = createSessionConfig();
 	const fake = register(session);
 
-	startSession(fake, createContextStub({ cwd: workDirectory, trusted: true }));
+	startSession(fake, createContextStub({ cwd: workDirectory, trusted: true, branch: [] }));
 
 	expect(readyConfig(session.state).enabled).toBe(false);
 });
@@ -125,7 +143,7 @@ test("no parent directory is searched for a project file", () => {
 	const session = createSessionConfig();
 	const fake = register(session);
 
-	expect(() => startSession(fake, createContextStub({ cwd: childDirectory, trusted: true }))).not.toThrow();
+	expect(() => startSession(fake, createContextStub({ cwd: childDirectory, trusted: true, branch: [] }))).not.toThrow();
 
 	expect(readyConfig(session.state)).toEqual(DEFAULT_TAIKNR_CONFIG);
 });
@@ -137,7 +155,7 @@ test("a rejected file leaves the holder rejected and throws the report", () => {
 
 	let thrown: unknown;
 	try {
-		startSession(fake, createContextStub({ cwd: workDirectory, trusted: false }));
+		startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: [] }));
 	} catch (error) {
 		thrown = error;
 	}
@@ -157,7 +175,7 @@ test("a rejected trusted project file does not fall back to the agent file", () 
 	const session = createSessionConfig();
 	const fake = register(session);
 
-	expect(() => startSession(fake, createContextStub({ cwd: workDirectory, trusted: true }))).toThrow();
+	expect(() => startSession(fake, createContextStub({ cwd: workDirectory, trusted: true, branch: [] }))).toThrow();
 
 	const error = rejectedError(session.state);
 	expect(error.filePath).toBe(projectPath);
@@ -173,7 +191,7 @@ test("a second session start re-reads, so an in-memory flip ends", () => {
 	const session = createSessionConfig();
 	const fake = register(session);
 
-	startSession(fake, createContextStub({ cwd: workDirectory, trusted: true }));
+	startSession(fake, createContextStub({ cwd: workDirectory, trusted: true, branch: [] }));
 	expect(readyConfig(session.state)).toEqual({
 		...DEFAULT_TAIKNR_CONFIG,
 		decisionThreshold: 0.9,
@@ -183,7 +201,7 @@ test("a second session start re-reads, so an in-memory flip ends", () => {
 	session.setEnabled(false);
 	expect(readyConfig(session.state).enabled).toBe(false);
 
-	startSession(fake, createContextStub({ cwd: secondDirectory, trusted: true }));
+	startSession(fake, createContextStub({ cwd: secondDirectory, trusted: true, branch: [] }));
 	expect(readyConfig(session.state)).toEqual({
 		...DEFAULT_TAIKNR_CONFIG,
 		decisionThreshold: 0.9,
@@ -201,7 +219,7 @@ test("a relative agent directory still yields an absolute agent path", () => {
 
 	let thrown: unknown;
 	try {
-		startSession(fake, createContextStub({ cwd: workDirectory, trusted: false }));
+		startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: [] }));
 	} catch (error) {
 		thrown = error;
 	}
@@ -217,11 +235,11 @@ test("a fixed file clears a prior rejection", () => {
 	const session = createSessionConfig();
 	const fake = register(session);
 
-	expect(() => startSession(fake, createContextStub({ cwd: workDirectory, trusted: false }))).toThrow();
+	expect(() => startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: [] }))).toThrow();
 	expect(session.state.status).toBe("rejected");
 
 	writeFileSync(path, '{"decisionThreshold":0.9}');
-	startSession(fake, createContextStub({ cwd: workDirectory, trusted: false }));
+	startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: [] }));
 
 	expect(readyConfig(session.state).decisionThreshold).toBe(0.9);
 });
@@ -232,7 +250,7 @@ test("a valid off is silent", () => {
 	const session = createSessionConfig();
 	const fake = register(session);
 
-	startSession(fake, createContextStub({ cwd: workDirectory, trusted: false }));
+	startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: [] }));
 
 	expect(readyConfig(session.state).enabled).toBe(false);
 	for (const spy of spies) expect(spy).not.toHaveBeenCalled();
@@ -243,8 +261,74 @@ test("no config file anywhere resolves to the defaults, loudly and silently", ()
 	const session = createSessionConfig();
 	const fake = register(session);
 
-	expect(() => startSession(fake, createContextStub({ cwd: workDirectory, trusted: true }))).not.toThrow();
+	expect(() => startSession(fake, createContextStub({ cwd: workDirectory, trusted: true, branch: [] }))).not.toThrow();
 
 	expect(readyConfig(session.state)).toEqual(DEFAULT_TAIKNR_CONFIG);
+	for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+});
+
+test("an active session hydrates the store from its branch", () => {
+	const session = createSessionConfig();
+	const store = new InMemoryArchiveStore();
+	const fake = register(session, store);
+	const branch = branchWith([item("aaaa1111")], [item("bbbb2222"), item("cccc3333")]);
+
+	startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch }));
+
+	expect(store.getAll().map(({ id }) => id)).toEqual(["aaaa1111", "bbbb2222", "cccc3333"]);
+});
+
+test("a session configured off hydrates nothing", () => {
+	agentConfigFile('{"enabled":false}');
+	const session = createSessionConfig();
+	const store = new InMemoryArchiveStore();
+	store.addBatch([item("stale")]);
+	const fake = register(session, store);
+
+	startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: branchWith([item("aaaa1111")]) }));
+
+	expect(store.getAll().map(({ id }) => id)).toEqual(["stale"]);
+});
+
+test("a rejected config file hydrates nothing and reports only the rejection", () => {
+	agentConfigFile('{"decisionThreshold":2}');
+	const session = createSessionConfig();
+	const store = new InMemoryArchiveStore();
+	store.addBatch([item("stale")]);
+	const fake = register(session, store);
+
+	expect(() =>
+		startSession(
+			fake,
+			createContextStub({ cwd: workDirectory, trusted: false, branch: branchWith([item("aaaa1111")]) }),
+		),
+	).toThrow();
+
+	expect(store.getAll().map(({ id }) => id)).toEqual(["stale"]);
+});
+
+test("a branch carrying no side-store entry leaves the store empty", () => {
+	const session = createSessionConfig();
+	const store = new InMemoryArchiveStore();
+	const fake = register(session, store);
+
+	startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: [] }));
+
+	expect(store.getAll()).toEqual([]);
+});
+
+test("hydration appends no session entry and prints nothing", () => {
+	const session = createSessionConfig();
+	const store = new InMemoryArchiveStore();
+	const fake = register(session, store);
+	const manager = SessionManager.inMemory();
+	manager.appendCustomEntry(TAIKNR_SIDE_STORE_TYPE, [item("aaaa1111")]);
+	const entriesBefore = manager.getEntries().length;
+	const spies = spyOnConsole();
+
+	startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: manager.getBranch() }));
+
+	expect(store.size()).toBe(1);
+	expect(manager.getEntries().length).toBe(entriesBefore);
 	for (const spy of spies) expect(spy).not.toHaveBeenCalled();
 });
