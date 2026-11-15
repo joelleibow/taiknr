@@ -50,12 +50,12 @@ The extension entry SHALL load under Pi 1.5.2 without throwing. Each of the seve
 
 ### Requirement: Handler signatures and the import boundary are preserved
 
-The change SHALL NOT alter the `register*Handler(pi, …)` signatures or the adapter and port contracts, and SHALL NOT introduce a `@earendil-works/pi-*` import into `src/domain/` or `src/use-cases/` (D3; Michael §2). The one-time format pass MAY change formatter whitespace in those files (R3).
+The `register*Handler(pi, …)` signatures and the adapter and port contracts SHALL stay fixed, except the three differences enumerated in `Signatures unchanged`, which carry the session's configuration (O1; ruling 6). Everything else in those contracts SHALL stay unchanged against `HEAD`, no `@earendil-works/pi-*` import MAY enter `src/domain/` or `src/use-cases/` (ADR 0001; D5; Michael §2), and formatter whitespace MAY change in those files (R3).
 
 #### Scenario: Signatures unchanged
 
-- **WHEN** the seven handler files are compared with `HEAD`
-- **THEN** their exported function names, parameter order and types, and return types are unchanged; each file's stub body is replaced; and any remaining difference is formatter whitespace (R3)
+- **WHEN** the seven handler files are compared with `HEAD`, and `ConfigPaths` in `src/config/taiknr-config.ts` is compared with `HEAD`
+- **THEN** the only contract differences are (1) `registerSessionStartHandler` gaining the per-session configuration holder as a third parameter while keeping its `pi` and store parameters in their order, (2) the `config` member of `registerTurnEndHandler`'s and `registerContextHandler`'s dependency objects changing type from `TaiknrConfig` to the per-session configuration holder with the other members of both objects unchanged, and (3) `ConfigPaths.projectConfigPath` changing type from `string` to `string | undefined` (neither a registrar signature nor an adapter contract, listed here so a reviewer has one list of every permitted difference; rulings 2, 6); everything else is unchanged against `HEAD` — the other four registrars' exported names, parameter order, types and return types, `createPiJevScorerAdapter(ctx, config: TaiknrConfig)` (its signature; `TaiknrConfig` itself gains `enabled` under the `configuration` spec), and the port contracts — apart from each stub body replaced by its implementation (a used parameter may drop its `_` prefix) and formatter whitespace, while the rest of `src/config/taiknr-config.ts` is governed by the `configuration` spec
 
 #### Scenario: Boundary holds
 
