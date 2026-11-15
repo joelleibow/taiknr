@@ -206,6 +206,29 @@ Untouched by this card, and verified as untouched in group 9: the four other han
   - Failing behavioural test: 7.1's cases.
   - Verification: `npx vitest run tests/infra/pi-event-handlers/session-start.test.ts` passes; `npm run typecheck` passes; `npx vitest run tests/app/extension/taiknr.test.ts` still passes; `npm run check` passes.
 
+- [ ] 7.3 Close the test gap Michael's Validate recorded (`michael-validate.json` finding 1, reproduced from Judge Gen's `judge-verify.md` S1): no case in `tests/infra/pi-event-handlers/session-start.test.ts` pairs a valid agent file with a rejected trusted project file, so the spec scenario `No fallback to the other layer` (Joel's Q1(b)) is unguarded — two mutations of the loader stay green. Insert the case below into that file, immediately after the existing rejection cases, exactly as written: it is the block `michael-validate.json`'s `required_change` gives, name for name. The helpers it uses (`agentConfigFile`, `projectConfigFile`, `workDirectory`, `startSession`, `rejectedError`, `createContextStub`, `createSessionConfig`) are 7.1's, so nothing else in the file changes.
+
+  ```ts
+  test("a rejected trusted project file does not fall back to the agent file", () => {
+  	agentConfigFile('{"decisionThreshold":0.9}');
+  	const projectPath = projectConfigFile(workDirectory, '{"minCharsToArchive":-1}');
+  	const session = createSessionConfig();
+  	const fake = register(session);
+
+  	expect(() => startSession(fake, createContextStub({ cwd: workDirectory, trusted: true }))).toThrow();
+
+  	const error = rejectedError(session.state);
+  	expect(error.filePath).toBe(projectPath);
+  	expect(error.field).toBe("minCharsToArchive");
+  	expect(session.isActive()).toBe(false);
+  });
+  ```
+
+  - Failing behavioural test: the new case under each of two temporary mutations of `src/config/taiknr-config.ts`, the two Michael ran (`michael-validate.json` finding 1): (a) swallow the `projectConfigPath` error so a rejected project file falls back to the agent file — the project file is then accepted and `minCharsToArchive: -1` layers without complaint, so the case's `toThrow` fails; (b) skip `validateDocument` when the layer is the project one — the same `-1` is accepted rather than rejected, so the same `toThrow` fails. Both consequently leave the `error.filePath`, `error.field` and `isActive` assertions unreached. Run each mutation on its own with `npx vitest run tests/infra/pi-event-handlers/session-start.test.ts` and require the new case to fail on its own assertions, not on a compile or import error. Revert each one by restoring the file from its 9.1 commit (`git checkout -- src/config/taiknr-config.ts`) and confirm `git diff --stat -- src/config/taiknr-config.ts` prints nothing, so the file ends byte-identical to its committed state: the mutations are the demonstration, never part of the change.
+  - Boundary cases: the cross-product 7.1 and 3.1 both omit — the agent layer valid, the project layer present, trusted and rejected. Its absence is what left the scenario unguarded.
+  - Commit: `tests/infra/pi-event-handlers/session-start.test.ts` and this task's own tick in `tasks.md` are its only paths, with the message `Guard the no-fallback rule for a rejected project file`, then push. It is a follow-up commit: it comes after 9.1's twelve-path commit, the trailing tick commit of 9.1–9.6 and 2.4's own follow-up commit, so the twelve-path commit stays exactly the twelve paths. No path is added to the File Boundary — the test file is already a Create path there.
+  - Verification: with either mutation in place the new case fails and the rest of the file passes; reverted, `npx vitest run tests/infra/pi-event-handlers/session-start.test.ts` passes and `npm run check` passes with 80 tests, one more than the 79 `michael-validate.json` recorded at `469abe2`. The test file is committed after that green run.
+
 ## 8. The composition root and the two deps types
 
 - [x] 8.1 Modify `src/infra/pi-event-handlers/turn-end.ts` and `src/infra/pi-event-handlers/context.ts` so the `config` member of each deps object is `SessionConfig`: the `import type { TaiknrConfig } from "../../config/taiknr-config.js"` line is replaced by `import type { SessionConfig } from "../../config/session-config.js"` so no import is left unreferenced. Nothing else changes in either file: not the registrar's name, parameter list, parameter names or return type, and not the deps objects' other members.
