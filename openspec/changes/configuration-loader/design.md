@@ -140,6 +140,7 @@ export function createSessionConfig(): SessionConfig;
 ```ts
 // src/app/extension/handler-gate.ts
 
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { SessionConfig } from "../../config/session-config.js";
 
 // Module-local, not exported: the loose signature Pi's overloaded `on` is cast to.
