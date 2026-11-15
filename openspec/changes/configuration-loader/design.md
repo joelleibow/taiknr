@@ -156,12 +156,12 @@ export function createGatedPi(pi: ExtensionAPI, session: SessionConfig): Extensi
 
 export function registerSessionStartHandler(
 	pi: ExtensionAPI,
-	store: ArchiveStore,
+	_store: ArchiveStore,
 	session: SessionConfig, // new third parameter
 ): void;
 ```
 
-HEAD's `_pi`/`_store` lose the prefix because the body now uses them; not a signature change.
+`_pi` becomes `pi` because the body registers through it; `_store` keeps its prefix because this card's body does not read the store — the archive card wires it. Not a signature change.
 
 The turn-end and context deps objects change in one member each — `config: TaiknrConfig` becomes `config: SessionConfig` — and nowhere else (ruling 6).
 
