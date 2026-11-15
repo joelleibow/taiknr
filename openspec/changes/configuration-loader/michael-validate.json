@@ -1,0 +1,44 @@
+{
+  "requirements": [
+    {
+      "status": "met",
+      "evidence": "Read `judge-pr-review.md` in full (head `469abe2`, zero Must-fix / Should-fix / Nice-to-have findings, verdict `Ship`). Verified `git diff --stat e219e88..469abe2 -- src tests` is empty (`src/` and `tests/` untouched after implementation gate `michael-implement-gate-2-4.json`), and re-ran `npm ci && npm run check` in a clean `mktemp -d` `git archive HEAD` copy (removed after): Biome 33 files / 0 warnings, `tsc --noEmit` 0 errors, Vitest 6 files / 79 passed.",
+      "requirement": "Judge Gen blind PR review (`judge-pr-review.md`) & branch integrity at `469abe2`"
+    },
+    {
+      "status": "met",
+      "requirement": "Judge Gen verification W1 (`Scenario \"A file's value reaches a handler\" has no runtime proof of the wiring`)",
+      "evidence": "Reproduced `judge-verify.md` W1 in a `mktemp -d` copy by mutating `src/app/extension/taiknr.ts` to pass a second `createSessionConfig()` instance to `createGatedPi`, `registerTurnEndHandler`, and `registerContextHandler`; `vitest run` stayed green (`79 passed`), confirming Judge Gen's observation. Ruled **not a defect in this card** (no route back): while the six gated handlers are no-op stubs (`_pi.on(\"<event>\", () => {})`), holder identity across registrars cannot be observed behaviorally without either adding out-of-scope handler logic or asserting on mocked internal modules (forbidden by Derek's standing bar). This limitation is explicitly settled in `michael-orientation.md` Trap 12, council rulings 4 & 17, `michael-resolve-s3-r3.json` (`critic-r3-1`), `michael-resolve-s5-r2.json` (`readiness-r2-3`), `design.md` Risks/Migration Plan, and `tasks.md` 8.2 (verified by diff review of `src/app/extension/taiknr.ts:20-56`: one `const session = createSessionConfig()` passed to all four sites), with behavioral verification routed to the archive and recall cards."
+    },
+    {
+      "requirement": "Judge Gen verification S1 (`Scenario \"No fallback to the other layer\"` handler-level test suggestion) & Spec `configuration` completeness/correctness/coherence (24/24 tasks, 16/16 requirements)",
+      "status": "met",
+      "evidence": "Reproduced `judge-verify.md` S1 in a `mktemp -d` copy: both swallowing `projectConfigPath` errors in `src/config/taiknr-config.ts:67-70` and skipping `validateDocument` on `layer === \"project\"` at `:105` left all 79 tests green. Verified `src/config/taiknr-config.ts` and `src/infra/pi-event-handlers/session-start.ts` already implement `Scenario: No fallback to the other layer` accurately via one shared `readDocument` -> `validateDocument` pipeline with every branch exercised; recorded the unasserted cross-product test case as `findings[0]` (`minor`, `required_change_ran: true`)."
+    },
+    {
+      "status": "met",
+      "evidence": "Inspected `git show 469abe2` (`README.md` +68, `ARCHITECTURE.md` +11/-6, `AGENTS.md` +8/-4) line by line against `src/` and `tests/`: verified all 5 config fields, types, ranges, and defaults (`0.5`, `600`, `~typesafe/jev-latest`, `openrouter`, `true`); host-helper paths (`getAgentDir` / `PI_CODING_AGENT_DIR`, `<cwd>/.pi/pi-taiknr.json` / `CONFIG_DIR_NAME`), trust gating, and no parent search; field-level layering; per-`session_start` re-read (`/new`, `/resume`, `/fork`, `/reload`, no watcher); silent valid `enabled: false`; loud-and-closed rejection with character-exact example message (`/Users/you/.pi/agent/pi-taiknr.json: decisionThreshold: must be <= 1; fix the file, then run /reload or start a new session`); read-error vs absence rules (project `ENOTDIR` & missing file silent; dangling symlink, directory, `EACCES` rejected; BOM stripped, whitespace rejected); and all 7 stale items from Derek's `Docs for Bambadjan` list updated accurately in `ARCHITECTURE.md` and `AGENTS.md`.",
+      "requirement": "Docs pass commit `469abe2` (`README.md`, `ARCHITECTURE.md`, `AGENTS.md`) checked against shipped code and `owner-rulings.md` / `design.md`"
+    }
+  ],
+  "not_covered": [
+    "`test-jev-poc.mjs`, `jev-context-poc.ts`, and any live model or OpenRouter classifier call (forbidden by brief and `AGENTS.md`).",
+    "Live multi-turn TUI and RPC `extension_error` rendering in an interactive Pi session (print/JSON error surfacing was measured during council ruling 5, and extension load + `session-start.ts` host value imports were verified via 9.5 `pi --no-session --help` under Pi 1.5.2)."
+  ],
+  "verdict": "approve",
+  "later_gates": [
+    "Owner merge / archive decision for `configuration-loader` (PR #2).",
+    "Archive and recall board cards to verify the two deferred behavioural `enabled: false` scenarios AND end-to-end composition-root holder sharing (`Judge Gen W1`: driving `taiknr(fake)` through `session_start` then firing a non-empty gated handler to observe shared `session` state and inertness, per council ruling 17 and `design.md` Migration Plan).",
+    "Status readout and `/taiknr` command board card to wire `/taiknr on|off` through `session.setEnabled(boolean)`, handle off-to-on store hydration, and expose any untrusted/disabled status readout (rulings 14, 15).",
+    "Recall board card to construct `createPiJevScorerAdapter(ctx, config)` inside the context handler from `session.state.config` (ruling 16)."
+  ],
+  "findings": [
+    {
+      "severity": "minor",
+      "required_change": "Insert one test case after line 152 of `tests/infra/pi-event-handlers/session-start.test.ts` (ran and verified green under `npm run check` — Biome 33 files clean, `tsc` clean, 80/80 tests passed — and verified catching both project-fallback and skipped-project-validation mutations):\n\n```ts\ntest(\"a rejected trusted project file does not fall back to the agent file\", () => {\n\tagentConfigFile('{\"decisionThreshold\":0.9}');\n\tconst projectPath = projectConfigFile(workDirectory, '{\"minCharsToArchive\":-1}');\n\tconst session = createSessionConfig();\n\tconst fake = register(session);\n\n\texpect(() => startSession(fake, createContextStub({ cwd: workDirectory, trusted: true }))).toThrow();\n\n\tconst error = rejectedError(session.state);\n\texpect(error.filePath).toBe(projectPath);\n\texpect(error.field).toBe(\"minCharsToArchive\");\n\texpect(session.isActive()).toBe(false);\n});\n```",
+      "finding": "Reproduced Judge Gen's S1 (`judge-verify.md`): across all 79 tests, every rejection fixture places the broken file at `agentConfigPath`, so no test pairs a valid agent file with a rejected trusted project file (`specs/configuration/spec.md` scenario `No fallback to the other layer`, guarding Joel's Q1(b)). Mutating `src/config/taiknr-config.ts:67-70` to swallow `projectConfigPath` errors (falling back to the agent file) and mutating `:105` to skip `validateDocument` on `layer === \"project\"` both left `vitest run` green (`79 passed`). Production code at `HEAD` (`469abe2`) is already correct (both layers run the same `readDocument` -> `validateDocument` pipeline and every branch in `src/` is exercised; `tasks.md` 3.1/7.1 omitted this cross-product case). Route: non-blocking `minor` (to Derek only if the conductor elects to close minor test items before merge; otherwise ships as-is).",
+      "required_change_ran": true,
+      "location": "tests/infra/pi-event-handlers/session-start.test.ts:152"
+    }
+  ]
+}
