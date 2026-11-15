@@ -1,5 +1,7 @@
 # Proposal
 
+Citation key: bare `D N`, `S N` and `Trap N` codes refer to `michael-orientation.md` and its addendum; `design D N` refers to `design.md`; `ruling N` to `michael-council-rulings.json`.
+
 ## Why
 
 The seven handlers load and register, but nothing behind them reads a configuration file: `loadTaiknrConfig` throws `Not implemented`, and the composition root hands the handlers the `DEFAULT_TAIKNR_CONFIG` constant (`src/config/taiknr-config.ts`, `src/app/extension/taiknr.ts:19`; research-eleanor §3). A user who writes a config file today changes nothing.
@@ -52,7 +54,7 @@ Rulings are cited as `council.md` "Michael's Rulings", by number; Joel's own rul
 
 - `src/config/taiknr-config.ts`: the `Not implemented` body, the new field and its default, the file-name constant, the error class, the rule table, and `ConfigPaths.projectConfigPath` as `string | undefined`.
 - A new `src/config/session-config.ts`: the per-session holder. A new `src/app/extension/` unit: the gate that wraps registration.
-- `src/infra/pi-event-handlers/session-start.ts`: path building from `ctx`, the trust gate, the loader call, the holder assignment and the rethrow.
+- `src/infra/pi-event-handlers/session-start.ts`: path building from `ctx`, the trust gate, the loader call, the holder assignment and the thrown report (design D5).
 - `src/infra/pi-event-handlers/turn-end.ts` and `context.ts`: the `config` member's type.
 - `src/app/extension/taiknr.ts`: the holder and the gate replace the constant.
 - New tests under `tests/config/`, `tests/app/extension/`, `tests/infra/pi-event-handlers/` and one shared fake under `tests/`; no tooling file needs an edit (D7).
