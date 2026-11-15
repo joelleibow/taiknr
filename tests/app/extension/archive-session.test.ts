@@ -223,6 +223,25 @@ test("a settled run stubs its large output, keeps the image and records the item
 	expect(projectedToolResult(session)?.content).toEqual([{ type: "text", text: STUB.replace("{id}", id) }, IMAGE]);
 });
 
+test("a /tree onto a branch before the settlement projects the whole original output again", async () => {
+	const { errors, faux, session } = await sessionHarness();
+	queueToolRun(faux);
+
+	await session.prompt("run it");
+
+	const id = latestToolResultEntryId(session);
+	expect(errors).toEqual([]);
+	expect(contextEdits(session)).toHaveLength(1);
+	expect(projectedToolResult(session)?.content).toEqual([{ type: "text", text: STUB.replace("{id}", id) }, IMAGE]);
+
+	// The target is the persisted tool result, not the user entry the Validate finding names: a user
+	// entry sends `navigateTree` to its parent, dropping the result off the branch altogether.
+	await session.navigateTree(id, { summarize: false });
+
+	expect(errors).toEqual([]);
+	expect(projectedToolResult(session)?.content).toEqual([{ type: "text", text: BIG_TEXT }, IMAGE]);
+});
+
 test("the recorded item costs the request after the settlement no context", async () => {
 	const { errors, faux, session } = await sessionHarness();
 	queueToolRun(faux);

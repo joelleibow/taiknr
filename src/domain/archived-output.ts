@@ -20,9 +20,8 @@ export function shouldArchive(rawTextLength: number, minCharsToArchive: number):
 	return rawTextLength >= minCharsToArchive;
 }
 
-// Every line separator a model provider or a terminal treats as a break (Trap 8).
-const LINE_SEPARATOR = /\r\n|\r|\n|\u2028|\u2029|\u0085/;
-const LINE_SEPARATOR_ALL = /\r\n|\r|\n|\u2028|\u2029|\u0085/g;
+// Every line separator a model provider or a terminal treats as a break.
+const LINE_SEPARATOR = /\r\n|\r|\n|\u2028|\u2029|\u0085/g;
 
 function isHighSurrogate(unit: number): boolean {
 	return unit >= 0xd800 && unit <= 0xdbff;
@@ -37,7 +36,7 @@ function isLowSurrogate(unit: number): boolean {
  * never lands inside a surrogate pair (M9).
  */
 export function summarizeSingleLine(text: string, maxUnits: number): string {
-	const single = text.replace(LINE_SEPARATOR_ALL, " ");
+	const single = text.replace(LINE_SEPARATOR, " ");
 	if (single.length <= maxUnits) return single.toWellFormed();
 	const splitsPair = isHighSurrogate(single.charCodeAt(maxUnits - 1)) && isLowSurrogate(single.charCodeAt(maxUnits));
 	return single.slice(0, splitsPair ? maxUnits - 1 : maxUnits).toWellFormed();

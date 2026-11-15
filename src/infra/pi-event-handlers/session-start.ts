@@ -26,7 +26,7 @@ export function registerSessionStartHandler(pi: ExtensionAPI, store: ArchiveStor
 			throw new Error(`${error.message}; fix the file, then run /reload or start a new session`, { cause: error });
 		}
 
-		// The archive is only current for a session that is on, and only after its config resolved (Trap 2).
+		// The archive is only current for a session that is on, and only after its config resolved.
 		if (!session.isActive()) return;
 		hydrateArchiveStore(readArchiveBatchesFromBranch(ctx.sessionManager.getBranch()), store);
 	});

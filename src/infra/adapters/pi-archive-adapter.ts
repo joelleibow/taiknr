@@ -61,7 +61,7 @@ function projectedEntryId(contextEntries: readonly ProjectedSessionEntry[], tool
 function entryIdAt(event: TurnEndEvent, index: number): string {
 	const contextEntries = event.context?.contextEntries;
 	if (contextEntries !== undefined) return projectedEntryId(contextEntries, event.toolResults[index].toolCallId);
-	// Position is a pairing key only when Pi resolved every id, which its `flatMap` does not guarantee (Trap 6).
+	// Position is a pairing key only when Pi resolved every id, which its `flatMap` does not guarantee.
 	const positionsAgree = event.toolResultEntryIds.length === event.toolResults.length;
 	return positionsAgree ? event.toolResultEntryIds[index] : "";
 }

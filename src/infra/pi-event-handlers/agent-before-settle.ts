@@ -49,7 +49,7 @@ export function registerAgentBeforeSettleHandler(
 			deps.originalContentByEntryId.delete(item.id);
 		}
 
-		// 5. Another extension's proposals keep their place; taiknr's follow them (Trap 5).
+		// 5. Another extension's proposals keep their place; taiknr's follow them.
 		return { entries: [...event.entries, ...drafts] };
 	});
 }
