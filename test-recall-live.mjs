@@ -112,6 +112,14 @@ function blocksOf(message) {
 /** A snapshot's messages, parsed. */
 const messagesOf = (snapshot) => JSON.parse(snapshot);
 
+/** The text of the last block of a snapshot's latest user message, or `""` when it has none. */
+function lastBlockText(snapshot) {
+	const messages = messagesOf(snapshot);
+	const message = messages.findLast(({ role }) => role === "user");
+	const [block] = message === undefined ? [] : blocksOf(message).slice(-1);
+	return typeof block?.text === "string" ? block.text : "";
+}
+
 /** Every way one request's recall differs from what the host had before taiknr appended it. */
 function recallProblems(beforeSnapshot, afterSnapshot, marker) {
 	const before = messagesOf(beforeSnapshot);
@@ -264,8 +272,13 @@ async function run() {
 			problems.push(`prompt 3's first request has no recall block: ${recallProblemsFound.join("; ")}`);
 		}
 		const recallPayload = state.payloads[payloadsAfterUnrelatedPrompt] ?? "";
-		if (occurrences(recallPayload, marker) !== 1) {
-			problems.push(`prompt 3's payload carries the marker ${occurrences(recallPayload, marker)} times, not once`);
+		// The model may call emit_marker more than once, so the payload must carry the marker exactly
+		// as often as the recall block does; setup checks prove the history carries none.
+		const inBlock = recallProblemsFound.length > 0 ? 0 : occurrences(lastBlockText(state.after[recallIndex]), marker);
+		if (occurrences(recallPayload, marker) !== inBlock) {
+			problems.push(
+				`prompt 3's payload carries the marker ${occurrences(recallPayload, marker)} times, but its recall block carries it ${inBlock} times (emit_marker ran ${state.markerCalls} times)`,
+			);
 		}
 
 		for (let index = afterToolPrompt; index < afterUnrelatedPrompt; index += 1) {
