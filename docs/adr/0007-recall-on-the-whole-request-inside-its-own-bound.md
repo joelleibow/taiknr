@@ -14,7 +14,7 @@ The first is disclosure. One archived output's text can leave the machine in two
 
 The second is size. Recall keeps the request it builds under the host's compaction threshold by the host's own estimate. The host's next threshold check counts something else: the provider usage of the request it last sent, recalled block included, plus what the step after it added. A recall that fills most of its budget can therefore make the host compact a session it would not otherwise have compacted at that check. On a 1,000,000-token window the case needs a conversation within roughly the top 7% under the threshold, because the block is bounded by the archive. On a 40,960-token window at the host's default `keepRecentTokens`, a large item only fits while the conversation is small, and the conversation plus the following step then has to reach about 20,000 tokens: a 3,000-token step made no compaction follow a 12,800-token item, and an 11,000-token step made one follow a 12,000-token item. After such a compaction the block may no longer fit, and the rest of the turn runs without it and without a notice.
 
-Three responses were weighed. Recall nothing that would fill the budget: rejected, because the large output a turn is missing is what recall exists for. Add a margin to the bound: rejected, because no source supplies a value, and the operator already holds the host's `reserveTokens`. Turn the host's compaction off for the session: rejected, because that switch also turns off its overflow recovery and every threshold compaction, a larger loss than the case. Joel accepted the exposure on 2026-11-15 ("Design review escalation — recall and pi's next compaction check"), narrowing his earlier preference to miss a recall rather than cause a compaction. The exposure this record describes is the corrected one; the case first put to him was narrower.
+Three responses were weighed. Recall nothing that would fill the budget: rejected, because the large output a turn is missing is what recall exists for. Add a margin to the bound: set aside by Joel's ruling of 2026-11-15, because no source supplies a value and a second reserve would leave a 40,960-token model almost no recall. Turn the host's compaction off globally: rejected, because that switch also turns off its overflow recovery and every threshold compaction, a larger loss than the case. Joel accepted the exposure on 2026-11-15 ("Design review escalation — recall and pi's next compaction check"), narrowing his earlier preference to miss a recall rather than cause a compaction. The exposure this record describes is the corrected one; the case first put to him was narrower.
 
 ## Decision
 
@@ -30,12 +30,13 @@ Recall attaches to a request on three terms.
 
 **Easier:**
 
-- A request carrying recall keeps its mid-conversation system messages, so the prefix it shares with the request before it stays reusable.
+- A request carrying recall keeps its mid-conversation system messages, so the prefix it shares with the request before it stays reusable across the requests of one turn.
 - Recall persists nothing, so a resumed session, a `/tree` jump and a compaction carry no recall state to reconcile.
 - What leaves the machine is stated once per destination and bounded by the item: a stub to the classifier, the body to the main model.
 
 **More difficult:**
 
+- The block is gone from the next user message's request, so that request's prefix diverges at the recalling turn's user message and the provider writes that turn to its cache again, once, at cache-write price.
 - A recall that fills most of its budget can cause a compaction the host would not otherwise make at that check. After it, the block may drop for the rest of the turn with no notice, and the next user message scores again.
 - Recall sits outside both request-time redaction paths, so anything that must not leave the machine has to be excluded before it is archived, or by a persisted edit, and never by a filter applied on the way out.
 - The classifier provider learns each scored message's text and a preview of every eligible archived output, on every new user message.

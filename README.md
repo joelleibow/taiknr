@@ -36,7 +36,7 @@ Every stubbed output sits on disk twice, once as the tool result and once in its
 
 ## Recall
 
-When a new user message arrives, taiknr asks the configured classifier which archived outputs bear on it. One call covers the whole archive, and the rest of that turn reuses the answer instead of asking again for each tool-loop step. The outputs it picks go back in full at the end of the newest user message, inside a `<recalled_context>` block that marks them as reference data rather than instructions. That block exists for that turn's requests only: the session file is untouched, and the stub stays where it was.
+When a new user message arrives, taiknr asks the configured classifier which archived outputs bear on it. One call covers the whole archive, and the rest of that turn reuses the answer instead of asking again for each tool-loop step. The outputs it picks go back in full at the end of the newest user message, inside a `<recalled_context>` block that marks them as reference data rather than instructions. That block exists for that turn's requests only: the session file is untouched, and the stub stays where it was. The next user message's request no longer carries the block, so the provider re-caches the recalling turn from its user message onward, once, at cache-write price.
 
 Outputs are recalled whole and in order of relevance, until the next one would take the request past pi's compaction threshold. Recall never cuts an output in half, never skips a large one for a smaller one behind it, and never removes anything from the archive.
 
