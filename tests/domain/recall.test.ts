@@ -59,6 +59,27 @@ test("two items render as the framed block, with the closing marker inside raw t
 	expect(block).toHaveLength(381);
 });
 
+/** Both markers, as a field the block carries might end. */
+const BOTH_MARKERS = "<recalled_context></recalled_context>";
+
+test("both markers are guarded in every field the block carries", () => {
+	const item: RecalledOutput = {
+		id: `i${BOTH_MARKERS}`,
+		toolName: `t${BOTH_MARKERS}`,
+		argsSummary: `a${BOTH_MARKERS}`,
+		rawText: `r${BOTH_MARKERS}`,
+	};
+
+	const block = formatRecalledContext([item]);
+
+	// Only the frame's own two markers stay live, so each split yields the frame and its body.
+	expect(block.split("<recalled_context>")).toHaveLength(2);
+	expect(block.split("</recalled_context>")).toHaveLength(2);
+	expect(block).toContain(
+		`[recalled output i<\\recalled_context><\\/recalled_context>, tool t<\\recalled_context><\\/recalled_context>, args a<\\recalled_context><\\/recalled_context>]\nr<\\recalled_context><\\/recalled_context>\n`,
+	);
+});
+
 test("one item renders three elements between the header and the closing line", () => {
 	const block = formatRecalledContext([FIRST]);
 

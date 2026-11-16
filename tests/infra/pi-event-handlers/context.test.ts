@@ -85,12 +85,15 @@ interface HarnessOptions {
 	/** The stub `classify`; the default answers every question at 0.9. */
 	classify?: (model: unknown, context: unknown, options: unknown) => Promise<unknown>;
 	ready?: boolean;
+	/** Whether another extension's edit lands on the item's message after taiknr's stub (ADR 0005). */
+	foreignEdit?: boolean;
 }
 
 /** The handler registered as the composition root registers it, over a fake host and a real branch. */
 function harness(options: HarnessOptions = {}) {
 	const manager = SessionManager.inMemory();
 	const item = appendArchivedItem(manager);
+	if (options.foreignEdit) manager.appendContextEdit(item.id, { content: [{ type: "text", text: "redacted" }] });
 	const branch = manager.getBranch();
 	const fake = createFakePi({ settings: options.settings });
 	const session = createSessionConfig();
@@ -170,6 +173,30 @@ test.each([
 
 	expect(await fire(context(), [prompt("why?")])).toBeUndefined();
 	expect(classify).not.toHaveBeenCalled();
+});
+
+test("an item another extension redacted on the branch is neither asked about nor recalled", async () => {
+	const { fire, classify, context } = harness({ foreignEdit: true });
+
+	expect(await fire(context(), [prompt("why?")])).toBeUndefined();
+	expect(classify).not.toHaveBeenCalled();
+});
+
+test("the session's own threshold decides what is recalled", async () => {
+	const { fire, classify, context } = harness({ config: { decisionThreshold: 0.95 } });
+
+	expect(await fire(context(), [prompt("why?")])).toBeUndefined();
+	expect(classify).toHaveBeenCalledTimes(1);
+});
+
+test("compaction turned off still leaves the bound in force", async () => {
+	const { fire, context, item } = harness({ settings: { compaction: { enabled: false, reserveTokens: 1000 } } });
+	const messages: Messages = [prompt("why?")];
+	const block = formatRecalledContext([item]).length;
+	const window = windowFor(1000, messages, block);
+
+	expect(appendedBlockText(await fire(context([], window), messages), 0)).toBe(formatRecalledContext([item]));
+	expect(await fire(context([], window - 1), messages)).toBeUndefined();
 });
 
 test("a request with no room recalls nothing and asks nothing", async () => {

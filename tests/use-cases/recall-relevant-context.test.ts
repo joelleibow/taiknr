@@ -239,6 +239,43 @@ test("a cache hit reuses the ids with no second call and filters to what the sto
 	expect(calls).toEqual([]);
 });
 
+test.each<[string, RelevanceScore[], number]>([
+	[
+		"nothing passes the threshold",
+		[
+			{ id: A.id, probability: 0.1 },
+			{ id: B.id, probability: 0.2 },
+		],
+		10_000,
+	],
+	["nothing fits the budget", [{ id: A.id, probability: 0.9 }], formatRecalledContext([A]).length - 1],
+])("a success that recalls nothing (%s) still records the key", async (_case, scores, budget) => {
+	const cache = freshCache();
+	const { scorer, calls } = fakeScorer(scores);
+	const deps = { store: fakeStore([A, B]), scorer, notifier: fakeNotifier().notifier, cache };
+	const entry = input({ budgetCharacters: budget });
+
+	expect(await recalledIds(entry, deps)).toEqual([]);
+	expect(cache).toEqual({ lastPromptKey: `2|1731|why did it fail?`, lastRecalledIds: [] });
+	expect(await recalledIds(entry, deps)).toEqual([]);
+	expect(calls).toHaveLength(1);
+});
+
+test("a cache hit drops a cached id the branch no longer admits, though the store still holds it", async () => {
+	const cache: RecallCache = { lastPromptKey: `3|1731|why did it fail?`, lastRecalledIds: [A.id, B.id] };
+	const { scorer, calls } = fakeScorer([{ id: A.id, probability: 0.9 }]);
+
+	const ids = await recalledIds(input({ eligibleIds: new Set([A.id, C.id]) }), {
+		store: fakeStore([A, B, C]),
+		scorer,
+		notifier: fakeNotifier().notifier,
+		cache,
+	});
+
+	expect(ids).toEqual([A.id]);
+	expect(calls).toEqual([]);
+});
+
 test("a cached block that no longer fits is dropped whole", async () => {
 	const cache: RecallCache = { lastPromptKey: `2|1731|why did it fail?`, lastRecalledIds: [A.id, B.id] };
 	const { scorer } = fakeScorer([]);

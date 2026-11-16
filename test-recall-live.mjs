@@ -112,17 +112,6 @@ function blocksOf(message) {
 /** A snapshot's messages, parsed. */
 const messagesOf = (snapshot) => JSON.parse(snapshot);
 
-/** The text of a snapshot's last `role: "user"` message. */
-function lastUserText(snapshot) {
-	const messages = messagesOf(snapshot);
-	const message = messages.findLast(({ role }) => role === "user");
-	if (message === undefined) return undefined;
-	return blocksOf(message)
-		.filter(({ type }) => type === "text")
-		.map(({ text }) => text)
-		.join("\n");
-}
-
 /** Every way one request's recall differs from what the host had before taiknr appended it. */
 function recallProblems(beforeSnapshot, afterSnapshot, marker) {
 	const before = messagesOf(beforeSnapshot);
@@ -240,6 +229,7 @@ async function run() {
 		session.setActiveToolsByName(["emit_marker"]);
 		await session.prompt(TOOL_PROMPT);
 		const afterToolPrompt = state.before.length;
+		const payloadsAfterToolPrompt = state.payloads.length;
 		if (state.markerCalls < 1) fail(SETUP, "emit_marker was never called, so nothing was archived");
 		const branch = session.sessionManager.getBranch();
 		if (!branch.some((entry) => entry.type === "custom" && entry.customType === SIDE_STORE)) {
@@ -250,6 +240,7 @@ async function run() {
 		session.setActiveToolsByName(["emit_marker", "ping"]);
 		await session.prompt(UNRELATED_PROMPT);
 		const afterUnrelatedPrompt = state.before.length;
+		const payloadsAfterUnrelatedPrompt = state.payloads.length;
 
 		await session.prompt(RECALL_PROMPT);
 		if (state.before.length <= afterUnrelatedPrompt) fail(SETUP, "prompt 3 made no provider request");
@@ -265,29 +256,26 @@ async function run() {
 		if (!messagesOf(state.before[recallIndex]).some(({ role }, index) => index > 0 && role === "system")) {
 			fail(SETUP, "prompt 3's list carries no system message above index 0");
 		}
-		if (!state.payloads.some((payload) => payload.includes(RECALL_PROMPT))) {
-			fail(SETUP, "no provider payload carries prompt 3");
-		}
+		if (state.payloads.length <= payloadsAfterUnrelatedPrompt) fail(SETUP, "no provider payload carries prompt 3");
 
 		const problems = [];
 		const recallProblemsFound = recallProblems(state.before[recallIndex], state.after[recallIndex], marker);
 		if (recallProblemsFound.length > 0) {
 			problems.push(`prompt 3's first request has no recall block: ${recallProblemsFound.join("; ")}`);
 		}
-		const recallPayload = state.payloads.find((payload) => payload.includes(RECALL_PROMPT)) ?? "";
+		const recallPayload = state.payloads[payloadsAfterUnrelatedPrompt] ?? "";
 		if (occurrences(recallPayload, marker) !== 1) {
 			problems.push(`prompt 3's payload carries the marker ${occurrences(recallPayload, marker)} times, not once`);
 		}
 
-		const unrelatedRequests = state.before
-			.map((snapshot, index) => ({ index, snapshot }))
-			.filter(({ snapshot }) => lastUserText(snapshot) === UNRELATED_PROMPT);
-		for (const { index } of unrelatedRequests) {
+		for (let index = afterToolPrompt; index < afterUnrelatedPrompt; index += 1) {
 			if (!sameList(messagesOf(state.before[index]), messagesOf(state.after[index]))) {
 				problems.push(`prompt 2's request ${index} changed, and it carries no recall`);
 			}
 		}
-		for (const payload of state.payloads.filter((candidate) => candidate.includes(UNRELATED_PROMPT))) {
+		// Prompt 2's payloads are the ones between the two boundaries. A substring filter was wrong:
+		// prompt 3's payload carries prompt 2's text in its history, next to prompt 3's recall block.
+		for (const payload of state.payloads.slice(payloadsAfterToolPrompt, payloadsAfterUnrelatedPrompt)) {
 			if (payload.includes(RECALL_OPENING)) problems.push("prompt 2's payload carries a recall block");
 		}
 
