@@ -1,4 +1,5 @@
 import type {
+	ContextEditEntry,
 	ProjectedSessionEntry,
 	SessionBoundaryDraft,
 	SessionEntry,
@@ -146,4 +147,33 @@ export function readArchiveBatchesFromBranch(entries: SessionEntry[]): ArchivedT
 		const batch = batchOf(entry);
 		return batch === undefined ? [] : [batch];
 	});
+}
+
+/** Whether `edit` is the replacement taiknr's own settlement wrote for `stub` (ADR 0005, ruling 10). */
+function carriesStub(edit: ContextEditEntry | undefined, stub: string): boolean {
+	const content = edit?.replacement?.content;
+	if (!Array.isArray(content)) return false;
+	// Only the first block is compared: a settlement writes the stub, then the original non-text blocks.
+	const [first] = content;
+	return first?.type === "text" && first.text === stub;
+}
+
+/**
+ * The ids of the items that may be recalled: a tool-result entry with the item's id is on `entries`,
+ * and the latest `context_edit` targeting it there carries taiknr's stub (design decision 5).
+ */
+export function readEligibleArchivedIds(entries: SessionEntry[]): ReadonlySet<string> {
+	const toolResultIds = new Set(
+		entries.flatMap((entry) => (entry.type === "message" && entry.message.role === "toolResult" ? [entry.id] : [])),
+	);
+	const latestEditByTarget = new Map<string, ContextEditEntry>();
+	for (const entry of entries) {
+		if (entry.type === "context_edit") latestEditByTarget.set(entry.targetId, entry);
+	}
+
+	const eligible = new Set<string>();
+	for (const item of readArchiveBatchesFromBranch(entries).flat()) {
+		if (toolResultIds.has(item.id) && carriesStub(latestEditByTarget.get(item.id), item.stub)) eligible.add(item.id);
+	}
+	return eligible;
 }

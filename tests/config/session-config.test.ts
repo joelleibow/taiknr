@@ -11,6 +11,7 @@ const config: TaiknrConfig = {
 	defaultDecisionModel: "m",
 	defaultDecisionModelProvider: "p",
 	minCharsToArchive: 100,
+	classifierTimeoutMs: 5000,
 	enabled: true,
 };
 

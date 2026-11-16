@@ -22,16 +22,23 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import taiknr from "../../../src/app/extension/taiknr.js";
 import { CONFIG_FILE_NAME } from "../../../src/config/taiknr-config.js";
 import type { ArchivedToolOutput } from "../../../src/domain/archived-output.js";
 import { TAIKNR_SIDE_STORE_TYPE } from "../../../src/infra/adapters/pi-archive-adapter.js";
+import {
+	type ClassifierGuard,
+	classifierProviderExtension,
+	installClassifierGuard,
+	writeClassifierAgentConfig,
+} from "../../support/classifier-guard.js";
 
 const BIG_TEXT = "x".repeat(700);
 const IMAGE = { type: "image" as const, data: "iVBORw0KGgo=", mimeType: "image/png" };
 const STUB = `[archived {id}] big_out({}) status=ok (700 chars, 1 lines) preview: ${"x".repeat(180)}`;
 
+let guard: ClassifierGuard;
 let originalAgentDir: string | undefined;
 let originalCwd: string;
 let workDirectory: string;
@@ -43,9 +50,14 @@ beforeEach(() => {
 	workDirectory = mkdtempSync(join(tmpdir(), "taiknr-archive-session-"));
 	agentDirectory = mkdtempSync(join(tmpdir(), "taiknr-archive-session-agent-"));
 	process.env.PI_CODING_AGENT_DIR = agentDirectory;
+	// The suite never reaches the live classifier: a recording stub answers, and the config names it.
+	guard = installClassifierGuard();
+	writeClassifierAgentConfig(agentDirectory);
 });
 
 afterEach(() => {
+	vi.unstubAllEnvs();
+	vi.unstubAllGlobals();
 	process.chdir(originalCwd);
 	if (originalAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
 	else process.env.PI_CODING_AGENT_DIR = originalAgentDir;
@@ -128,6 +140,7 @@ async function sessionHarness(
 		agentDir: agentDirectory,
 		settingsManager,
 		extensionFactories: [
+			classifierProviderExtension,
 			...(options.beforeTaiknr ?? []),
 			taiknr,
 			...(options.afterTaiknr ?? []),
@@ -371,6 +384,7 @@ test("a trusted project file that turns taiknr off leaves the output raw", async
 	expect(sideStoreBatches(session)).toEqual([]);
 	expect(contextEdits(session)).toEqual([]);
 	expect(projectedToolResult(session)?.content).toEqual([{ type: "text", text: BIG_TEXT }, IMAGE]);
+	expect(guard.requests).toEqual([]);
 });
 
 test("a trusted project file that leaves taiknr on stubs the output", async () => {
@@ -384,4 +398,152 @@ test("a trusted project file that leaves taiknr on stubs the output", async () =
 	expect(errors).toEqual([]);
 	expect(sideStoreBatches(session)).toHaveLength(1);
 	expect(contextEdits(session)).toHaveLength(1);
+});
+
+/** What a recall probe recorded, and the host API the test drives the tool set with. */
+type RecallProbe = { before: string[]; after: string[]; api?: ExtensionAPI };
+
+/** A probe loaded before taiknr: it owns both tools and snapshots what the event carried. */
+function beforeProbe(state: RecallProbe): InlineExtension {
+	return (pi) => {
+		state.api = pi;
+		pi.registerTool({
+			name: "noop",
+			label: "No Op",
+			description: "Does nothing at all",
+			parameters: { type: "object", properties: {} } as never,
+			execute: async () => ({ content: [{ type: "text", text: "nothing" }], details: undefined }),
+		});
+		pi.on("context_with_system", (event) => {
+			state.before.push(JSON.stringify(event.messages));
+		});
+	};
+}
+
+/** A probe loaded after taiknr: it snapshots the list the host is about to send. */
+function afterProbe(state: RecallProbe): InlineExtension {
+	return (pi) => {
+		pi.on("context_with_system", (event) => {
+			state.after.push(JSON.stringify(event.messages));
+		});
+	};
+}
+
+/** One message as a snapshot holds it: JSON, so an in-place mutation cannot pass vacuously. */
+type SnapshotMessage = { role: string; content: string | { type: string; text?: string }[] };
+
+const snapshot = (text: string): SnapshotMessage[] => JSON.parse(text) as SnapshotMessage[];
+
+/** A message's blocks, with a string content read as one text block. */
+function blocksOf(message: SnapshotMessage): { type: string; text?: string }[] {
+	return typeof message.content === "string" ? [{ type: "text", text: message.content }] : message.content;
+}
+
+/**
+ * Assert one request's recall: every message untouched but the latest user message, which gains
+ * exactly one trailing text block. Returns that block's text.
+ */
+function recallBlockOf(before: SnapshotMessage[], after: SnapshotMessage[]): string {
+	expect(after).toHaveLength(before.length);
+	const userIndex = before.findLastIndex(({ role }) => role === "user");
+	expect(userIndex).toBeGreaterThanOrEqual(0);
+	before.forEach((message, index) => {
+		if (index !== userIndex) expect(after[index]).toEqual(message);
+	});
+
+	const beforeBlocks = blocksOf(before[userIndex]);
+	const afterBlocks = blocksOf(after[userIndex]);
+	expect(afterBlocks.slice(0, beforeBlocks.length)).toEqual(beforeBlocks);
+	expect(afterBlocks).toHaveLength(beforeBlocks.length + 1);
+	return afterBlocks[afterBlocks.length - 1].text ?? "";
+}
+
+/** Queue the turn whose reply calls `noop` and then stops, so the turn makes two requests. */
+function queueNoopRun(faux: FauxProviderHandle): void {
+	faux.setResponses([
+		fauxAssistantMessage([fauxToolCall("noop", {}, { id: "call-2" })], { stopReason: "toolUse" }),
+		fauxAssistantMessage([fauxText("done 2")], { stopReason: "stop" }),
+	]);
+}
+
+/** A session whose archive holds one stubbed item, with a probe on each side of taiknr. */
+async function recallSession(): Promise<{ probe: RecallProbe; harness: Harness }> {
+	const probe: RecallProbe = { before: [], after: [] };
+	const harness = await sessionHarness({ beforeTaiknr: [beforeProbe(probe)], afterTaiknr: [afterProbe(probe)] });
+	// The tool set starts narrow, so the `noop` the turn calls can join it mid-conversation.
+	probe.api?.setActiveTools(["big_out"]);
+	queueToolRun(harness.faux);
+	await harness.session.prompt("run it");
+	// Prompt 1's own requests are not the turn under test; only what the next prompt builds is compared.
+	probe.before.length = 0;
+	probe.after.length = 0;
+	return { probe, harness };
+}
+
+test("recall reaches the request, and every system message stays where the host put it", async () => {
+	const { probe, harness } = await recallSession();
+	probe.api?.setActiveTools(["big_out", "noop"]);
+	guard.answer((ids) => Object.fromEntries(ids.map((id) => [id, 0.9])));
+	queueNoopRun(harness.faux);
+
+	await harness.session.prompt("what did you see?");
+
+	expect(harness.errors).toEqual([]);
+	expect(probe.before).toHaveLength(2);
+	expect(probe.after).toHaveLength(2);
+	const requests = probe.before.map((before, index) => ({
+		before: snapshot(before),
+		after: snapshot(probe.after[index]),
+	}));
+	const blocks = requests.map(({ before, after }) => recallBlockOf(before, after));
+
+	expect(requests[0].before.some(({ role }, index) => index > 0 && role === "system")).toBe(true);
+	expect(blocks[0].startsWith("<recalled_context>")).toBe(true);
+	expect(blocks[0]).toContain(BIG_TEXT);
+	expect(blocks[1]).toBe(blocks[0]);
+});
+
+test("a recall request writes nothing, and one turn under one key makes one classifier call", async () => {
+	const { probe, harness } = await recallSession();
+	probe.api?.setActiveTools(["big_out", "noop"]);
+	guard.answer((ids) => Object.fromEntries(ids.map((id) => [id, 0.9])));
+	const batches = sideStoreBatches(harness.session);
+	const edits = contextEdits(harness.session);
+	const calls = guard.requests.length;
+	queueNoopRun(harness.faux);
+
+	await harness.session.prompt("what did you see?");
+
+	expect(harness.errors).toEqual([]);
+	expect(sideStoreBatches(harness.session)).toEqual(batches);
+	expect(contextEdits(harness.session)).toEqual(edits);
+	expect(guard.requests).toHaveLength(calls + 1);
+});
+
+test("a classifier that never answers fails open, and stubbing carries on", async () => {
+	writeClassifierAgentConfig(agentDirectory, { classifierTimeoutMs: 50 });
+	guard.answer("hang");
+	const { errors, faux, session } = await sessionHarness();
+	queueToolRun(faux);
+	await session.prompt("run it");
+	let transcript: TranscriptContext | undefined;
+	faux.setResponses([
+		(context) => {
+			transcript = context;
+			return fauxAssistantMessage([fauxText("done 2")], { stopReason: "stop" });
+		},
+	]);
+	const calls = guard.requests.length;
+
+	await session.prompt("what did you see?");
+
+	expect(errors).toEqual([]);
+	expect(JSON.stringify(transcript)).not.toContain("<recalled_context>");
+	expect(guard.requests).toHaveLength(calls + 1);
+
+	queueToolRun(faux);
+	await session.prompt("run it again");
+
+	expect(errors).toEqual([]);
+	expect(sideStoreBatches(session)).toHaveLength(2);
 });

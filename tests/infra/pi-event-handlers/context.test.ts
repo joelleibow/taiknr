@@ -1,0 +1,284 @@
+import {
+	type ContextWithSystemEvent,
+	type ExtensionContext,
+	estimateTokens,
+	SessionManager,
+	type SettingsManager,
+	type TurnEndEvent,
+} from "@earendil-works/pi-coding-agent";
+import { expect, test, vi } from "vitest";
+import { createGatedPi } from "../../../src/app/extension/handler-gate.js";
+import { createSessionConfig } from "../../../src/config/session-config.js";
+import { DEFAULT_TAIKNR_CONFIG, type TaiknrConfig } from "../../../src/config/taiknr-config.js";
+import type { ArchivedToolOutput } from "../../../src/domain/archived-output.js";
+import { formatRecalledContext } from "../../../src/domain/recall.js";
+import { InMemoryArchiveStore, TAIKNR_SIDE_STORE_TYPE } from "../../../src/infra/adapters/pi-archive-adapter.js";
+import { registerContextHandler } from "../../../src/infra/pi-event-handlers/context.js";
+import type { RecallCache } from "../../../src/use-cases/recall-relevant-context.js";
+import { createContextStub, createFakePi } from "../../support/fake-pi.js";
+
+type Messages = ContextWithSystemEvent["messages"];
+
+const MODEL = { api: "typesafe-system-one", provider: "test-provider", id: "test-model" };
+
+const CONFIG: TaiknrConfig = {
+	...DEFAULT_TAIKNR_CONFIG,
+	defaultDecisionModelProvider: "test-provider",
+	defaultDecisionModel: "test-model",
+	decisionThreshold: 0,
+};
+
+/** A prompt, whose timestamp tells one key from the next. */
+function prompt(text: string, timestamp = 1000) {
+	return { role: "user" as const, content: [{ type: "text" as const, text }], timestamp };
+}
+
+const SYSTEM = { role: "system" as const, content: "Keep answers short.", timestamp: 0 };
+
+/** A mid-run note, which a split turn can carry with no user message of its own. */
+const CUSTOM = {
+	role: "custom" as const,
+	customType: "probe",
+	content: [{ type: "text" as const, text: "note" }],
+	display: true,
+	timestamp: 5,
+};
+
+const toolResult = (): TurnEndEvent["toolResults"][number] => ({
+	role: "toolResult",
+	toolCallId: "call-1",
+	toolName: "bash",
+	content: [{ type: "text", text: "raw" }],
+	isError: false,
+	timestamp: 0,
+});
+
+/**
+ * Append one archived item to `manager`'s branch — its tool result, its side-store record and
+ * taiknr's stub edit — with a block length that is a whole number of tokens, so a budget a case
+ * computes lands exactly on the block.
+ */
+function appendArchivedItem(manager: SessionManager): ArchivedToolOutput {
+	const id = manager.appendMessage(toolResult());
+	const base = { id, toolName: "bash", argsSummary: "", isError: false, stub: `[archived ${id}]` };
+	const pad = (4 - (formatRecalledContext([{ ...base, rawText: "" }]).length % 4)) % 4;
+	const item = { ...base, rawText: "x".repeat(pad) };
+	manager.appendCustomEntry(TAIKNR_SIDE_STORE_TYPE, [item]);
+	manager.appendContextEdit(id, { content: [{ type: "text", text: item.stub }] });
+	return item;
+}
+
+/** What a stubbed `classify` answers: every question it was asked, at `probability`. */
+function answered(context: unknown, probability = 0.9) {
+	const { questions } = context as { questions: Record<string, unknown> };
+	return {
+		stopReason: "stop",
+		answers: Object.fromEntries(Object.keys(questions).map((id) => [id, { type: "bool", probability }])),
+	};
+}
+
+interface HarnessOptions {
+	config?: Partial<TaiknrConfig>;
+	settings?: Parameters<typeof SettingsManager.inMemory>[0];
+	model?: { provider: string; id: string };
+	contextWindow?: number;
+	/** The stub `classify`; the default answers every question at 0.9. */
+	classify?: (model: unknown, context: unknown, options: unknown) => Promise<unknown>;
+	ready?: boolean;
+}
+
+/** The handler registered as the composition root registers it, over a fake host and a real branch. */
+function harness(options: HarnessOptions = {}) {
+	const manager = SessionManager.inMemory();
+	const item = appendArchivedItem(manager);
+	const branch = manager.getBranch();
+	const fake = createFakePi({ settings: options.settings });
+	const session = createSessionConfig();
+	const store = new InMemoryArchiveStore();
+	store.addBatch([item]);
+	const recallCache: RecallCache = { lastPromptKey: "", lastRecalledIds: [] };
+	const classify = vi.fn(options.classify ?? ((_model, classifyContext) => Promise.resolve(answered(classifyContext))));
+	const modelRegistry = {
+		findOfType: vi.fn(() => ("model" in options ? options.model : MODEL)),
+		classify,
+	};
+	registerContextHandler(createGatedPi(fake.pi, session), { config: session, store, recallCache });
+
+	if (options.ready ?? true) session.assign({ status: "ready", config: { ...CONFIG, ...options.config } });
+
+	/** A context for one event, recording any notice it receives. */
+	const context = (
+		notices: string[] = [],
+		contextWindow = "contextWindow" in options ? options.contextWindow : 200_000,
+	) =>
+		createContextStub({
+			cwd: "/work",
+			trusted: false,
+			branch,
+			contextWindow,
+			model: "model" in options ? options.model : undefined,
+			modelRegistry,
+			notify: (message) => notices.push(message),
+		});
+
+	/** Fire the registered handler once, as the host does. */
+	const fire = async (ctx: ExtensionContext, messages: Messages) =>
+		fake.registered[0].handler({ type: "context_with_system", messages }, ctx);
+
+	return { fake, session, store, recallCache, item, classify, context, fire };
+}
+
+/** The text of the block a result appends to the message at `index`, or `undefined` when none. */
+function appendedBlockText(result: unknown, index: number): string | undefined {
+	const messages = (result as { messages?: Messages } | undefined)?.messages;
+	const message = messages?.[index];
+	if (message === undefined || message.role !== "user" || !Array.isArray(message.content)) return undefined;
+	const [last] = message.content.slice(-1);
+	return last?.type === "text" && last.text.startsWith("<recalled_context>") ? last.text : undefined;
+}
+
+const estimate = (messages: Messages) => messages.reduce((total, message) => total + estimateTokens(message), 0);
+
+/** The window at which the block exactly fills the budget, from the reserve a case expects. */
+const windowFor = (reserve: number, messages: Messages, block: number) => block / 4 + reserve + estimate(messages);
+
+test("the handler registers context_with_system, and nothing for context", () => {
+	const { fake } = harness();
+
+	expect(fake.registered.map(({ event }) => event)).toEqual(["context_with_system"]);
+});
+
+test("a config that is not ready recalls nothing and asks nothing", async () => {
+	const { fire, classify, context } = harness({ ready: false });
+
+	expect(await fire(context(), [prompt("why?")])).toBeUndefined();
+	expect(classify).not.toHaveBeenCalled();
+});
+
+test("a turn with no user message recalls nothing and asks nothing", async () => {
+	const { fire, classify, context } = harness();
+
+	expect(await fire(context(), [CUSTOM])).toBeUndefined();
+	expect(classify).not.toHaveBeenCalled();
+});
+
+test.each([
+	["no usage at all", undefined],
+	["a window of zero", 0],
+])("%s recalls nothing and asks nothing", async (_case, contextWindow) => {
+	const { fire, classify, context } = harness({ contextWindow });
+
+	expect(await fire(context(), [prompt("why?")])).toBeUndefined();
+	expect(classify).not.toHaveBeenCalled();
+});
+
+test("a request with no room recalls nothing and asks nothing", async () => {
+	const { fire, classify, context } = harness({
+		contextWindow: 100,
+		settings: { compaction: { reserveTokens: 1000 } },
+	});
+
+	expect(await fire(context(), [prompt("why?")])).toBeUndefined();
+	expect(classify).not.toHaveBeenCalled();
+});
+
+test("the notice reaches the latest event's ctx, and is spent once per registration", async () => {
+	const notices: string[][] = [[], [], []];
+	let failing = false;
+	const { fire, context, classify } = harness({
+		classify: async (_model, classifyContext) =>
+			failing ? { stopReason: "error", errorMessage: "boom", answers: {} } : answered(classifyContext),
+	});
+
+	await fire(context(notices[0]), [prompt("first", 1)]);
+	failing = true;
+	await fire(context(notices[1]), [prompt("second", 2)]);
+	await fire(context(notices[2]), [prompt("third", 3)]);
+
+	expect(classify).toHaveBeenCalledTimes(3);
+	expect(notices[0]).toEqual([]);
+	expect(notices[1]).toHaveLength(1);
+	expect(notices[1][0]).toContain("boom");
+	expect(notices[2]).toEqual([]);
+});
+
+test("the block is appended exactly when the budget equals its length, and not one token short", async () => {
+	const { fire, context, item } = harness({ settings: { compaction: { reserveTokens: 1000 } } });
+	const messages: Messages = [prompt("why?")];
+	const block = formatRecalledContext([item]).length;
+	const window = windowFor(1000, messages, block);
+
+	expect(appendedBlockText(await fire(context([], window), messages), 0)).toBe(formatRecalledContext([item]));
+	expect(await fire(context([], window - 1), messages)).toBeUndefined();
+});
+
+test("a system message counts toward the estimate, so the boundary moves by its own tokens", async () => {
+	const { fire, context, item } = harness({ settings: { compaction: { reserveTokens: 1000 } } });
+	const messages: Messages = [prompt("why?"), SYSTEM];
+	const block = formatRecalledContext([item]).length;
+	const window = windowFor(1000, messages, block);
+
+	expect(appendedBlockText(await fire(context([], window), messages), 0)).toBeDefined();
+	expect(await fire(context([], window - 1), messages)).toBeUndefined();
+	expect(appendedBlockText(await fire(context([], window + estimateTokens(SYSTEM)), messages), 0)).toBeDefined();
+});
+
+test("a model's override sets the reserve, and the boundary it implies is the one that applies", async () => {
+	const settings = {
+		compaction: { reserveTokens: 5000, modelOverrides: { "test-provider/test-model": { reserveTokens: 100 } } },
+	};
+	const { fire, context, item } = harness({ settings, model: { provider: "test-provider", id: "test-model" } });
+	const messages: Messages = [prompt("why?")];
+	const block = formatRecalledContext([item]).length;
+
+	expect(appendedBlockText(await fire(context([], windowFor(100, messages, block)), messages), 0)).toBeDefined();
+	expect(await fire(context([], windowFor(100, messages, block) - 1), messages)).toBeUndefined();
+});
+
+test("an unknown model reads no override, so the setting's own reserve applies", async () => {
+	const settings = {
+		compaction: { reserveTokens: 5000, modelOverrides: { "other-provider/other-model": { reserveTokens: 100 } } },
+	};
+	const { fire, context, item } = harness({ settings });
+	const messages: Messages = [prompt("why?")];
+	const block = formatRecalledContext([item]).length;
+
+	expect(appendedBlockText(await fire(context([], windowFor(5000, messages, block)), messages), 0)).toBeDefined();
+	expect(await fire(context([], windowFor(100, messages, block)), messages)).toBeUndefined();
+});
+
+test("no compaction settings fall through to pi's own default reserve", async () => {
+	const { fire, context, item } = harness();
+	const messages: Messages = [prompt("why?")];
+	const block = formatRecalledContext([item]).length;
+
+	expect(appendedBlockText(await fire(context([], windowFor(16384, messages, block)), messages), 0)).toBeDefined();
+	expect(await fire(context([], windowFor(0, messages, block)), messages)).toBeUndefined();
+});
+
+test("three requests under one key score the archive once", async () => {
+	const { fire, context, classify, item } = harness();
+	const messages: Messages = [prompt("why?", 7)];
+
+	const first = await fire(context(), messages);
+	await fire(context(), messages);
+	const third = await fire(context(), messages);
+
+	expect(classify).toHaveBeenCalledTimes(1);
+	expect(appendedBlockText(first, 0)).toBe(formatRecalledContext([item]));
+	expect(appendedBlockText(third, 0)).toBe(formatRecalledContext([item]));
+});
+
+test("the gate stops the handler while taiknr is off and lets it run once it is on", async () => {
+	const { fire, context, classify, session, item } = harness();
+
+	expect(session.setEnabled(false)).toBe(true);
+	expect(await fire(context(), [prompt("why?", 11)])).toBeUndefined();
+	expect(classify).not.toHaveBeenCalled();
+
+	expect(session.setEnabled(true)).toBe(true);
+	const result = await fire(context(), [prompt("again", 12)]);
+
+	expect(classify).toHaveBeenCalledTimes(1);
+	expect(appendedBlockText(result, 0)).toBe(formatRecalledContext([item]));
+});
