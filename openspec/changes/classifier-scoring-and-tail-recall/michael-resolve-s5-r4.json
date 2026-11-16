@@ -1,0 +1,50 @@
+{
+  "owner_decisions": [],
+  "resolutions": [
+    {
+      "disposition": "decline",
+      "evidence": "`design.md` decision 3 (L152) fixes the text as the message's `text` blocks joined with `\\n`. The round-1 finding readiness-s5r1-RDY-10 (a) (\"no case has two text blocks\") was declined and settled: \"readiness-s5r1-RDY-8, RDY-9, RDY-10 … Do not reopen at Stage 5 unless those decisions change.\" Decision 3 has not changed since.",
+      "finding_id": "readiness-s5r4-readiness-s5r4-RDY4-1",
+      "rationale": "Minor. This repeats a settled coverage finding. The design fixes the separator exactly, so Derek has nothing to decide, and the implementation gate checks the `join` with a mutation run.",
+      "required_change": "",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "`design.md` decision 9: a successful scoring records the token even when no item is kept. `tasks.md` 7.1 already lists \"a success records the token and kept ids in block order\", plus the boundary cases \"the highest-probability item alone over budget (nothing recalled)\" and \"a probability equal to the threshold (selected)\". The token rule is Joel's Q6 (one classifier call per new user message).",
+      "finding_id": "readiness-s5r4-readiness-s5r4-RDY4-2",
+      "rationale": "Minor. The design states the rule exactly (record on every success, kept ids possibly empty), so the coder has no decision to make. Asserting a second call under the same key on the nothing-kept path is a coverage row on behaviour that is already fixed. It is the same class as RDY-8 and RDY3-1.\n\nThe implementation gate will run the mutation the reviewer names: record only when `kept.length > 0`. That rule protects Joel's cost guarantee, so the gate must show a test fails under it.",
+      "required_change": "",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "`tasks.md` 8.3 comes after 8.2's handler, so its tests pass when first written. 6.2 and 8.1 say they are not red-first. 8.3 does not say so.",
+      "finding_id": "readiness-s5r4-readiness-s5r4-RDY4-3",
+      "rationale": "Minor. 8.3 contains no conditional or open choice: its tests and pass conditions are named, and none can be red after 8.2, which is evident from the order.\n\nSaying how they are shown catching a mistake is a sentence of process. The implementation gate supplies it by re-running a mutation, such as registering `context` instead of `context_with_system` and confirming case 1 fails, as it does for every claimed check.",
+      "required_change": "",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "`design.md` decision 5: an id is eligible only when its batch is on the branch, (a) an entry with that id on the branch is a tool-result entry, and (b) the latest `context_edit` there carries taiknr's stub as its first block. The items come from `readArchiveBatchesFromBranch(entries)`.",
+      "finding_id": "codebase-s5r4-CB-R4-1",
+      "rationale": "Minor. The premise that the row passes for every implementation holds only for the reviewer's construction, where the branch lacks the batch. Built with the batch and its stub edit on the branch but no tool-result entry for the id, the off-branch case fails any implementation that skips rule (a). So the case can carry real coverage.\n\nThe store-level off-branch filter is already asserted in 7.1, as the reviewer notes. How the fixture is built is a test-local choice the implementation gate checks.",
+      "required_change": "",
+      "target_artifact": "tasks.md"
+    }
+  ],
+  "round_status": "clean",
+  "settled_findings": [
+    "readiness-s5r4-RDY4-1 (minor, declined). This is the two-text-block join, a repeat of settled readiness-s5r1-RDY-10 (a). Decision 3 fixes `\\n` exactly. Do not reopen unless decision 3 changes.",
+    "readiness-s5r4-RDY4-2 (minor, declined). Decision 9 records the token on every success, including when nothing is kept. The implementation gate runs the mutation \"record only when kept is non-empty\" and requires a test to fail on it, because Joel's Q6 cost guarantee rests on that rule. Do not reopen unless decision 9's success branch changes.",
+    "readiness-s5r4-RDY4-3 (minor, declined). 8.3's tests run after the handler exists, so they cannot fail on first run, which is evident from the task order. The implementation gate shows them catching a mistake by mutation, for example registering `context` instead of `context_with_system`. Do not reopen unless 8.3 changes.",
+    "codebase-s5r4-CB-R4-1 (minor, declined). 3.1's off-branch case fails an implementation that skips decision 5's rule (a), provided the fixture keeps the batch and stub edit on the branch and omits the tool-result entry. The store-level filter is asserted in 7.1. Do not reopen unless decision 5 or 3.1 changes.",
+    "readiness-s5r3-RDY3-1, codebase-s5r3-CB-R3-1 and CB-R3-2 (minor, declined in round 3). Do not reopen unless the decisions or tasks they cite change.",
+    "codebase-s5r2-CB-R2-1 (fixed). Do not reopen unless 2.1 changes.",
+    "readiness-s5r2-RDY2-1, RDY2-2, RDY2-3 and RDY2-5, and codebase-s5r2-CB-R2-2, CB-R2-3 and CB-R2-4 (minor, declined in round 2). Do not reopen at Stage 5 unless 8.2, 8.3 or the extension-packaging delta changes.",
+    "structural-s5r1-S5-R1-STRUCT-1 (contested). Decision 10's two-item string is 381 UTF-16 code units. Do not reopen unless decision 10's items, header or guard change.",
+    "readiness-s5r1-RDY-8, RDY-9, RDY-10 and RDY-11, codebase-s5r1-CB-7, and structural-s5r1-STRUCT-2 (minor, declined in round 1). Do not reopen at Stage 5 unless the decisions they cite change.",
+    "codebase-s5r1-CB-4, CB-5, CB-6 and CB-8, readiness-s5r1-RDY-12 and RDY-13, and structural-s5r1-STRUCT-3 and STRUCT-4 (minor, folded in round 1). Judge them through the round-1 rows that absorbed them."
+  ]
+}
