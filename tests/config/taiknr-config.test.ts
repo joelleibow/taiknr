@@ -130,6 +130,37 @@ test("a file at the would-be project path is not a layer when the caller passes 
 	expect(config).toEqual(DEFAULT_TAIKNR_CONFIG);
 });
 
+test("the classifier timeout defaults to 5000 when neither file sets it", () => {
+	const config = loadTaiknrConfig({
+		agentConfigPath: configFile(tempDirectory(), "{}"),
+		projectConfigPath: configFile(tempDirectory(), "{}"),
+	});
+
+	expect(config.classifierTimeoutMs).toBe(5000);
+});
+
+test("an agent file's classifier timeout is carried", () => {
+	const config = loadTaiknrConfig({
+		agentConfigPath: configFile(tempDirectory(), '{"classifierTimeoutMs":8000}'),
+		projectConfigPath: undefined,
+	});
+
+	expect(config).toEqual({ ...DEFAULT_TAIKNR_CONFIG, classifierTimeoutMs: 8000 });
+});
+
+test("a project file's classifier timeout wins over the agent file's", () => {
+	const config = loadTaiknrConfig({
+		agentConfigPath: configFile(tempDirectory(), '{"classifierTimeoutMs":8000}'),
+		projectConfigPath: configFile(tempDirectory(), '{"classifierTimeoutMs":12000}'),
+	});
+
+	expect(config.classifierTimeoutMs).toBe(12000);
+});
+
+test.each([1, 2147483647])("a classifier timeout of %i is accepted", (value) => {
+	expect(accepted(`{"classifierTimeoutMs":${value}}`).classifierTimeoutMs).toBe(value);
+});
+
 const rejectedInputs: Array<[string, string | undefined, string]> = [
 	['{"decisionThreshold":2}', "decisionThreshold", "must be <= 1"],
 	['{"decisionThreshold":-0.1}', "decisionThreshold", "must be >= 0"],
@@ -145,6 +176,12 @@ const rejectedInputs: Array<[string, string | undefined, string]> = [
 	['{"defaultDecisionModelProvider":""}', "defaultDecisionModelProvider", "must be a non-empty string"],
 	['{"defaultDecisionModelProvider":" "}', "defaultDecisionModelProvider", "must be a non-empty string"],
 	['{"defaultDecisionModelProvider":null}', "defaultDecisionModelProvider", "must be a non-empty string"],
+	['{"classifierTimeoutMs":0}', "classifierTimeoutMs", "must be an integer from 1 to 2147483647"],
+	['{"classifierTimeoutMs":-1}', "classifierTimeoutMs", "must be an integer from 1 to 2147483647"],
+	['{"classifierTimeoutMs":1.5}', "classifierTimeoutMs", "must be an integer from 1 to 2147483647"],
+	['{"classifierTimeoutMs":1e999}', "classifierTimeoutMs", "must be an integer from 1 to 2147483647"],
+	['{"classifierTimeoutMs":2147483648}', "classifierTimeoutMs", "must be an integer from 1 to 2147483647"],
+	['{"classifierTimeoutMs":"8000"}', "classifierTimeoutMs", "must be an integer from 1 to 2147483647"],
 	['{"enabled":"false"}', "enabled", "must be a boolean"],
 	['{"enabled":0}', "enabled", "must be a boolean"],
 	['{"enabled":null}', "enabled", "must be a boolean"],
@@ -190,7 +227,7 @@ test("a rejection with no field reads <path>: <reason>", () => {
 
 test("the known fields accept their valid values", () => {
 	const config = accepted(
-		'{"decisionThreshold":0.5,"minCharsToArchive":600,"defaultDecisionModel":"m","defaultDecisionModelProvider":"p","enabled":true}',
+		'{"decisionThreshold":0.5,"minCharsToArchive":600,"defaultDecisionModel":"m","defaultDecisionModelProvider":"p","classifierTimeoutMs":8000,"enabled":true}',
 	);
 
 	expect(config).toEqual({
@@ -198,6 +235,7 @@ test("the known fields accept their valid values", () => {
 		defaultDecisionModel: "m",
 		defaultDecisionModelProvider: "p",
 		minCharsToArchive: 600,
+		classifierTimeoutMs: 8000,
 		enabled: true,
 	});
 });

@@ -5,6 +5,7 @@ export interface TaiknrConfig {
 	defaultDecisionModel: string;
 	defaultDecisionModelProvider: string;
 	minCharsToArchive: number;
+	classifierTimeoutMs: number;
 	enabled: boolean;
 }
 
@@ -16,6 +17,7 @@ export const DEFAULT_TAIKNR_CONFIG: TaiknrConfig = {
 	defaultDecisionModel: "~typesafe/jev-latest",
 	defaultDecisionModelProvider: "openrouter",
 	minCharsToArchive: 600,
+	classifierTimeoutMs: 5000,
 	enabled: true,
 };
 
@@ -54,6 +56,11 @@ const FIELD_RULES: { readonly [K in keyof TaiknrConfig]: (value: unknown) => str
 	},
 	minCharsToArchive: (value) =>
 		typeof value === "number" && Number.isInteger(value) && value >= 0 ? undefined : "must be an integer >= 0",
+	// A larger value makes Node warn and fire after 1 ms, which turns the setting into "always fail".
+	classifierTimeoutMs: (value) =>
+		typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 2147483647
+			? undefined
+			: "must be an integer from 1 to 2147483647",
 	defaultDecisionModel: (value) => (isNonEmptyString(value) ? undefined : "must be a non-empty string"),
 	defaultDecisionModelProvider: (value) => (isNonEmptyString(value) ? undefined : "must be a non-empty string"),
 	enabled: (value) => (typeof value === "boolean" ? undefined : "must be a boolean"),
@@ -75,6 +82,7 @@ export function loadTaiknrConfig(paths: ConfigPaths): TaiknrConfig {
 		defaultDecisionModel: layered("defaultDecisionModel", documents),
 		defaultDecisionModelProvider: layered("defaultDecisionModelProvider", documents),
 		minCharsToArchive: layered("minCharsToArchive", documents),
+		classifierTimeoutMs: layered("classifierTimeoutMs", documents),
 		enabled: layered("enabled", documents),
 	};
 }

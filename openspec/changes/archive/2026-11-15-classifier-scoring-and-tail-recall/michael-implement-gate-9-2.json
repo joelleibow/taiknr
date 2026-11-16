@@ -1,0 +1,39 @@
+{
+  "verdict": "approve",
+  "requirements": [
+    {
+      "requirement": "My consult remedy: the payload carries the marker exactly as often as the appended recall block does, and at least once, using a `lastBlockText(snapshot)` helper",
+      "evidence": "I read `git show a4085fd -- test-recall-live.mjs`. It adds `lastBlockText(snapshot)`, which returns the last block's text of the snapshot's latest user message, or `\"\"`. It replaces the `!== 1` check with `inBlock = recallProblemsFound.length > 0 ? 0 : occurrences(lastBlockText(state.after[recallIndex]), marker)` and `occurrences(recallPayload, marker) !== inBlock`, with a two-line comment saying why. The failure line names both counts and `markerCalls`.\n\n\"At least once\" holds through `recallProblems`, which already requires the appended block to include the marker. That is the remedy as I ruled it. Nothing else in the script changed.",
+      "status": "met"
+    },
+    {
+      "requirement": "Design decision 13 (5) and task 9.2 carry the same amended pass condition (the Bambadjan step before Derek's change)",
+      "evidence": "Commit 04fc141 changes one line each in `design.md` (L382) and `tasks.md` (L138), and both now carry the same sentence: \"the marker appears in that request's provider payload exactly as many times as the recall block carries it, and at least once — once per archived `emit_marker` output, since the model may call the tool more than once; setup check (6) keeps the history marker-free\".\n\n`rg \"exactly once\"` over the change finds no remaining copy of the old condition.",
+      "status": "met"
+    },
+    {
+      "requirement": "Offline through Derek's fetch stand-in: one call, two calls, `--break-model`",
+      "evidence": "I ran these in a `git archive HEAD` copy of a4085fd under `mktemp -d`, after `npm ci`, with Derek's stand-in copied in, a dummy key, and no model call. Instrumented runs printed per-location counts.\n\n| Run | Exit | What it showed |\n|---|---|---|\n| One call | 0 | PASS; 1 recalled item, marker in block 1, in payload 1 |\n| Two parallel calls (tool_calls index 0 and 1) | 0 | PASS; 2, 2, 2 |\n| Two sequential calls | 0 | PASS |\n| Three sequential calls | 0 | PASS; 3, 3, 3 |\n| `--break-model`, one call | 1 | only \"prompt 3's first request has no recall block: the latest user message gained 0 block(s) rather than exactly one\" |\n| `--break-model`, two calls | 1 | the same single line |\n| Key unset | 2 | |\n\nThe pre-fix script (`a4085fd~1`) against two calls exits 1 with \"prompt 3's payload carries the marker 2 times, not once\". That reproduces the live failure.",
+      "status": "met"
+    },
+    {
+      "requirement": "The amended condition still catches a misplaced, duplicated or dropped marker",
+      "evidence": "I injected two test-only payload mutations through a `before_provider_request` hook in my copy. Neither is part of the shipped script.\n\n| Mutation | Exit | Printed line |\n|---|---|---|\n| Marker added outside the block, two calls | 1 | \"carries the marker 3 times, but its recall block carries it 2 times (emit_marker ran 2 times)\" |\n| Marker added outside the block, one call | 1 | \"2 times … 1 times\" |\n| Marker stripped from the payload | 1 | \"0 times … 2 times\" |",
+      "status": "met"
+    },
+    {
+      "requirement": "The gate stays green and the tree is clean",
+      "evidence": "In the same copy, `npm run check` passed lint, `tsc` and vitest: 22 files, 327 tests. The commit touches only `test-recall-live.mjs`, which is outside the test include, the type program and the lint allowlist.\n\nThe stand-in still lives under the excluded `.pi/` and is not in the repository. `git status` in the checkout is clean. My copy is removed.",
+      "status": "met"
+    }
+  ],
+  "findings": [],
+  "later_gates": [
+    "Task 9.2's paid runs: `node test-recall-live.mjs` must exit 0 and `node test-recall-live.mjs --break-model` must exit 1 on the \"no recall block\" line. Both lines are appended under 9.2 in `tasks.md` as the task states. A run that exits 2 is never ticked. The 0911062 run's exit-1 line is context only, not one of the two completion lines.",
+    "Bambadjan's docs pass and PL2 with Joel, unchanged from gate 2."
+  ],
+  "not_covered": [
+    "Real OpenRouter and Jev behaviour: whether gpt-4.1-nano calls `emit_marker` once or several times, and how Jev answers prompts 2 and 3. Only the paid 9.2 run exercises those.",
+    "The stand-in's fidelity to OpenRouter's real SSE stream and usage fields. It was exercised only through pi-ai's openai-completions parser against hand-built chunks."
+  ]
+}

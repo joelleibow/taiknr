@@ -1,0 +1,78 @@
+{
+  "owner_decisions": [],
+  "resolutions": [
+    {
+      "disposition": "propose_fix",
+      "evidence": "**Unexported.** `src/config/taiknr-config.ts` L48 declares `const FIELD_RULES: {…} = {` with no `export`. `rg FIELD_RULES src tests` finds it only at L48, L140 and L141.\n\n**Unreachable from the test.** `tests/config/taiknr-config.test.ts` L5-11 imports `CONFIG_FILE_NAME`, `DEFAULT_TAIKNR_CONFIG`, `loadTaiknrConfig`, `TaiknrConfig` and `TaiknrConfigError`, not `FIELD_RULES`.\n\n**Already asserted another way.** The file's `test.each(rejectedInputs)` (L163-169) asserts `error.field` and `error.reason` on every row through `loadTaiknrConfig`, so the reason string is pinned without the table.\n\n**Where the clause came from.** `tasks.md` 2.1 (L66) ends its test sentence with \"and `FIELD_RULES.classifierTimeoutMs` returns that string\". That clause came from my own readiness-s5r1-RDY-7 required change.",
+      "finding_id": "codebase-s5r2-CB-R2-1",
+      "rationale": "The finding is correct, and readiness-s5r2-RDY2-4 is the same defect. My round-1 RDY-7 remedy put an implementation fact (which function returns the string) inside 2.1's test sentence. As written, Derek has to export a production constant the design never exposes, or drop a stated assertion. Either is a decision the plan should not leave to him, so I rate it major.\n\n**Churn check.** This is not oscillation. Reverting the whole RDY-7 patch would also delete the exact reason string, which is the gap RDY-7 closed. The remedy instead removes one clause and moves its fact into the implementation sentence, so the reason string stays specified.",
+      "required_change": "In `tasks.md` 2.1:\n- End the rejection clause at \"…each rejected with reason exactly `must be an integer from 1 to 2147483647`, asserted in the file's existing `rejectedInputs` row format\", deleting \"and `FIELD_RULES.classifierTimeoutMs` returns that string\".\n- In the implementation sentence that follows (\"Then add `classifierTimeoutMs` to `src/config/taiknr-config.ts`: …\"), add: \"through a new entry in the module-local `FIELD_RULES`, whose rule returns that reason string; `FIELD_RULES` stays unexported\".",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "**The test it amends.** `tests/app/extension/archive-session.test.ts` L366-373: with taiknr off, `sideStoreBatches(session)` is `[]` after the prompt, so the store is empty and no item can be eligible.\n\n**Where this was already recorded.** My round-1 RDY-3 rationale said the gate's effect on recall can be shown only at handler level, which is `tasks.md` 8.2 case 7 (`createGatedPi` plus `setEnabled`).",
+      "finding_id": "readiness-s5r2-RDY2-1",
+      "rationale": "Minor. The line is not vacuous as a behavioural assertion: it fails if any classifier call leaks while taiknr is off, including one with an empty eligible set, which 8.2's boundary case forbids. It does not prove the gate, and the plan never claims it does. Case 7 carries that proof, as round 1 recorded.",
+      "required_change": "",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "pi 1.5.2's `dist/core/extensions/loader.js` L111-113 and L130-132: `setActiveTools` (and `getSettings`) are `notInitialized` and throw \"Extension runtime not initialized\" until the runner binds them.\n\nMy orientation probe P2 called `setActiveTools` on a kept `pi` after the harness resolved.",
+      "finding_id": "readiness-s5r2-RDY2-2",
+      "rationale": "Minor and test-local. A call made in the factory body throws at load with pi's own explicit message, which names the fix. Calling it after `sessionHarness()` resolves, on the probe's kept `pi` or on `session`, is a private fixture choice. It touches no interface, behaviour or file boundary.",
+      "required_change": "",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "**The case as written.** `tasks.md` 8.2 case 4 says the block \"is appended when `4 * (window - reserve - estimate)` equals the formatted block's length, and not when it is one less\".\n\n**What the fit rule does.** Decision 9 appends when the length is at most `budgetCharacters`. The test sets `contextWindow` itself through `createContextStub`.",
+      "finding_id": "readiness-s5r2-RDY2-3",
+      "rationale": "Minor. The boundary case can always be reached, because the test owns both the window and the item's `rawText`.\n\nThe fixture can make the block's length a multiple of 4. Without padding, the smallest window with `4 * (window - reserve - estimate) >= length` appends and the window one below it does not, which pins the same boundary.\n\nThe fixture choice is test-local. Loosening the assertion to a bare `>=` would be the weakened test the implementation gate rejects.",
+      "required_change": "",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "**The sentence in question.** `tasks.md` 8.2's closing sentence, \"The handler tests `enabled` nowhere; the composition-root gate stops it (D3; S5)\", is AGENTS.md's own trap wording (\"no handler tests `enabled` itself\").\n\n**The fixture builder.** Case 7 already names the branch shape: the item's tool result, its `taiknr-side-store` entry and taiknr's stub `context_edit`.",
+      "finding_id": "readiness-s5r2-RDY2-5",
+      "rationale": "Minor.\n- The sentence describes the handler body, matching AGENTS.md, and case 7 tests the gate composition. The two do not conflict.\n- Reusing case 7's branch builder for cases 3-6 is a private helper inside `context.test.ts`. That is a test-local choice, not an interface.",
+      "required_change": "",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "**How the holder behaves.** `src/config/session-config.ts`: `setEnabled` returns `false` without mutating when `state.status !== \"ready\"`. `src/app/extension/handler-gate.ts`: `createGatedPi` calls the handler only when `session.isActive()`.\n\n**Where the trap is documented.** AGENTS.md: \"A test that registers through it and fires the event sees nothing until it assigns a ready state to the holder.\"\n\n**Where the plan implies it.** Case 7 names a config (`decisionThreshold: 0`), and the precedent `tests/infra/pi-event-handlers/turn-end.test.ts` L204-224 assigns that state.",
+      "finding_id": "codebase-s5r2-CB-R2-2",
+      "rationale": "Minor. The ready-state assignment is a documented repository trap. Case 7 already implies a holder carrying the named config, and the precedent it mirrors assigns it.\n\nA case that forgot it would fail loudly at the enabled assertion, so it cannot pass vacuously end to end.",
+      "required_change": "",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "**The existing seam.** `tests/support/fake-pi.ts`'s `createContextStub` takes `branch?: SessionEntry[]`, which `tasks.md` 8.2 keeps.\n\n**The existing pattern.** `tests/infra/adapters/pi-archive-adapter.test.ts` L319-337 builds a branch with a real `SessionManager.inMemory()` and passes its entries.",
+      "finding_id": "codebase-s5r2-CB-R2-3",
+      "rationale": "Minor. The existing `branch` seam carries a real manager's `getBranch()`, and the repository already uses that pattern.\n\nAdding a sixth stub option would change `fake-pi.ts` beyond what 8.2 enumerates, and the implementation gate checks the diff against that list.",
+      "required_change": "",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "decline",
+      "evidence": "**The two rows.** `design.md` L69 and `tasks.md` L42 both say the registered list \"gains `context_with_system`\".\n\n**The test.** `tests/app/extension/taiknr.test.ts` holds an exact seven-element `toEqual` that includes `\"context\"`.\n\n**The spec.** The `extension-packaging` delta's \"Seven events registered\" names `context_with_system` in place of `context`.",
+      "finding_id": "codebase-s5r2-CB-R2-4",
+      "rationale": "Minor. The spec delta already states the exact seven-event list, and the `toEqual` fails loudly on eight entries.\n\nThe row's \"gains\" is shorthand. Under the standing ruling, closing it is an edit to a description of the change and touches no code.",
+      "required_change": "",
+      "target_artifact": "design.md"
+    }
+  ],
+  "round_status": "needs_fixes",
+  "settled_findings": [
+    "readiness-s5r2-RDY2-1 (minor, declined). 8.3 item 4 is a leaked-call regression line, not the proof of inertness. 8.2 case 7 carries that proof (round-1 RDY-3 rationale). Do not reopen unless case 7 or item 4 changes.",
+    "readiness-s5r2-RDY2-2, RDY2-3 and RDY2-5, and codebase-s5r2-CB-R2-2 and CB-R2-3 (minor, declined). These are test-local fixture choices in 8.2 and 8.3:\n- when `setActiveTools` is called (pi throws an explicit message at load);\n- padding or window choice for the 4-character budget step;\n- a private branch builder for cases 3-6;\n- the ready-state assignment (an AGENTS.md trap);\n- the existing `branch` seam.\n\nEach fails loudly if done wrong, and none touches an interface or the file boundary. Do not reopen at Stage 5 unless 8.2 or 8.3 changes.",
+    "codebase-s5r2-CB-R2-4 (minor, declined). \"Gains `context_with_system`\" in `design.md` L69 and `tasks.md` L42 is shorthand. The `extension-packaging` delta fixes the exact seven-event list, and the `toEqual` enforces it. Do not reopen unless that delta changes.",
+    "structural-s5r1-S5-R1-STRUCT-1 (contested). Decision 10's two-item string is 381 UTF-16 code units. Do not reopen unless decision 10's items, header or guard change.",
+    "readiness-s5r1-RDY-8, RDY-9, RDY-10 and RDY-11, codebase-s5r1-CB-7, and structural-s5r1-STRUCT-2 (minor, declined in round 1). Do not reopen at Stage 5 unless the decisions they cite change.",
+    "codebase-s5r1-CB-4, CB-5, CB-6 and CB-8, readiness-s5r1-RDY-12 and RDY-13, and structural-s5r1-STRUCT-3 and STRUCT-4 (minor, folded in round 1). Judge them through the round-1 rows that absorbed them."
+  ]
+}

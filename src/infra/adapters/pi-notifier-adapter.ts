@@ -7,8 +7,9 @@ export function createOncePerSessionNotifier(getCtx: () => ExtensionContext): Fa
 	return {
 		notifyOnce(message: string): void {
 			if (warned) return;
-			warned = true;
 			getCtx().ui.notify(message, "warning");
+			// Set only once the notice is out, so a throw (a stale ctx) leaves the session's one notice unspent.
+			warned = true;
 		},
 	};
 }

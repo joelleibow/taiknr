@@ -13,7 +13,7 @@ test("registers exactly the seven lifecycle events and touches nothing else", ()
 	taiknr(fake);
 	expect(events.sort()).toEqual([
 		"agent_before_settle",
-		"context",
+		"context_with_system",
 		"session_compact",
 		"session_start",
 		"session_tree",

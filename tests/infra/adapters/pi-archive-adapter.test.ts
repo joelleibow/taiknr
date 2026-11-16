@@ -1,8 +1,15 @@
-import { type ProjectedSessionEntry, SessionManager, type TurnEndEvent } from "@earendil-works/pi-coding-agent";
+import {
+	type ContextEditEntry,
+	type ProjectedSessionEntry,
+	type SessionEntry,
+	SessionManager,
+	type TurnEndEvent,
+} from "@earendil-works/pi-coding-agent";
 import { expect, test } from "vitest";
 import type { ArchivedToolOutput } from "../../../src/domain/archived-output.js";
 import {
 	readArchiveBatchesFromBranch,
+	readEligibleArchivedIds,
 	TAIKNR_SIDE_STORE_TYPE,
 	toSettlementDrafts,
 	toToolOutputCandidates,
@@ -421,4 +428,107 @@ test("two entries carrying one id both survive, the later one last", () => {
 	const batches = readArchiveBatchesFromBranch(manager.getBranch());
 
 	expect(batches.map(([only]) => only.rawText)).toEqual(["root", "leaf"]);
+});
+
+/** The blocks a `context_edit` replacement may carry. */
+type EditableBlock = TurnEndEvent["toolResults"][number]["content"][number];
+
+/** The replacement content a settlement writes for `id`: the stub's text block, then the original's. */
+function stubContent(id: string, ...rest: EditableBlock[]) {
+	return { content: [{ type: "text" as const, text: `[archived ${id}]` }, ...rest] };
+}
+
+/** A context_edit entry targeting `targetId`, built rather than appended so it can sit off a branch. */
+function edit(targetId: string, replacement: ContextEditEntry["replacement"]): SessionEntry {
+	return { type: "context_edit", id: `edit-of-${targetId}`, parentId: null, timestamp: "", targetId, replacement };
+}
+
+/** A side-store entry carrying `data`, built rather than appended. */
+function sideStore(data: unknown): SessionEntry {
+	return {
+		type: "custom",
+		id: "custom-entry",
+		parentId: null,
+		timestamp: "",
+		customType: TAIKNR_SIDE_STORE_TYPE,
+		data,
+	};
+}
+
+test("an item whose latest edit is taiknr's stub is eligible", () => {
+	const manager = SessionManager.inMemory();
+	const id = manager.appendMessage(toolResult());
+	manager.appendCustomEntry(TAIKNR_SIDE_STORE_TYPE, [item(id)]);
+	manager.appendContextEdit(id, stubContent(id));
+
+	expect(readEligibleArchivedIds(manager.getBranch())).toEqual(new Set([id]));
+});
+
+test("an item whose latest edit carries foreign content is ineligible", () => {
+	const manager = SessionManager.inMemory();
+	const id = manager.appendMessage(toolResult());
+	manager.appendCustomEntry(TAIKNR_SIDE_STORE_TYPE, [item(id)]);
+	manager.appendContextEdit(id, { content: [{ type: "text", text: "redacted" }] });
+
+	expect(readEligibleArchivedIds(manager.getBranch())).toEqual(new Set());
+});
+
+test("an item whose entry is off the active branch is ineligible", () => {
+	const entries = [sideStore([item("aaaa1111")]), edit("aaaa1111", stubContent("aaaa1111"))];
+
+	expect(readEligibleArchivedIds(entries)).toEqual(new Set());
+});
+
+test("an item with no context_edit is ineligible", () => {
+	const manager = SessionManager.inMemory();
+	const id = manager.appendMessage(toolResult());
+	manager.appendCustomEntry(TAIKNR_SIDE_STORE_TYPE, [item(id)]);
+
+	expect(readEligibleArchivedIds(manager.getBranch())).toEqual(new Set());
+});
+
+test("a stub followed by the image the output carried leaves the item eligible", () => {
+	const manager = SessionManager.inMemory();
+	const id = manager.appendMessage(toolResult());
+	const image = { type: "image" as const, data: "AAAA", mimeType: "image/png" };
+	manager.appendCustomEntry(TAIKNR_SIDE_STORE_TYPE, [item(id)]);
+	manager.appendContextEdit(id, stubContent(id, image));
+
+	expect(readEligibleArchivedIds(manager.getBranch())).toEqual(new Set([id]));
+});
+
+test("empty entries yield an empty set", () => {
+	expect(readEligibleArchivedIds([])).toEqual(new Set());
+});
+
+test("a null replacement makes the item ineligible", () => {
+	const manager = SessionManager.inMemory();
+	const id = manager.appendMessage(toolResult());
+	manager.appendCustomEntry(TAIKNR_SIDE_STORE_TYPE, [item(id)]);
+	manager.appendContextEdit(id, null);
+
+	expect(readEligibleArchivedIds(manager.getBranch())).toEqual(new Set());
+});
+
+test("the latest of several edits decides, and a stub landing last makes the item eligible", () => {
+	const manager = SessionManager.inMemory();
+	const id = manager.appendMessage(toolResult());
+	manager.appendCustomEntry(TAIKNR_SIDE_STORE_TYPE, [item(id)]);
+	manager.appendContextEdit(id, stubContent(id));
+	manager.appendContextEdit(id, { content: [{ type: "text", text: "redacted" }] });
+
+	expect(readEligibleArchivedIds(manager.getBranch())).toEqual(new Set());
+
+	manager.appendContextEdit(id, stubContent(id));
+
+	expect(readEligibleArchivedIds(manager.getBranch())).toEqual(new Set([id]));
+});
+
+test("a malformed batch contributes no item, so its edit makes nothing eligible", () => {
+	const manager = SessionManager.inMemory();
+	const id = manager.appendMessage(toolResult());
+	manager.appendCustomEntry(TAIKNR_SIDE_STORE_TYPE, ["not an item"]);
+	manager.appendContextEdit(id, stubContent(id));
+
+	expect(readEligibleArchivedIds(manager.getBranch())).toEqual(new Set());
 });

@@ -1,0 +1,60 @@
+{
+  "verdict": "approve",
+  "requirements": [
+    {
+      "requirement": "Round-1 finding 1 (blocking): the live script can pass on a correct implementation, and its failing run exits 1 on the named condition",
+      "evidence": "I read `git diff 869685f...HEAD -- test-recall-live.mjs`. Prompt 2's payloads are now `state.payloads.slice(payloadsAfterToolPrompt, payloadsAfterUnrelatedPrompt)`, with the comment explaining why. Prompt 3's payload is `state.payloads[payloadsAfterUnrelatedPrompt]`, and prompt 2's snapshots run from `afterToolPrompt` to `afterUnrelatedPrompt`. The now-unused `lastUserText` is removed.\n\nRuns in a `git archive HEAD` mktemp copy through Derek's `fetch-stand-in.mjs` (copied in; `.pi/` is excluded by `.git/info/exclude` L7), with a dummy key and no model call:\n\n| Run | Exit | Output |\n|---|---|---|\n| Correct | 0 | `PASS` |\n| `--break-model` | 1 | \"prompt 3's first request has no recall block … gained 0 block(s)\" and \"carries the marker 0 times\" |\n| Key unset | 2 | — |\n\nMy own checks that the script catches mistakes:\n\n| Change | Exit | Output |\n|---|---|---|\n| Stand-in answers yes to every prompt | 1 | \"prompt 2's payload carries a recall block\" |\n| Model never calls the tool | 2 | \"emit_marker was never called\" |\n| Round-1 substring filter restored | 1 | the same false failure I measured in round 1 |\n| `decisionThreshold: 0.95` in the throwaway config | 1 | \"no recall block\" |",
+      "status": "met"
+    },
+    {
+      "requirement": "Round-1 finding 2 (major): the handler's event-time eligibility and threshold reads are pinned, and task 8.2's ticked boundary cases exist",
+      "evidence": "The `foreignEdit` harness option and three tests are present in `context.test.ts`.\n\nMutations run in my copy:\n- **M21**, eligibility taken from `deps.store`: 1 failed, \"an item another extension redacted on the branch is neither asked about nor recalled\".\n- **M24**, `decisionThreshold: 0.5` hardcoded: 1 failed, \"the session's own threshold decides what is recalled\".\n- **My extra M25**, the bound skipped when `compaction.enabled === false`: 1 failed, \"compaction turned off still leaves the bound in force\".\n\nThe empty-eligible-set case is now covered by the redacted-item test: no eligible item, no call.",
+      "status": "met"
+    },
+    {
+      "requirement": "Round-1 finding 3 (major): a success that keeps nothing records the key, and a cache hit applies eligibility on its own",
+      "evidence": "The `test.each` cases \"nothing passes the threshold\" and \"nothing fits the budget\" are present, plus the cache-hit test over `fakeStore([A, B, C])` with `eligibleIds {A, C}`.\n\nMutations run in my copy:\n- **M1**, token recorded only when `kept.length > 0`: 2 failed, both `test.each` cases.\n- **M6**, cache hit ignores `eligibleIds`: 1 failed, \"a cache hit drops a cached id the branch no longer admits, though the store still holds it\".",
+      "status": "met"
+    },
+    {
+      "requirement": "Round-1 finding 4 (minor): both markers are guarded in all four fields",
+      "evidence": "The test \"both markers are guarded in every field the block carries\" is present.\n\nMutations run in my copy, each failing that one test:\n- **M7**, only the closing marker guarded;\n- **M7b**, `argsSummary` unguarded;\n- **M7c**, `id` unguarded;\n- **M7d**, `toolName` unguarded.\n\nDerek's correction of my shorthand is right: the guarded opening marker is `<\\recalled_context>`, which is what decision 10's insert-a-backslash rule produces.",
+      "status": "met"
+    },
+    {
+      "requirement": "The gate over the whole change against ceec8a5: lint, types, tests, no leaked call, no suppressions, skips, secrets, environment files, `console.*` in `src/`, or Markdown other than tasks.md",
+      "evidence": "I ran `npm ci` then `npm run check` in the mktemp copy with both keys unset. Biome reported \"Checked 50 files … No fixes applied\", `tsc` was clean, and vitest passed 22 files / 327 tests.\n\nI ran it again with both keys set to a dummy value and a `--import` preload that throws on any fetch to a host other than localhost: 327 passed, and the preload logged no leaked fetch.\n\nSearches over `git diff ceec8a5...HEAD`:\n- the suppression search found nothing;\n- no `.only`, `.skip` or `.todo` (the one hit was `process.exit(`, a false match);\n- no `console.` in `src/`;\n- the only `.md` file is `tasks.md`.\n\nThe conductor's commit 2e525c1 adds `.openspec.yaml` and `michael-implement-gate.json`. Neither is Markdown, and neither is Derek's.",
+      "status": "met"
+    },
+    {
+      "requirement": "The whole change still holds against the round-1 checks: boundary, frozen contracts, decisions 1–13, and the mutations killed in round 1",
+      "evidence": "`git diff 869685f...HEAD -- src/` is empty, so no production code moved.\n\n`rg @earendil-works src/domain src/use-cases src/config` still finds nothing.\n\nI re-ran three round-1 mutations, and each is still killed:\n- **M3**, registering `context`: 3 failed, including the session-level \"every system message stays where the host put it\";\n- **M2**, `maxRetries` removed: 3 failed, including the 1.5 s hang;\n- **M13**, cache hit refit as a prefix: 1 failed.",
+      "status": "met"
+    },
+    {
+      "requirement": "Task ticks match the code",
+      "evidence": "In `tasks.md`, groups 1–8 and 9.1 are ticked and 9.2 is unticked (L138), as the brief intends.\n\nThe two 8.2 boundary cases that were missing in round 1 now exist. The 7.1 boundary case \"a cached id no longer eligible (skipped)\" is now isolated by its own test.",
+      "status": "met"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "minor",
+      "location": "src/infra/adapters/pi-jev-scorer-adapter.ts, the `elapsed >= config.classifierTimeoutMs - 1` line",
+      "finding": "This is carried from round 1 (finding 5), unchanged.\n\nThe one-millisecond tolerance has its comment, but no test fails if it is dropped. Task 6.1 forbids fake timers and a `Date.now` spy, so its timing test cannot hold the elapsed time at the bound minus one. The plan accepted this.",
+      "required_change": "None required. It ships as accepted, and the code comment is the guard against someone \"simplifying\" the line.",
+      "required_change_ran": false
+    }
+  ],
+  "later_gates": [
+    "**Task 9.2, the paid live run.** It must show that the real `openai/gpt-4.1-nano` calls `emit_marker`, that Jev answers no on prompt 2 and yes on prompt 3, and that the real OpenRouter payload carries the marker exactly once. The two exit lines are appended under 9.2, and a run that exits 2 is never ticked.",
+    "**Bambadjan's docs pass**, from Derek's list: `AGENTS.md` L3 and the trap list (now naming `test-recall-live.mjs`), the `ARCHITECTURE.md` intro, §3, §5 and §7, the README field table plus the disclosure and compaction text, and ADR 0007.",
+    "**PL2 with Joel.** The conductor brings forward the redactor and disclosure items (ruling 11) and the corrections to the compaction premises (Stage 3 rounds 2–7)."
+  ],
+  "not_covered": [
+    "**Fidelity of the stand-in to real OpenRouter.** It feeds pi-ai's openai-completions parser a hand-built SSE stream and System One JSON, so OpenRouter's real stream shape, its usage fields, and Jev's real answers are exercised only by 9.2.",
+    "**RPC-mode rendering of `ctx.ui.notify`**, which is the design's own open question.",
+    "**Latency and cost on archives beyond the measured 30 items**, including the O(n²) prefix re-format on a new key.",
+    "**The `pi --no-session --help` load check.** I did not re-run it; the session-level suite loads the real entry through `DefaultResourceLoader`."
+  ]
+}

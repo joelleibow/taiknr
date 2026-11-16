@@ -41,14 +41,5 @@ export default function taiknr(pi: ExtensionAPI): void {
 		pendingOutputs,
 		originalContentByEntryId,
 	});
-	registerContextHandler(gatedPi, {
-		config: session,
-		store,
-		notifier: {
-			notifyOnce: () => {
-				// Bound per-session via createOncePerSessionNotifier(getCtx) inside context handler.
-			},
-		},
-		recallCache,
-	});
+	registerContextHandler(gatedPi, { config: session, store, recallCache });
 }

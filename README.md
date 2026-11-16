@@ -1,6 +1,6 @@
 # pi-taiknr
 
-`pi-taiknr` is a Pi coding-agent extension: it keeps large tool outputs out of the active prompt by replacing them with deterministic one-line stubs, and recalls a raw output at the tail of the user's message when a turn needs it back. Stubbing works end to end. Recall and the status command are still being built.
+`pi-taiknr` is a Pi coding-agent extension: it keeps large tool outputs out of the active prompt by replacing them with deterministic one-line stubs, and recalls a raw output at the tail of the user's message when a turn needs it back. Stubbing and recall work end to end. The status readout and the `/taiknr` commands are still being built.
 
 ## What runs today
 
@@ -9,8 +9,10 @@
 - A broken config file is reported, and taiknr then does nothing for that session.
 - A tool result whose text reaches `minCharsToArchive` is replaced with a one-line stub once the run that produced it settles.
 - Every stubbed output is recorded in the session file, so a resumed session, a `/tree` jump and a `/compact` all keep what was archived before them.
+- A new user message is scored against the archive once, and the outputs the classifier picks come back in full at the end of that message for that turn's requests only.
+- Recall leaves out an output another extension has edited or that the active branch no longer carries, and it writes nothing to the session file.
 
-Not built yet: recall, the status readout, and the `/taiknr on` and `/taiknr off` commands. Until they land, `context` has no behavior behind it, so the classifier never runs and nothing is recalled.
+Not built yet: the status readout and the `/taiknr on` and `/taiknr off` commands. Until they land, nothing prints recall's decisions or its cost, so the only sign recall ran is the model answering with text it could not otherwise have seen.
 
 ## Stubbing
 
@@ -31,6 +33,39 @@ A stub hides an output from the model and nothing else. It is not redaction and 
 ### What stubbing costs
 
 Every stubbed output sits on disk twice, once as the tool result and once in its side-store record, so a session file roughly doubles the bytes of what it archived. The archive also grows with the branch and has no ceiling yet: a long session that archives output on many runs keeps every item.
+
+## Recall
+
+When a new user message arrives, taiknr asks the configured classifier which archived outputs bear on it. One call covers the whole archive, and the rest of that turn reuses the answer instead of asking again for each tool-loop step. The outputs it picks go back in full at the end of the newest user message, inside a `<recalled_context>` block that marks them as reference data rather than instructions. That block exists for that turn's requests only: the session file is untouched, and the stub stays where it was. The next user message's request no longer carries the block, so the provider re-caches the recalling turn from its user message onward, once, at cache-write price.
+
+Outputs are recalled whole and in order of relevance, until the next one would take the request past pi's compaction threshold. Recall never cuts an output in half, never skips a large one for a smaller one behind it, and never removes anything from the archive.
+
+An output is a candidate only while its tool result is still on the active branch and the newest edit to it is taiknr's own stub. So a redaction another extension persisted keeps that output out, and an output left behind on a branch you navigated away from never comes back.
+
+### What recall sends, and where
+
+Two destinations, and they are not the same:
+
+- **The classifier provider** (`defaultDecisionModelProvider`, `openrouter` by default) gets the new message's text and, for each candidate, that output's stub: the tool name, the 120-character argument summary and the 180-character preview of the first three lines. It never gets an output's raw text, and never an image.
+- **The main model's provider** gets the full raw text of every output recall picks, inside the request that carries the block.
+
+A stub does not keep an output off the network. It keeps the output out of the conversation; recall puts the body back in front of a provider on the one request that needs it.
+
+### What recall costs, and why you cannot see it
+
+About $0.0002 a call at today's archive size, which is around thirty archived outputs, and less when the archive is smaller (about $0.00004 at five). It is one call per new user message, and the cost grows with the archive because the call carries one stub per candidate.
+
+pi's footer and `/session` do not show that spend. pi totals the usage it records against a message or a tool result, and a classifier call an extension makes records nothing there, so the cost is real and invisible. A spend readout belongs to the status command, which is not built yet.
+
+### How far recall may grow, and one consequence
+
+Recall keeps the request it builds under pi's compaction threshold, measured with pi's own estimate. That is a bound on one request, not on pi's next check: pi's check counts the provider usage of the request it last sent, the recall block included, plus whatever the step after it added. So a recall that fills most of its room can make pi compact a session at that check, where it would not have compacted otherwise. After such a compaction the block may no longer fit, and the rest of that turn runs without it, silently; the next user message is scored again.
+
+No taiknr setting removes this while recall is on. Raising `decisionThreshold` can only shrink the block. Raising `reserveTokens` lowers pi's threshold and recall's budget by the same amount, so it moves the case rather than avoiding it, and pi's own compactions start earlier. Turning pi's global compaction off (its own `compaction.enabled` setting) does remove the case, and it also turns off pi's overflow recovery, so taiknr does not recommend it. `docs/adr/0007-recall-on-the-whole-request-inside-its-own-bound.md` has the measurements.
+
+### When the classifier cannot answer
+
+Recall fails open: the request goes out without a block, and stubbing carries on. A missing model, an error answer or a call that runs past `classifierTimeoutMs` shows one warning in the session, naming the provider, the model and the field to fix, and later failures in that session are silent. A classifier that hangs adds up to the timeout to each new user message after that. Cancelling the run reports nothing. Print and JSON modes keep working and print nothing, because the warning has no surface there.
 
 ## Loading it
 
@@ -55,11 +90,14 @@ The project file counts only in a project Pi reports as trusted. taiknr looks in
 | `minCharsToArchive` | an integer of 0 or more: the minimum length at which an output is stubbed, with `0` stubbing every result that carries any text | `600` |
 | `defaultDecisionModel` | a non-empty string, the classifier model | `~typesafe/jev-latest` |
 | `defaultDecisionModelProvider` | a non-empty string, the provider serving that model | `openrouter` |
+| `classifierTimeoutMs` | an integer from 1 to 2147483647: how long one classifier call may take, in milliseconds | `5000` |
 | `enabled` | `true` or `false` | `true` |
 
 A file states only the fields that differ. Every other case is a config error rather than something to ignore: a key outside the table, a value of the wrong type, a number out of range, a root that is not a JSON object.
 
 The default threshold leaves room for the stub, whose framing costs a few hundred characters. Set `minCharsToArchive` well below about 400 and a stub can be longer than the text it replaced, which grows the context it was meant to shrink.
+
+`classifierTimeoutMs` bounds one classifier call. `5000` is about fourteen times the slowest of the ten calls measured, and that margin is there because the archive grows with the branch: too low a value turns a large archive into a recall outage that looks like recall not working, and a huge one makes a classifier that is down add that wait to every new user message, silently after the first warning. The range stops at 2147483647 because Node warns above it and fires the timer after 1 ms, which would make every call fail.
 
 ### Which value wins
 
