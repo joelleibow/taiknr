@@ -279,6 +279,35 @@ One place SHALL exist where the deferred `/taiknr` command can set `enabled` for
 - **WHEN** `setEnabled` changed `enabled` in memory and a later `session_start` arrives
 - **THEN** the resolved state comes from the files as they are then, not from the in-memory value
 
+### Requirement: The classifier call's timeout is a field with a default that can be overridden
+
+`classifierTimeoutMs` SHALL be a known key holding an integer from 1 to 2147483647 milliseconds, defaulting to the value the design records from a measured classifier round trip. A file MAY override it, layering as every other field does, and a value outside that range, or one that is not an integer or not a number, SHALL be a rejection naming the file and the field (Joel's "Orientation Q2" → (b) and (c); D7; ruling 2).
+
+#### Scenario: The default applies
+
+- **WHEN** neither file sets `classifierTimeoutMs`
+- **THEN** the resolved config carries the default the design records, and nothing is reported (D7)
+
+#### Scenario: A file overrides the default
+
+- **WHEN** the agent file sets `classifierTimeoutMs` to 8000
+- **THEN** the resolved config carries 8000 (Joel's "Orientation Q2" → "a sensible default that can be overridden")
+
+#### Scenario: The project file wins
+
+- **WHEN** the agent file sets `classifierTimeoutMs` to 8000 and a trusted project file sets it to 12000
+- **THEN** the resolved config carries 12000
+
+#### Scenario: A value that is not an integer in range
+
+- **WHEN** `classifierTimeoutMs` is `0`, `-1`, `1.5`, `1e999`, `2147483648` or `"8000"`
+- **THEN** it is rejected, naming the file and `classifierTimeoutMs` (ruling 2: a larger value makes Node warn and fire after 1 ms, which would turn the setting into "always fail")
+
+#### Scenario: The timeout reaches the recall path
+
+- **WHEN** a session resolves a non-default `classifierTimeoutMs` and a request is scored
+- **THEN** that session's classifier call is bounded by that value, read at event time (D7; `tail-recall` spec)
+
 ### Requirement: Config loading is tested without a Pi session
 
 Tests SHALL mirror the `src/` layer each one exercises and SHALL follow the conventions the `development-checks` specification fixes rather than restating them. They SHALL cover the host-free loader and its rejection classes, the holder's three states, the gate, and the session-start handler's trust gate, ordering and re-read, with no Pi session or extension loader present in the loader tests (S7, S14; D7; ruling 9).
