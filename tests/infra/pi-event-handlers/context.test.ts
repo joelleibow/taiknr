@@ -94,7 +94,6 @@ function harness(options: HarnessOptions = {}) {
 	const manager = SessionManager.inMemory();
 	const item = appendArchivedItem(manager);
 	if (options.foreignEdit) manager.appendContextEdit(item.id, { content: [{ type: "text", text: "redacted" }] });
-	const branch = manager.getBranch();
 	const fake = createFakePi({ settings: options.settings });
 	const session = createSessionConfig();
 	const store = new InMemoryArchiveStore();
@@ -117,7 +116,8 @@ function harness(options: HarnessOptions = {}) {
 		createContextStub({
 			cwd: "/work",
 			trusted: false,
-			branch,
+			// Read when the context is built, so a case can change the branch between two events.
+			branch: manager.getBranch(),
 			contextWindow,
 			model: "model" in options ? options.model : undefined,
 			modelRegistry,
@@ -128,7 +128,7 @@ function harness(options: HarnessOptions = {}) {
 	const fire = async (ctx: ExtensionContext, messages: Messages) =>
 		fake.registered[0].handler({ type: "context_with_system", messages }, ctx);
 
-	return { fake, session, store, recallCache, item, classify, context, fire };
+	return { fake, session, store, recallCache, item, classify, context, fire, manager };
 }
 
 /** The text of the block a result appends to the message at `index`, or `undefined` when none. */
@@ -294,6 +294,18 @@ test("three requests under one key score the archive once", async () => {
 	expect(classify).toHaveBeenCalledTimes(1);
 	expect(appendedBlockText(first, 0)).toBe(formatRecalledContext([item]));
 	expect(appendedBlockText(third, 0)).toBe(formatRecalledContext([item]));
+});
+
+test("a foreign edit that lands under a scored key drops the cached recall on that key's next request", async () => {
+	const { fire, context, classify, item, manager } = harness();
+	const messages: Messages = [prompt("why?", 21)];
+
+	expect(appendedBlockText(await fire(context(), messages), 0)).toBe(formatRecalledContext([item]));
+
+	manager.appendContextEdit(item.id, { content: [{ type: "text", text: "redacted" }] });
+
+	expect(await fire(context(), messages)).toBeUndefined();
+	expect(classify).toHaveBeenCalledTimes(1);
 });
 
 test("the gate stops the handler while taiknr is off and lets it run once it is on", async () => {
