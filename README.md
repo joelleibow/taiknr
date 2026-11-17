@@ -1,6 +1,6 @@
 # pi-taiknr
 
-`pi-taiknr` is a Pi coding-agent extension: it keeps large tool outputs out of the active prompt by replacing them with deterministic one-line stubs, and recalls a raw output at the tail of the user's message when a turn needs it back. Stubbing and recall work end to end. The status readout and the `/taiknr` commands are still being built.
+`pi-taiknr` is a Pi coding-agent extension: it keeps large tool outputs out of the active prompt by replacing them with deterministic one-line stubs, and recalls a raw output at the tail of the user's message when a turn needs it back. Stubbing, recall and the four instruments work end to end. The status readout and the `/taiknr` commands are still being built.
 
 ## What runs today
 
@@ -11,8 +11,9 @@
 - Every stubbed output is recorded in the session file, so a resumed session, a `/tree` jump and a `/compact` all keep what was archived before them.
 - A new user message is scored against the archive once, and the outputs the classifier picks come back in full at the end of that message for that turn's requests only.
 - Recall leaves out an output another extension has edited or that the active branch no longer carries, and it writes nothing to the session file.
+- Four instruments are published to pi-jefferson 0.14.0 or later from the session start, and `jeffersonInstruments` turns them off without touching anything else.
 
-Not built yet: the status readout and the `/taiknr on` and `/taiknr off` commands. Until they land, nothing prints recall's decisions or its cost, so the only sign recall ran is the model answering with text it could not otherwise have seen.
+Not built yet: the status readout and the `/taiknr on` and `/taiknr off` commands. The [instruments](#instruments) cover part of what those were meant to show: `taiknr.recall` carries the last request's block and whether a classifier call is running, and the net dollars include recall's classifier spend.
 
 ## Stubbing
 
@@ -51,11 +52,13 @@ Two destinations, and they are not the same:
 
 A stub does not keep an output off the network. It keeps the output out of the conversation; recall puts the body back in front of a provider on the one request that needs it.
 
-### What recall costs, and why you cannot see it
+### What recall costs, and where you can see it
 
 About $0.0002 a call at today's archive size, which is around thirty archived outputs, and less when the archive is smaller (about $0.00004 at five). It is one call per new user message, and the cost grows with the archive because the call carries one stub per candidate.
 
-pi's footer and `/session` do not show that spend. pi totals the usage it records against a message or a tool result, and a classifier call an extension makes records nothing there, so the cost is real and invisible. A spend readout belongs to the status command, which is not built yet.
+pi's footer and `/session` do not show that spend. pi totals the usage it records against a message or a tool result, and a classifier call an extension makes records nothing there, so the cost is real and invisible to pi.
+
+taiknr's own figures do show it. `savedDollarsRequest` and `savedDollarsSinceStart` subtract every classifier call taiknr made since the last priced request, so the net dollars a session reports include recall's cost. The [instruments](#instruments) section has the details.
 
 ### How far recall may grow, and one consequence
 
@@ -67,9 +70,107 @@ No taiknr setting removes this while recall is on. Raising `decisionThreshold` c
 
 Recall fails open: the request goes out without a block, and stubbing carries on. A missing model, an error answer or a call that runs past `classifierTimeoutMs` shows one warning in the session, naming the provider, the model and the field to fix, and later failures in that session are silent. A classifier that hangs adds up to the timeout to each new user message after that. Cancelling the run reports nothing. Print and JSON modes keep working and print nothing, because the warning has no surface there.
 
+## Instruments
+
+taiknr publishes four instruments to pi-jefferson 0.14.0 or later: `taiknr.context`, `taiknr.archive`, `taiknr.savings` and `taiknr.recall`. Publishing is on by default. `jeffersonInstruments` is taiknr's only new setting, and turning it off leaves stubbing, settlement, hydration and recall exactly as they are.
+
+Jefferson draws the rows. taiknr posts numbers and booleans and renders nothing itself, so where the rows sit, what they say, their label and their colour are ordinary Jefferson configuration in `~/.pi/agent/pi-jefferson.json`. An example set is below. With Jefferson absent the posts reach no listener: no row appears, nothing throws, and nothing else changes.
+
+### What stubbing does to pi's own context figure
+
+After a settlement replaces a tool output, the branch carries a `context_edit` newer than the last reply. At that moment pi stops trusting the provider's usage: it sums characters ÷ 4 over the whole projection instead, and keeps doing that until the next reply lands. So anyone watching pi's context figure sees it fall after a settled run and jump back when the next reply lands: two moves over a change that made the prompt smaller.
+
+That estimate is low, and how low depends on the model. On Anthropic models it lands 38–41% below the next request's real prompt, measured at 33 consecutive settlements in one session; on the one deepseek session measured it is a few percent. It is pi's own rule and not a setting, so nothing in taiknr changes it.
+
+Three consequences matter beyond the size of the gap:
+
+- pi's pre-run compaction check runs on the same estimate, so after a settled run and until a reply arrives, pi checks against a number that is low by that much.
+- Right after a compaction pi's figure is `null`, while taiknr's is still a number.
+- A recall block counts in a request's usage and never in the persisted history, so the two measurements part company on a recalling turn.
+
+`taiknr.context` is the reading for these. Its default format shows `contextInTurn`, the request the provider bills with recall's block: k × taiknr's estimate while the request is in flight, and the provider's own prompt count once its reply lands, on OpenRouter models as on Anthropic. Its bar reads that figure's share of the model's window. `$totalContext`, the persisted history, is the figure that never swaps estimators mid-stream: it moves by what was added and stubbed, not by 40% at once, and it is never `null`. A format naming `$bar` draws the bar, and a session whose host reports no window gets an empty track rather than a wrong fill.
+
+### What each figure means
+
+The figures overlap, so they are never added together. `recalled` is part of `contextInTurn`, and `historyBefore` differs from `contextInTurn` by exactly the request's saving.
+
+- `contextInTurn`: the request as sent, recall block included.
+- `historyBefore`: the same request with every stub replaced by the raw text it stands for, and the block removed.
+- `withheld`: the raw text those stubs replaced.
+- `stubbed`: the stub text standing in its place.
+- `recalled`: recall's block in this request.
+- `totalContext`: the persisted history after taiknr's edits, and never the recall block, which lives in one request and in no history.
+
+Three more describe the archive rather than one request: `archiveItems`, `archiveWithheld` and `archiveStubbed` count the whole store, which keeps items from before a compaction, so `archiveWithheld` is larger than a request's `withheld` once the branch has been compacted.
+
+Every token figure is a character estimate times one ratio, `k`: the prompt tokens of the newest valid reply for a provider and model, divided by the estimate of the request that produced it. One ratio is kept per provider and model and seeded from the session's branch at start. A model with no ratio of its own borrows the ratio of the model measured most recently until its own first reply is measured, so a model switch starts uncalibrated but not at the raw estimate; `k` is 1 only while no model has been measured on the branch or in this run.
+
+The `~` beside a figure means the provider and model it was posted under have no live sample yet, and the figure is uncalibrated: `k` is a seed read from the branch, another model's ratio borrowed until this one replies, or 1 while nothing has been measured. The flag never means exact, and there is no second flag. Once a reply from that model has been measured, the flag turns off and the figures are calibrated estimates rather than raw ones.
+
+Every token figure but one stays an estimate. `contextInTurn` becomes measured once its own reply lands, and the measured value is published only as `contextInTurn`: the saving is always computed from estimates, because subtracting a measured request from an estimated history would mix two different measurements.
+
+The four savings figures count from the moment the session started. `/new`, `/resume`, `/fork` and `/reload` each begin again at zero, and nothing is persisted, which is why the default format says *tokens not sent since start*: a stub carried by ten requests counts ten times, so the total can pass the size of the context it is in. All four are signed. The dollars are net of the cache rewrite taiknr caused and of recall's classifier spend, so a session can read negative early on, while a rewrite and a classifier call have been charged and no saving has accumulated. They show four decimals, and a negative too small to show renders `-0.0000` rather than losing its sign.
+
+The dollars are a counterfactual: they price the text a stub kept off the request at the cache rate that request's own response reported. A provider outside the catalog's rates, a cost tier the smaller request avoided, or a cache read that covered only part of the prefix all bias them, in directions that are known and sizes that are not.
+
+`taiknr.recall` carries `recalled` for the last request, `deciding` for whether a classifier call is running (`deciding 12`, or `idle`), and `decidingItems` for the latest call's count on its own: 0 before any call, and it keeps that call's count after it ends, while `deciding` reads `idle`. A value that does not change repaints nothing, so the indicator flashes rather than ticks: one call moves it for as long as the call runs, up to `classifierTimeoutMs`, and no elapsed time is published.
+
+### Example rows
+
+Copy these into `~/.pi/agent/pi-jefferson.json`. The rows append to whatever is already there, and where they land is your choice.
+
+```json
+{
+  "rows": [
+    [
+      { "instrument": "taiknr.context" },
+      { "instrument": "taiknr.recall", "align": "right" }
+    ],
+    [
+      { "instrument": "taiknr.archive" },
+      { "instrument": "taiknr.savings", "align": "right" }
+    ]
+  ],
+  "instruments": {
+    "taiknr.context": {
+      "label": "🗜️",
+      "format": "$contextInTurn/$contextWindow $approx $bar",
+      "style": { "fg": "accent" }
+    },
+    "taiknr.archive": {
+      "format": "$archiveItems items, $archiveWithheld withheld, $archiveStubbed stubbed $approx"
+    },
+    "taiknr.savings": {
+      "format": "$savedTokensSinceStart tok $savedDollarsSinceStart usd since start $approx"
+    },
+    "taiknr.recall": {
+      "format": "$recalled tok $deciding $approx"
+    }
+  }
+}
+```
+
+The `$bar` in `taiknr.context` makes that instrument fill the spare columns of its row, so `taiknr.recall` beside it gets only its own text's width.
+
+- A row entry takes `instrument` and `align` and nothing else. A label or a format inside a row rejects the whole file.
+- Format, label and style go in the `instruments` block, keyed by the same full name the row uses.
+- A format may name only variables its instrument declares. `taiknr.recall` declares no bar, so `$bar` there blanks it. `formats` is not accepted for any `taiknr.*` row.
+- An undeclared variable, an undeclared option or an unusable style refuses that one instrument, which renders blank and warns once; the others are unaffected.
+- Omit the `instruments` block entirely to get each instrument's default format and label.
+
+This example ran through Jefferson 0.14.0's own configuration reader against taiknr's registration, registration first and file first, with no warning and all four names resolving.
+
+### Turning publishing off
+
+`"jeffersonInstruments": false` stops publishing and nothing else. Nothing registers and no figure is posted, so a `taiknr.*` row that is already in `pi-jefferson.json` reports `not a known instrument` at each start, which is Jefferson's own warning about a row it has no instrument for. `"enabled": false` still stops everything, publishing included, and a row already on screen stays there by the same rule.
+
+The switch is read once, at session start. There is no `/taiknr` command yet, so turning publishing off today means editing the file and running `/reload`.
+
+A switch turned off in a session that has already posted values cannot clear them: Jefferson clears a field only when the session shuts down. The last figures stay on the row and go stale from then on. Nothing in taiknr reads a posted figure back, so a frozen row is only ever stale to the person reading it.
+
 ## Loading it
 
-Nothing is published yet: `package.json` has no `version`, `license` or `files`, so `npm pack` fails. Pi loads the extension from a local checkout named under `packages` in `~/.pi/agent/settings.json`. `ARCHITECTURE.md` §6 has that entry and the path rules around it.
+Nothing is packaged yet: `package.json` has no `version`, `license` or `files`, so `npm pack` fails. Pi loads the extension from a local checkout named under `packages` in `~/.pi/agent/settings.json`. `ARCHITECTURE.md` §6 has that entry and the path rules around it.
 
 ## Configuration
 
@@ -92,12 +193,15 @@ The project file counts only in a project Pi reports as trusted. taiknr looks in
 | `defaultDecisionModelProvider` | a non-empty string, the provider serving that model | `openrouter` |
 | `classifierTimeoutMs` | an integer from 1 to 2147483647: how long one classifier call may take, in milliseconds | `5000` |
 | `enabled` | `true` or `false` | `true` |
+| `jeffersonInstruments` | `true` or `false`: whether taiknr publishes its four `taiknr.*` instruments to pi-jefferson | `true` |
 
 A file states only the fields that differ. Every other case is a config error rather than something to ignore: a key outside the table, a value of the wrong type, a number out of range, a root that is not a JSON object.
 
 The default threshold leaves room for the stub, whose framing costs a few hundred characters. Set `minCharsToArchive` well below about 400 and a stub can be longer than the text it replaced, which grows the context it was meant to shrink.
 
 `classifierTimeoutMs` bounds one classifier call. `5000` is about fourteen times the slowest of the ten calls measured, and that margin is there because the archive grows with the branch: too low a value turns a large archive into a recall outage that looks like recall not working, and a huge one makes a classifier that is down add that wait to every new user message, silently after the first warning. The range stops at 2147483647 because Node warns above it and fires the timer after 1 ms, which would make every call fail.
+
+`jeffersonInstruments` turns taiknr's instruments off and nothing else: staging, settlement, hydration and recall carry on, and only the published rows go away. `enabled` still stops every one of those. The [Instruments](#instruments) section says what each figure means and what a switch does to a value already on screen.
 
 ### Which value wins
 
@@ -109,7 +213,7 @@ At every session start: a new `pi` process, `/new`, `/resume`, `/fork` or `/relo
 
 ### Turning it off
 
-`"enabled": false` makes taiknr do nothing for that session: no staging, no settlement, no hydration, no recall, no classifier calls. Anything stubbed before you turned it off stays stubbed until it is back on. A valid off is silent, because a switch you set yourself needs no announcement.
+`"enabled": false` makes taiknr do nothing for that session: no staging, no settlement, no hydration, no recall, no classifier calls, and no instruments. Anything stubbed before you turned it off stays stubbed until it is back on. A valid off is silent, because a switch you set yourself needs no announcement.
 
 To flip it today, edit the file and run `/reload`. `/taiknr on` and `/taiknr off` arrive with the status command.
 

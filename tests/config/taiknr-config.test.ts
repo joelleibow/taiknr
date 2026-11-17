@@ -182,6 +182,9 @@ const rejectedInputs: Array<[string, string | undefined, string]> = [
 	['{"classifierTimeoutMs":1e999}', "classifierTimeoutMs", "must be an integer from 1 to 2147483647"],
 	['{"classifierTimeoutMs":2147483648}', "classifierTimeoutMs", "must be an integer from 1 to 2147483647"],
 	['{"classifierTimeoutMs":"8000"}', "classifierTimeoutMs", "must be an integer from 1 to 2147483647"],
+	['{"jeffersonInstruments":"false"}', "jeffersonInstruments", "must be a boolean"],
+	['{"jeffersonInstruments":0}', "jeffersonInstruments", "must be a boolean"],
+	['{"jeffersonInstruments":null}', "jeffersonInstruments", "must be a boolean"],
 	['{"enabled":"false"}', "enabled", "must be a boolean"],
 	['{"enabled":0}', "enabled", "must be a boolean"],
 	['{"enabled":null}', "enabled", "must be a boolean"],
@@ -227,7 +230,7 @@ test("a rejection with no field reads <path>: <reason>", () => {
 
 test("the known fields accept their valid values", () => {
 	const config = accepted(
-		'{"decisionThreshold":0.5,"minCharsToArchive":600,"defaultDecisionModel":"m","defaultDecisionModelProvider":"p","classifierTimeoutMs":8000,"enabled":true}',
+		'{"decisionThreshold":0.5,"minCharsToArchive":600,"defaultDecisionModel":"m","defaultDecisionModelProvider":"p","classifierTimeoutMs":8000,"enabled":true,"jeffersonInstruments":true}',
 	);
 
 	expect(config).toEqual({
@@ -237,7 +240,31 @@ test("the known fields accept their valid values", () => {
 		minCharsToArchive: 600,
 		classifierTimeoutMs: 8000,
 		enabled: true,
+		jeffersonInstruments: true,
 	});
+});
+
+test("the instruments switch defaults to on", () => {
+	const config = loadTaiknrConfig({
+		agentConfigPath: join(tempDirectory(), CONFIG_FILE_NAME),
+		projectConfigPath: undefined,
+	});
+
+	expect(config.jeffersonInstruments).toBe(true);
+});
+
+test("the instruments switch layers like every other field, in either order", () => {
+	const projectOn = loadTaiknrConfig({
+		agentConfigPath: configFile(tempDirectory(), '{"jeffersonInstruments":false}'),
+		projectConfigPath: configFile(tempDirectory(), '{"jeffersonInstruments":true}'),
+	});
+	const projectOff = loadTaiknrConfig({
+		agentConfigPath: configFile(tempDirectory(), '{"jeffersonInstruments":true}'),
+		projectConfigPath: configFile(tempDirectory(), '{"jeffersonInstruments":false}'),
+	});
+
+	expect(projectOn.jeffersonInstruments).toBe(true);
+	expect(projectOff.jeffersonInstruments).toBe(false);
 });
 
 test("a negative zero threshold is accepted and stays negative zero", () => {

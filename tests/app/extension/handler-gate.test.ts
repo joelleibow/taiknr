@@ -12,6 +12,7 @@ const config: TaiknrConfig = {
 	minCharsToArchive: 600,
 	classifierTimeoutMs: 5000,
 	enabled: true,
+	jeffersonInstruments: true,
 };
 
 const result: ToolCallEventResult = { block: false };

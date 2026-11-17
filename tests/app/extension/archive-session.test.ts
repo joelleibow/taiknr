@@ -547,3 +547,178 @@ test("a classifier that never answers fails open, and stubbing carries on", asyn
 	expect(errors).toEqual([]);
 	expect(sideStoreBatches(session)).toHaveLength(2);
 });
+
+/** One field report as it crossed the Jefferson bus. */
+type BusUpdate = { extension: string; field: string; value: unknown };
+
+/** What crossed the Jefferson bus, in the order it arrived. */
+type BusRecord = { registrations: unknown[]; updates: BusUpdate[]; order: string[] };
+
+/** An extension loaded after taiknr that records the bus from its factory body. */
+function busListener(state: BusRecord): InlineExtension {
+	return (pi) => {
+		// Subscribed in the factory body: an afterTaiknr extension's session_start runs after taiknr's,
+		// so a subscription made there would miss the registration and the opening updates.
+		pi.events.on("jefferson:registration", (data) => {
+			state.registrations.push(data);
+			state.order.push("registration");
+		});
+		pi.events.on("jefferson:update", (data) => {
+			state.updates.push(data as BusUpdate);
+			state.order.push("update");
+		});
+	};
+}
+
+/** The last value posted for one field, or `undefined` when nothing ever was. */
+function lastField(state: BusRecord, field: string): unknown {
+	return state.updates.filter((update) => update.field === field).at(-1)?.value;
+}
+
+/** An extension that proposes a boundary entry pi cannot apply, so pi discards the whole boundary. */
+function discardingCompetitor(): InlineExtension {
+	return (pi) => {
+		pi.on("agent_before_settle", (event) => ({
+			entries: [
+				...event.entries,
+				{ type: "context_edit" as const, targetId: "no-such-entry", replacement: { content: [] } },
+			],
+		}));
+	};
+}
+
+/** The one bus session a case watches: its recorder, and the harness that ran it. */
+function busSession(
+	options: { afterTaiknr?: InlineExtension[]; settings?: Parameters<typeof SettingsManager.inMemory>[0] } = {},
+) {
+	const bus: BusRecord = { registrations: [], updates: [], order: [] };
+	return {
+		bus,
+		session: sessionHarness({ ...options, afterTaiknr: [...(options.afterTaiknr ?? []), busListener(bus)] }),
+	};
+}
+
+/** One settled tool run and one more prompt: the two prompts 14.1(b)'s compaction case needs. */
+async function runTwoPrompts(harness: Harness): Promise<void> {
+	queueToolRun(harness.faux);
+	await harness.session.prompt("run it");
+	harness.faux.setResponses([fauxAssistantMessage([fauxText("done 2")], { stopReason: "stop" })]);
+	await harness.session.prompt("one more");
+}
+
+test("a tree jump re-posts the archive's item count after the branch drops the item", async () => {
+	const { bus, session } = busSession();
+	const { errors, faux, session: agent } = await session;
+	queueToolRun(faux);
+
+	await agent.prompt("run it");
+
+	expect(errors).toEqual([]);
+	expect(bus.order[0]).toBe("registration");
+	expect(bus.registrations).toHaveLength(1);
+	expect(lastField(bus, "archiveItems")).toBe(1);
+	expect(Number(lastField(bus, "archiveWithheld"))).toBeGreaterThan(0);
+
+	await agent.navigateTree(latestToolResultEntryId(agent), { summarize: false });
+
+	expect(errors).toEqual([]);
+	expect(lastField(bus, "archiveItems")).toBe(0);
+});
+
+test("a compaction after a discarded boundary re-posts the archive as the branch now carries it", async () => {
+	const { bus, session } = busSession({
+		afterTaiknr: [discardingCompetitor()],
+		settings: { compaction: { enabled: false, keepRecentTokens: 0 } },
+	});
+	const harness = await session;
+
+	await runTwoPrompts(harness);
+
+	// The discarded boundary is the evidence: one report per settled run, and none from the compaction.
+	expect(harness.errors).toHaveLength(2);
+	for (const entry of harness.errors as { event: string; error: string }[]) {
+		expect(entry.event).toBe("agent_before_settle");
+		expect(entry.error.startsWith("Invalid boundary entries")).toBe(true);
+	}
+	expect(lastField(bus, "archiveItems")).toBe(1);
+
+	harness.faux.setResponses([
+		fauxAssistantMessage([fauxText("history summary")], { stopReason: "stop" }),
+		fauxAssistantMessage([fauxText("turn prefix summary")], { stopReason: "stop" }),
+	]);
+	await harness.session.compact();
+
+	expect(harness.errors).toHaveLength(2);
+	expect(lastField(bus, "archiveItems")).toBe(0);
+});
+
+test("a recall turn publishes its block above zero, more than once", async () => {
+	const bus: BusRecord = { registrations: [], updates: [], order: [] };
+	const probe: RecallProbe = { before: [], after: [] };
+	const { errors, faux, session } = await sessionHarness({
+		beforeTaiknr: [beforeProbe(probe)],
+		afterTaiknr: [afterProbe(probe), busListener(bus)],
+	});
+	probe.api?.setActiveTools(["big_out"]);
+	queueToolRun(faux);
+	await session.prompt("run it");
+	probe.api?.setActiveTools(["big_out", "noop"]);
+	guard.answer((ids) => Object.fromEntries(ids.map((id) => [id, 0.9])));
+	const posted = bus.updates.length;
+	queueNoopRun(faux);
+
+	await session.prompt("what did you see?");
+
+	const recalled = bus.updates.slice(posted).filter(({ field }) => field === "recalled");
+	expect(errors).toEqual([]);
+	expect(recalled.length).toBeGreaterThanOrEqual(2);
+	for (const update of recalled) expect(Number(update.value)).toBeGreaterThan(0);
+});
+
+test("with the instruments switch off nothing crosses the bus, and recall still runs", async () => {
+	writeClassifierAgentConfig(agentDirectory, { jeffersonInstruments: false });
+	const bus: BusRecord = { registrations: [], updates: [], order: [] };
+	const probe: RecallProbe = { before: [], after: [] };
+	const { errors, faux, session } = await sessionHarness({
+		beforeTaiknr: [beforeProbe(probe)],
+		afterTaiknr: [afterProbe(probe), busListener(bus)],
+	});
+	probe.api?.setActiveTools(["big_out"]);
+	queueToolRun(faux);
+	await session.prompt("run it");
+	probe.api?.setActiveTools(["big_out", "noop"]);
+	guard.answer((ids) => Object.fromEntries(ids.map((id) => [id, 0.9])));
+	const calls = guard.requests.length;
+	queueNoopRun(faux);
+
+	await session.prompt("what did you see?");
+
+	expect(errors).toEqual([]);
+	expect(guard.requests.length).toBeGreaterThan(calls);
+	expect(bus.registrations).toEqual([]);
+	expect(bus.updates).toEqual([]);
+});
+
+test("the same flow with the switch on publishes the registration and a block", async () => {
+	writeClassifierAgentConfig(agentDirectory, { jeffersonInstruments: true });
+	const bus: BusRecord = { registrations: [], updates: [], order: [] };
+	const probe: RecallProbe = { before: [], after: [] };
+	const { errors, faux, session } = await sessionHarness({
+		beforeTaiknr: [beforeProbe(probe)],
+		afterTaiknr: [afterProbe(probe), busListener(bus)],
+	});
+	probe.api?.setActiveTools(["big_out"]);
+	queueToolRun(faux);
+	await session.prompt("run it");
+	probe.api?.setActiveTools(["big_out", "noop"]);
+	guard.answer((ids) => Object.fromEntries(ids.map((id) => [id, 0.9])));
+	const calls = guard.requests.length;
+	queueNoopRun(faux);
+
+	await session.prompt("what did you see?");
+
+	expect(errors).toEqual([]);
+	expect(guard.requests.length).toBeGreaterThan(calls);
+	expect(bus.registrations).toHaveLength(1);
+	expect(bus.updates.some(({ field, value }) => field === "recalled" && Number(value) > 0)).toBe(true);
+});

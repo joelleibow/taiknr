@@ -8,12 +8,16 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { expect, test, vi } from "vitest";
 import { createGatedPi } from "../../../src/app/extension/handler-gate.js";
+import { createInstrumentsHolder } from "../../../src/app/extension/instruments-holder.js";
 import { createSessionConfig } from "../../../src/config/session-config.js";
 import { DEFAULT_TAIKNR_CONFIG, type TaiknrConfig } from "../../../src/config/taiknr-config.js";
 import type { ArchivedToolOutput } from "../../../src/domain/archived-output.js";
 import { formatRecalledContext } from "../../../src/domain/recall.js";
+import { tokenEstimate } from "../../../src/domain/token-estimate.js";
+import { createJeffersonBusAdapter } from "../../../src/infra/adapters/jefferson-bus-adapter.js";
 import { InMemoryArchiveStore, TAIKNR_SIDE_STORE_TYPE } from "../../../src/infra/adapters/pi-archive-adapter.js";
 import { registerContextHandler } from "../../../src/infra/pi-event-handlers/context.js";
+import { createInstrumentsPublisher, type Publication } from "../../../src/use-cases/instruments-publisher.js";
 import type { RecallCache } from "../../../src/use-cases/recall-relevant-context.js";
 import { createContextStub, createFakePi } from "../../support/fake-pi.js";
 
@@ -104,7 +108,8 @@ function harness(options: HarnessOptions = {}) {
 		findOfType: vi.fn(() => ("model" in options ? options.model : MODEL)),
 		classify,
 	};
-	registerContextHandler(createGatedPi(fake.pi, session), { config: session, store, recallCache });
+	const holder = createInstrumentsHolder();
+	registerContextHandler(createGatedPi(fake.pi, session), { config: session, store, recallCache, holder });
 
 	if (options.ready ?? true) session.assign({ status: "ready", config: { ...CONFIG, ...options.config } });
 
@@ -128,7 +133,7 @@ function harness(options: HarnessOptions = {}) {
 	const fire = async (ctx: ExtensionContext, messages: Messages) =>
 		fake.registered[0].handler({ type: "context_with_system", messages }, ctx);
 
-	return { fake, session, store, recallCache, item, classify, context, fire, manager };
+	return { fake, session, store, recallCache, item, classify, context, fire, manager, holder };
 }
 
 /** The text of the block a result appends to the message at `index`, or `undefined` when none. */
@@ -320,4 +325,45 @@ test("the gate stops the handler while taiknr is off and lets it run once it is 
 
 	expect(classify).toHaveBeenCalledTimes(1);
 	expect(appendedBlockText(result, 0)).toBe(formatRecalledContext([item]));
+});
+
+test("the block recall appended is the estimate the request figures report", async () => {
+	const { fire, context, item, holder, store } = harness();
+	const posts: Publication[] = [];
+	holder.install(
+		createInstrumentsPublisher({
+			sink: {
+				register() {},
+				post(publication) {
+					posts.push(publication);
+				},
+			},
+			store,
+		}),
+	);
+
+	const result = await fire(context(), [prompt("why?")]);
+
+	expect(appendedBlockText(result, 0)).toBe(formatRecalledContext([item]));
+	holder
+		.current()
+		.requestBuilt(() => ({ pair: undefined, messageEstimates: [], toolResults: [], latestUser: undefined }));
+	const request = posts[posts.length - 1];
+	expect(request.recalled).toBe(tokenEstimate(formatRecalledContext([item])));
+	expect(Number(request.recalled)).toBeGreaterThan(0);
+});
+
+test("the classifier's posts reach the bus even when the emit throws", async () => {
+	const { fire, context, item, holder, store } = harness();
+	const bus = createFakePi({ emitThrows: true });
+	holder.install(createInstrumentsPublisher({ sink: createJeffersonBusAdapter(bus.pi), store }));
+
+	const result = await fire(context(), [prompt("why?")]);
+
+	expect(appendedBlockText(result, 0)).toBe(formatRecalledContext([item]));
+	expect(bus.emitted.map(({ data }) => data)).toEqual([
+		{ extension: "taiknr", field: "deciding", value: true },
+		{ extension: "taiknr", field: "decidingItems", value: 1 },
+		{ extension: "taiknr", field: "deciding", value: false },
+	]);
 });

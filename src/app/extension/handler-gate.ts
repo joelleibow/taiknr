@@ -5,8 +5,8 @@ import type { SessionConfig } from "../../config/session-config.js";
 type LooseOn = (event: string, handler: (eventArg: unknown, ctx: unknown) => unknown) => () => void;
 
 /**
- * The `pi` the six non-session-start registrars receive: a handler runs only while the session is
- * active, and every other member is the host's own (design D3).
+ * The `pi` every registrar but the config-loading `session_start` one receives: a handler runs only
+ * while the session is active, and every other member is the host's own (design D3).
  */
 export function createGatedPi(pi: ExtensionAPI, session: SessionConfig): ExtensionAPI {
 	return new Proxy(pi, {

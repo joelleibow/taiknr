@@ -4,6 +4,12 @@ import type { ArchivedToolOutput } from "../../domain/archived-output.js";
 import { InMemoryArchiveStore } from "../../infra/adapters/pi-archive-adapter.js";
 import { registerAgentBeforeSettleHandler } from "../../infra/pi-event-handlers/agent-before-settle.js";
 import { registerContextHandler } from "../../infra/pi-event-handlers/context.js";
+import { registerInstrumentsCompactHandler } from "../../infra/pi-event-handlers/instruments-compact.js";
+import { registerInstrumentsRequestHandler } from "../../infra/pi-event-handlers/instruments-request.js";
+import { registerInstrumentsResponseHandler } from "../../infra/pi-event-handlers/instruments-response.js";
+import { registerInstrumentsSessionStartHandler } from "../../infra/pi-event-handlers/instruments-session-start.js";
+import { registerInstrumentsSettledHandler } from "../../infra/pi-event-handlers/instruments-settled.js";
+import { registerInstrumentsTreeHandler } from "../../infra/pi-event-handlers/instruments-tree.js";
 import { registerSessionCompactHandler } from "../../infra/pi-event-handlers/session-compact.js";
 import { registerSessionStartHandler } from "../../infra/pi-event-handlers/session-start.js";
 import { registerSessionTreeHandler } from "../../infra/pi-event-handlers/session-tree.js";
@@ -11,6 +17,7 @@ import { registerToolCallHandler } from "../../infra/pi-event-handlers/tool-call
 import { registerTurnEndHandler } from "../../infra/pi-event-handlers/turn-end.js";
 import type { RecallCache } from "../../use-cases/recall-relevant-context.js";
 import { createGatedPi } from "./handler-gate.js";
+import { createInstrumentsHolder } from "./instruments-holder.js";
 
 /**
  * Taiknr Pi extension entry point.
@@ -24,11 +31,17 @@ export default function taiknr(pi: ExtensionAPI): void {
 	const pendingOutputs: ArchivedToolOutput[] = [];
 	const originalContentByEntryId = new Map<string, unknown[]>();
 	const recallCache: RecallCache = { lastPromptKey: "", lastRecalledIds: [] };
+	const holder = createInstrumentsHolder();
 
-	// Handlers stay thin Pi event bridges; adapters translate Pi DTOs to domain contracts.
+	// Handlers stay thin Pi event bridges; adapters translate Pi DTOs to domain contracts. Each
+	// publishing registrar follows the registrar whose outcome it reads, because pi runs one event's
+	// handlers in registration order.
 	registerSessionStartHandler(pi, store, session);
+	registerInstrumentsSessionStartHandler(gatedPi, { config: session, store, holder });
 	registerSessionTreeHandler(gatedPi, store);
+	registerInstrumentsTreeHandler(gatedPi, holder);
 	registerSessionCompactHandler(gatedPi, store);
+	registerInstrumentsCompactHandler(gatedPi, holder);
 	registerToolCallHandler(gatedPi, argsByCallId);
 	registerTurnEndHandler(gatedPi, {
 		config: session,
@@ -41,5 +54,8 @@ export default function taiknr(pi: ExtensionAPI): void {
 		pendingOutputs,
 		originalContentByEntryId,
 	});
-	registerContextHandler(gatedPi, { config: session, store, recallCache });
+	registerContextHandler(gatedPi, { config: session, store, recallCache, holder });
+	registerInstrumentsRequestHandler(gatedPi, holder);
+	registerInstrumentsResponseHandler(gatedPi, holder);
+	registerInstrumentsSettledHandler(gatedPi, holder);
 }

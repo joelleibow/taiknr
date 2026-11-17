@@ -5,6 +5,7 @@
 		"strict": true,
 		"noEmit": true,
 		"skipLibCheck": true,
+		"verbatimModuleSyntax": true,
 		"types": ["node"]
 	},
 	"include": ["src/**/*.ts", "tests/**/*.ts"]

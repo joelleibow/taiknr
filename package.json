@@ -19,6 +19,7 @@
 		"@biomejs/biome": "2.6.7",
 		"@earendil-works/pi-coding-agent": "^1.5.2",
 		"@types/node": "^22",
+		"pi-jefferson": "0.14.0",
 		"typescript": "^7.0.2",
 		"vitest": "^5.1.0"
 	}

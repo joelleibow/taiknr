@@ -1,6 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TaiknrConfig } from "../../config/taiknr-config.js";
 import type { RelevanceScore } from "../../domain/recall.js";
+import type { ClassifierObserver } from "../../use-cases/instruments-publisher.js";
 import type { RelevanceScorer } from "../../use-cases/ports.js";
 
 const NO_MODEL = "the classifier model is not in pi's model catalog";
@@ -21,8 +22,15 @@ function notice(config: TaiknrConfig, reason: string, field: string): string {
 	return `taiknr: recall did not score this prompt — ${reason}. provider=${config.defaultDecisionModelProvider} model=${config.defaultDecisionModel} field=${field}. Fix that field in pi-taiknr.json, then run /reload or start a new session.`;
 }
 
-/** Translate stubbed archive state into a Pi classifier request via ModelRegistry. */
-export function createPiJevScorerAdapter(ctx: ExtensionContext, config: TaiknrConfig): RelevanceScorer {
+/**
+ * Translate stubbed archive state into a Pi classifier request via ModelRegistry. The optional
+ * observer hears the call start and end, which is what the instruments' indicator publishes.
+ */
+export function createPiJevScorerAdapter(
+	ctx: ExtensionContext,
+	config: TaiknrConfig,
+	observer?: ClassifierObserver,
+): RelevanceScorer {
 	return {
 		async score(
 			promptText: string,
@@ -45,6 +53,7 @@ export function createPiJevScorerAdapter(ctx: ExtensionContext, config: TaiknrCo
 			);
 
 			const started = Date.now();
+			observer?.started(ids.length);
 			const result = await ctx.modelRegistry.classify(
 				model,
 				{ state: { userPrompt: promptText, archivedToolOutputs: archivedStubs }, questions },
@@ -56,6 +65,8 @@ export function createPiJevScorerAdapter(ctx: ExtensionContext, config: TaiknrCo
 					maxRetries: 0,
 				},
 			);
+			// Immediately after the await and before every branch: classify never rejects, so one point covers every exit.
+			observer?.finished(result.usage === undefined ? undefined : { costTotal: result.usage.cost.total });
 			const elapsed = Date.now() - started;
 
 			if (result.stopReason === "aborted") return undefined;

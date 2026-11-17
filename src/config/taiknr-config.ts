@@ -7,6 +7,7 @@ export interface TaiknrConfig {
 	minCharsToArchive: number;
 	classifierTimeoutMs: number;
 	enabled: boolean;
+	jeffersonInstruments: boolean;
 }
 
 /** The config file's name in both the agent directory and the project config directory. */
@@ -19,6 +20,7 @@ export const DEFAULT_TAIKNR_CONFIG: TaiknrConfig = {
 	minCharsToArchive: 600,
 	classifierTimeoutMs: 5000,
 	enabled: true,
+	jeffersonInstruments: true,
 };
 
 export interface ConfigPaths {
@@ -64,6 +66,7 @@ const FIELD_RULES: { readonly [K in keyof TaiknrConfig]: (value: unknown) => str
 	defaultDecisionModel: (value) => (isNonEmptyString(value) ? undefined : "must be a non-empty string"),
 	defaultDecisionModelProvider: (value) => (isNonEmptyString(value) ? undefined : "must be a non-empty string"),
 	enabled: (value) => (typeof value === "boolean" ? undefined : "must be a boolean"),
+	jeffersonInstruments: (value) => (typeof value === "boolean" ? undefined : "must be a boolean"),
 };
 
 /** Resolve agent-level and project-level config overrides over DEFAULT_TAIKNR_CONFIG. */
@@ -84,6 +87,7 @@ export function loadTaiknrConfig(paths: ConfigPaths): TaiknrConfig {
 		minCharsToArchive: layered("minCharsToArchive", documents),
 		classifierTimeoutMs: layered("classifierTimeoutMs", documents),
 		enabled: layered("enabled", documents),
+		jeffersonInstruments: layered("jeffersonInstruments", documents),
 	};
 }
 

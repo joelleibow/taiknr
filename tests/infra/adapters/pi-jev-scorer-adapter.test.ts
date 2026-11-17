@@ -27,6 +27,23 @@ interface Classification {
 	stopReason: string;
 	errorMessage?: string;
 	answers: Record<string, unknown>;
+	usage?: { cost: { total: number } };
+}
+
+/** A classifier observer that records both calls in the order they arrive. */
+function observer() {
+	const calls: string[] = [];
+	return {
+		calls,
+		observer: {
+			started(itemCount: number) {
+				calls.push(`started ${itemCount}`);
+			},
+			finished(spend: { costTotal: number } | undefined) {
+				calls.push(`finished ${spend?.costTotal}`);
+			},
+		},
+	};
 }
 
 /** The one reason sentence each rejection carries, factored so a case can fill in the id. */
@@ -254,6 +271,46 @@ test("a 36-character id is asked about and scored whole", async () => {
 
 	expect(Object.keys((calls[0].context as { questions: Record<string, unknown> }).questions)).toEqual([id]);
 	expect(scores).toEqual([{ id, probability: 0.9 }]);
+});
+
+test("the observer hears the call start and the cost it reported", async () => {
+	const { ctx } = scorerContext({
+		classify: async () => ({
+			stopReason: "stop",
+			answers: answersFor(Object.keys(STUBS), 0.9),
+			usage: { cost: { total: 0.001 } },
+		}),
+	});
+	const recorded = observer();
+
+	await createPiJevScorerAdapter(ctx, CONFIG, recorded.observer).score("p", STUBS);
+
+	expect(recorded.calls).toEqual(["started 2", "finished 0.001"]);
+});
+
+test.each([
+	["an abort", { stopReason: "aborted", answers: {} }],
+	["an error", { stopReason: "error", errorMessage: "boom", answers: {} }],
+	["a timeout-shaped error", { stopReason: "error", errorMessage: "Request timed out after 5ms", answers: {} }],
+	["a malformed answer", { stopReason: "stop", answers: { a1b2c3d4: { type: "noul", noul: 0.9 } } }],
+])("after %s the observation still ends, with no cost to charge", async (_case, classification) => {
+	const { ctx } = scorerContext({ classify: async () => classification });
+	const recorded = observer();
+
+	await createPiJevScorerAdapter(ctx, CONFIG, recorded.observer)
+		.score("p", STUBS)
+		.catch(() => undefined);
+
+	expect(recorded.calls).toEqual(["started 2", "finished undefined"]);
+});
+
+test("a catalog miss observes nothing, because it throws before the call", async () => {
+	const { ctx } = scorerContext({ model: null, classify: async () => ({ stopReason: "stop", answers: {} }) });
+	const recorded = observer();
+
+	await rejectionOf(createPiJevScorerAdapter(ctx, CONFIG, recorded.observer).score("p", STUBS));
+
+	expect(recorded.calls).toEqual([]);
 });
 
 const directories: string[] = [];
