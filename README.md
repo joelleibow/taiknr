@@ -113,7 +113,7 @@ The four savings figures count from the moment the session started. `/new`, `/re
 
 The dollars are a counterfactual: they price the text a stub kept off the request at the cache rate that request's own response reported. A provider outside the catalog's rates, a cost tier the smaller request avoided, or a cache read that covered only part of the prefix all bias them, in directions that are known and sizes that are not.
 
-`taiknr.recall` carries `recalled` for the last request, `deciding` for whether a classifier call is running (`deciding 12`, or `idle`), and `decidingItems` for the count on its own. A value that does not change repaints nothing, so the indicator flashes rather than ticks: one call moves it for as long as the call runs, up to `classifierTimeoutMs`, and no elapsed time is published.
+`taiknr.recall` carries `recalled` for the last request, `deciding` for whether a classifier call is running (`deciding 12`, or `idle`), and `decidingItems` for the latest call's count on its own: 0 before any call, and it keeps that call's count after it ends, while `deciding` reads `idle`. A value that does not change repaints nothing, so the indicator flashes rather than ticks: one call moves it for as long as the call runs, up to `classifierTimeoutMs`, and no elapsed time is published.
 
 ### Example rows
 
@@ -158,7 +158,7 @@ The `$bar` in `taiknr.context` makes that instrument fill the spare columns of i
 - An undeclared variable, an undeclared option or an unusable style refuses that one instrument, which renders blank and warns once; the others are unaffected.
 - Omit the `instruments` block entirely to get each instrument's default format and label.
 
-This example ran through Jefferson 0.14.0's own configuration reader against taiknr's registration, registration first and file first, with no warning and all four names resolving (`research-chidi.md`, "Addendum — pi-jefferson.json rows").
+This example ran through Jefferson 0.14.0's own configuration reader against taiknr's registration, registration first and file first, with no warning and all four names resolving.
 
 ### Turning publishing off
 

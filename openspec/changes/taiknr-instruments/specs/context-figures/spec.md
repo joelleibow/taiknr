@@ -147,14 +147,28 @@ Savings for one request SHALL be k × (withheld − stubbed − recalled), all t
 - **WHEN** one request's saving is published
 - **THEN** it is an estimate, because the conversion is proven at whole-request scale and not at one settlement's scale (T8; M3)
 
-### Requirement: Dollar savings are net of cache rewrites and of recall's classifier spend
+### Requirement: A saving is priced at the rates the request's own response reported
 
-Savings in dollars SHALL be net: the read rate inside the part of a warm request the last priced request carried, and the write rate after it and on a cold request; the first request priced after any change taiknr made to an earlier message is charged, when it is warm, the suffix it re-wrote; each classify result's reported cost is subtracted (a request is priced when a valid response arrives for it and its estimate is above 0) (J12; S4; Q2(a); M2; M4; T18–T21; ruling 15).
+A stub's saving SHALL be priced at the read rate on a warm request and the write rate on a cold one, including a warm request that read only part of its prefix, whose saving is then an estimate low by the difference between the two rates (design D8, row 11; M2). Recall's block SHALL be priced at the read rate when its message lies inside what the last priced request carried, and at the write rate after it or on a cold request (M2; M4; T18).
 
 #### Scenario: A cold request
 
 - **WHEN** a request was cold because the cache had expired over an idle gap
 - **THEN** its saved tokens are priced at the write rate, and the expiry itself is not charged to taiknr, because it would have happened anyway (T18; M2)
+
+#### Scenario: A warm request that read only part of its prefix
+
+- **WHEN** the first priced request after a compaction or a tree jump is warm and read only part of its prefix from cache
+- **THEN** its saving is priced at the read rate and is therefore low by (write − read) on each saved token in the rewritten portion, which is an accepted estimate and not a corrected figure (design D8, row 11; ruling 15)
+
+#### Scenario: The edges the design decides
+
+- **WHEN** a component's token count is zero, or the counterfactual request would fall in another cost tier, or a response mixes short and one-hour cache writes
+- **THEN** every rate comes from the response's own component costs, and how a rate is derived is the design's, worked out as a table of cases with numbers, so each of these edges has a row and an expected output, and no published figure is non-finite (T20; §O6; ruling 15; R13)
+
+### Requirement: Dollar savings are net of cache rewrites and of recall's classifier spend
+
+Savings in dollars SHALL be net. The first request priced after any change taiknr made to an earlier message is charged, when it is warm, the suffix it re-wrote, and each classify result's reported cost is subtracted (a request is priced when a valid response arrives for it and its estimate is above 0) (J12; S4; Q2(a); M2; M4; T18–T21; ruling 15).
 
 #### Scenario: A warm request after taiknr's own change
 
@@ -170,11 +184,6 @@ Savings in dollars SHALL be net: the read rate inside the part of a warm request
 
 - **WHEN** a request's net saving is negative, or the session's running total is
 - **THEN** both are published negative and neither is clamped, as M4's early running total was negative (T19; M4)
-
-#### Scenario: The edges the design decides
-
-- **WHEN** a component's token count is zero, or the counterfactual request would fall in another cost tier, or a response mixes short and one-hour cache writes
-- **THEN** every rate comes from the response's own component costs, and how a rate is derived is the design's, worked out as a table of cases with numbers, so each of these edges has a row and an expected output, and no published figure is non-finite (T20; §O6; ruling 15; R13)
 
 #### Scenario: The pair publishes together at the response
 
