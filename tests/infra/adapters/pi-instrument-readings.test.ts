@@ -208,3 +208,14 @@ test("a user message whose content is a plain string is its own tail", () => {
 		tailText: "a string prompt",
 	});
 });
+
+test("a pair with two valid replies seeds from the newest, over the projection that produced it", () => {
+	const manager = branchOf(user("hi"), assistant(), user("again", 3), assistant({ usage: { ...USAGE, input: 900 } }));
+	const ctx = context({ model: MODEL, branch: manager.getBranch() });
+	const produced = [user("hi"), assistant(), user("again", 3)].reduce(
+		(total, message) => total + estimateTokens(message),
+		0,
+	);
+
+	expect(readSessionStarted(ctx).seeds).toEqual([{ pair: PAIR, k: 900 / produced }]);
+});

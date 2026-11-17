@@ -192,12 +192,6 @@ export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): Inst
 		sessionStarted(read) {
 			const readings = read();
 			table = seedTable(readings.seeds);
-			pending = undefined;
-			baseline = undefined;
-			reportedRecall = undefined;
-			unchargedSpend = 0;
-			savedTokensSinceStart = 0;
-			savedDollarsSinceStart = 0;
 			const { k, uncalibrated } = ratioFor(table, readings.pair);
 			const totalContext = posted(readings.projectionEstimate, k);
 			const opening: FigureValues = {

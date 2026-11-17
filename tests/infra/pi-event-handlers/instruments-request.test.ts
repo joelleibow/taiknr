@@ -222,3 +222,47 @@ test("a request with no model posts its figures at k 1 with the flag on", async 
 	expect(posts[0]).toMatchObject({ uncalibrated: true });
 	expect(holder.current()).toBeDefined();
 });
+
+test("with the switch off the request registrar posts nothing and evaluates no reading", () => {
+	const fake = createFakePi();
+	const session = createSessionConfig();
+	session.assign({ status: "ready", config: { ...DEFAULT_TAIKNR_CONFIG, jeffersonInstruments: false } });
+	const holder = createInstrumentsHolder();
+	registerInstrumentsRequestHandler(createGatedPi(fake.pi, session), holder);
+
+	expect(() =>
+		fake.registered[0].handler(
+			{ type: "context_with_system", messages: [prompt("why?")] },
+			createContextStub({ cwd: "/work", trusted: false, hostReadsThrow: true }),
+		),
+	).not.toThrow();
+	expect(fake.emitted).toEqual([]);
+});
+
+test("the same request with a real publisher on that context throws, so the silence can fail", () => {
+	const fake = createFakePi();
+	const session = createSessionConfig();
+	session.assign({ status: "ready", config: DEFAULT_TAIKNR_CONFIG });
+	const holder = createInstrumentsHolder();
+	const posts: Publication[] = [];
+	holder.install(
+		createInstrumentsPublisher({
+			sink: {
+				register() {},
+				post(publication) {
+					posts.push(publication);
+				},
+			},
+			store: new InMemoryArchiveStore(),
+		}),
+	);
+	registerInstrumentsRequestHandler(createGatedPi(fake.pi, session), holder);
+
+	expect(() =>
+		fake.registered[0].handler(
+			{ type: "context_with_system", messages: [prompt("why?")] },
+			createContextStub({ cwd: "/work", trusted: false, hostReadsThrow: true }),
+		),
+	).toThrow("an instrument read the host while it was off");
+	expect(posts).toEqual([]);
+});
