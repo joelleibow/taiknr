@@ -219,3 +219,10 @@ test("a pair with two valid replies seeds from the newest, over the projection t
 
 	expect(readSessionStarted(ctx).seeds).toEqual([{ pair: PAIR, k: 900 / produced }]);
 });
+
+test("an assistant message with no usage is not a sample, as pi's own rule has it", () => {
+	const manager = branchOf(user("hi"), assistant(), user("again", 3), assistant({ usage: undefined }));
+	const ctx = context({ model: { ...MODEL, api: "pi-virtual" }, branch: manager.getBranch() });
+	expect(readSessionStarted(ctx).seeds).toEqual([{ pair: PAIR, k: 500 / estimateTokens(user("hi")) }]);
+	expect(readSessionStarted(ctx).pair).toEqual(PAIR);
+});

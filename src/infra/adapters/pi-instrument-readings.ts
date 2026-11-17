@@ -30,7 +30,10 @@ function usageOf(message: Extract<Message, { role: "assistant" }>): UsageCounts 
 function assistantEntries(branch: readonly SessionEntry[]): AssistantEntry[] {
 	const entries: AssistantEntry[] = [];
 	for (const entry of branch) {
-		if (entry.type === "message" && entry.message.role === "assistant") entries.push(entry as AssistantEntry);
+		// pi's own rule: a message carrying no usage is no sample (compaction.js getAssistantUsage).
+		if (entry.type === "message" && entry.message.role === "assistant" && entry.message.usage !== undefined) {
+			entries.push(entry as AssistantEntry);
+		}
 	}
 	return entries;
 }
