@@ -4,7 +4,7 @@ x-marbleization:
   working_dir_state: existing_project
   runs:
     michael: "b1dd7a2a-5d3d-41bb-a896-9c1183acbc7b"
-    chidi: "9b8d3cfb-ca80-46ca-98c4-d734e9941975"
+    chidi: "be69f0a0-f62e-4989-ae08-91a1cdb6bb84"
     eleanor: "7fa23a7c-4d15-42ea-a158-bc85dc6b1f0f"
   gates:
     council_owner: approved

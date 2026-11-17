@@ -227,3 +227,101 @@ usage: {
 - `pi-taiknr.json` was not read. Vitest, biome and a registry install against `pi-jefferson/instruments` were not tried.
 - The cause of the 5% worst prediction error was not isolated; the sub-agent and per-request `context`-hook effects on `est` versus the sent payload were not measured.
 - Sources: the taiknr project's own `package.json` and `tsconfig.json`; no web search was needed.
+
+## Addendum — pi-jefferson.json rows
+
+Source: pi-jefferson `v0.14.0` (`/Users/joelleibow/Projects/pi-jefferson`, read only; `git show v0.14.0:<path>`). `docs/configuration.md` is `C`; `docs/instruments.md` is `I`; `docs/formats.md` is `F`. Nothing was edited in either repository, and no model call was made.
+
+### 1. Top-level shape
+
+- One JSON object with three keys: `rows`, `instruments`, `rowGap` (`C:9–15`). Unknown keys are ignored without a warning (`C:17`), except the retired keys `cells`, `id`, `distribution`, which reject the file (`configuration.ts:101`, `:450–454`).
+- The enclosing key for rows is **`rows`**: "`rows` lists the rows in the order they render. Each row is one line of the footer." (`C:21`).
+- `rows` is an **array of rows**. A **row is an array of instruments**, not an object keyed by name (`C:23`: "A row is a list of instruments"; example `C:25–37`). A row written as an object rejects the file (`C:187–189`; `configuration.ts:371`). An empty row rejects the file (`C:48`).
+- Each entry in a row is an object, e.g. `{ "instrument": "context", "align": "right" }`.
+- Options are not in the row. They live in the top-level `instruments` object, keyed by instrument name (`C:94–108`).
+
+### 2. The key naming an instrument
+
+- A row entry names its instrument with **`instrument`** (required, a non-empty string): `C:41`; code `configuration.ts:391–397`.
+- A provided instrument is named by its **full name**: "An instrument from another extension has a name with a dot, such as `taiknr.savings`. Write that full name." (`C:55`). Jefferson composes the name as `` `${extension}.${part}` `` (`registration-listener.ts:93`). So `"taiknr.context"` is right, and a bare `"context"` means `jefferson.default.context`, Jefferson's own (`C:54`).
+- The same full name is the key in the `instruments` block: "The block follows the same naming rule as a row." (`C:110`). `I:66`: "Place one by its full name, such as `taiknr.savings`. Configure it in the `instruments` block as you configure Jefferson's own."
+- Confirmed by run: all four `taiknr.*` names resolved through the real registry (below).
+
+### 3. Keys a row and a block entry may set
+
+**Row entry** (`C:39–44`; `configuration.ts:384–402`): only `instrument` and `align` (`left` | `right` | `center`, default `left`). "Any other key is a fault", and it rejects the whole file. My run confirmed it: a `label` inside a row gave `pi-jefferson: … was rejected (row 1, instrument 1: has an unrecognised key "label"; an instrument in a row takes only "instrument" and "align"); rendering the default row`.
+
+**`instruments` block entry for a provided instrument** (`configuration.ts:167–175`, `checkProvidedSettings`; `I:29–35, 66`):
+
+- `format` (string), `label` (string), `style` (object: `fg`, `bg`, `bold`, `dim`, `italic`, `underline`, `inverse`, `strikethrough`; `F:80`). These are `FOUNDATIONAL_OPTIONS = ["format", "style", "label"]` (`instrument.ts:41`).
+- `formats` only if the provider declares `composed` and `options: ["formats"]` (`I:66`, `F:94`, `instrument-binding.ts:234`). taiknr declares neither, so it is **not** accepted for `taiknr.*`.
+- Any other key (e.g. `width`, `seconds`) refuses that instrument alone: it renders blank, with one warning `"taiknr.context" is configured with "width", which the instrument does not declare; it renders blank` (`C:127`; `configuration.ts:167–175`). Confirmed in the run.
+- A bad shape, non-string format or label, an unknown `$variable` or an unusable style also refuse that instrument alone (`C:118–136`). `$bar` in a format of an instrument with no declared `bar` is refused as `format naming "$bar", which the instrument does not declare` (my run: `taiknr.recall`).
+
+**`bar` and `fills` are provider-only.** The user cannot set either; neither is in the option list. `bar` is a member of the provider's declaration (`instrument-binding.ts:43, 230`); the user turns it on by writing `$bar` in a format (`F:74`), which works only where the provider declared `bar`. `fills` is likewise a declaration member (`:124, 231`). The user does not set `fills` either: "A format that holds `$bar` makes its instrument fill the row" (`F:74`, `C:76`).
+
+### 4. Example, validated
+
+Instrument names, variables and defaults come from `/Users/joelleibow/Projects/taiknr/src/infra/adapters/jefferson-instruments-declaration.ts` (branch `taiknr-instruments`): `context` (`contextInTurn`, `historyBefore`, `totalContext`, `contextWindow`, `approx`, and `bar` declared; default `ctx $totalContext/$contextWindow $approx $bar`, label `taiknr ctx`), `archive` (`archiveItems`, `archiveWithheld`, `archiveStubbed`, `withheld`, `stubbed`, `approx`; default `arc $archiveItems $archiveWithheld to $archiveStubbed $approx`, label `taiknr arc`), `savings` (`savedTokensRequest`, `savedTokensSinceStart`, `savedDollarsRequest`, `savedDollarsSinceStart`, `withheld`, `stubbed`, `recalled`, `approx`; label `taiknr save`), `recall` (`recalled`, `deciding`, `decidingItems`, `approx`; default `rec $recalled tok $deciding $approx`, label `taiknr recall`). Only `context` declares `bar`.
+
+```json
+{
+  "rows": [
+    [
+      { "instrument": "taiknr.context" },
+      { "instrument": "taiknr.recall", "align": "right" }
+    ],
+    [
+      { "instrument": "taiknr.archive" },
+      { "instrument": "taiknr.savings", "align": "right" }
+    ]
+  ],
+  "instruments": {
+    "taiknr.context": {
+      "label": "🗜️",
+      "format": "$totalContext/$contextWindow $approx $bar",
+      "style": { "fg": "accent" }
+    },
+    "taiknr.archive": {
+      "format": "$archiveItems items, $archiveWithheld withheld, $archiveStubbed stubbed $approx"
+    },
+    "taiknr.savings": {
+      "format": "saved $savedTokensSinceStart tok $savedDollarsSinceStart usd $approx"
+    },
+    "taiknr.recall": {
+      "format": "recalled $recalled tok $deciding $approx"
+    }
+  }
+}
+```
+
+The `$bar` in `taiknr.context` makes it fill the row, so `taiknr.recall` beside it gets only its text's columns (`C:76`, `F:74`). Omit the whole `instruments` block to get each instrument's default format and label.
+
+**How validated.** In a `mktemp -d` scratch directory (removed afterwards) I extracted the `v0.14.0` tag and ran Jefferson's own code under Node 26.8.1 type stripping: the real `readConfiguration` (`configuration.ts:549`), the real registry with Jefferson's `SHIPPED` instruments, and the real `createRegistrationListener`. It was fed taiknr's real `TAIKNR_REGISTRATION`, copied from the branch's declaration file; Jefferson's `tests/fake-theme.ts` stood in for the theme. I tried both load orders: registration before the file is read, and the file read first with registration after.
+
+| Case | Result |
+| --- | --- |
+| Example, registration first | No warning, no unknown names, no faults reported; the rows resolve to the four `taiknr.*` instruments. |
+| Example, file read first | No warning and no faults reported after registration. At read time the four names are in `unknownNames` (they are reported only if still unknown when startup completes, `C:62`), and the cells fill when the registration arrives. |
+| Negative control: `width` on `taiknr.context`, `$nope` in `taiknr.archive`, `$bar` on `taiknr.recall` | Three faults reported (`settings-option`, `settings-variable`, `settings-variable`); each instrument alone is refused. |
+| Negative control: `label` inside a row | Whole file rejected, as quoted in §3. |
+
+Not run: a real pi session (so nothing about how the rows look on screen), and the real theme (the `fg: "accent"` token is checked against the fake theme only; `accent` is the token `C:104` uses).
+
+**Docs example for a provided instrument.** Jefferson's docs have no complete example of a provided-instrument row with a configured block. The nearest are the warning-table examples using `taiknr.savings` (`C:67, 124–133`) and the prose at `I:66`. The only docs example showing a configured block is for the built-in `model` (`C:98–108`), quoted in §1.
+
+### Would Joel's real file accept the merge
+
+`~/.pi/agent/pi-jefferson.json` (read, not edited) has 3 rows (`notice`; `path`, `model`, `thinking`; `blank`, `blank`, `context`), `"rowGap": 0`, and an `instruments` block for `notice`, `path`, `model`, `thinking`, `context`, `blank`, using only built-in bare names. I merged in memory, appending the example's two rows as rows 4–5 and adding its four keys to `instruments`, wrote the result to the scratch directory, and ran it through the same reader. **Yes: accepted.** No rejection warning, no faults, and the four names resolve (registration first); file-first behaves as in the table. Why it merges cleanly:
+
+- The example's keys (`taiknr.*`) are disjoint from Joel's (`notice`, `path`, `model`, `thinking`, `context`, `blank`). The "two spellings of one instrument" rejection (`C:110`) applies only to one instrument under two spellings.
+- Rows are independent lists; the first ten instruments of a row render (`C:46`), and the example's rows have two each.
+- Joel's `context` entry (`$bar $percent`) is Jefferson's own instrument and unaffected. `taiknr.context` is a different instrument.
+- Placement caveat: the merged footer would have five rows with `rowGap: 0`. The example's rows go below Joel's existing ones, and where they should go is his choice.
+- The agent file applies unless a trusted project has its own `.pi/pi-jefferson.json`, which replaces it whole and is never merged (`C:3`). I did not check whether any project of Joel's has one.
+
+### Addendum gaps
+
+- No live pi run: rendered appearance, bar colours at 70%/90%, and the reflow of `taiknr.recall` beside the filling `taiknr.context` were not observed.
+- The scratch harness used a fake theme and a hand-built event bus; the fault ledger's delivery (`ctx.ui.notify`) was not exercised. The faults I report are what the reader hands to `source.report`.
+- Project-level `.pi/pi-jefferson.json` files were not searched for.
