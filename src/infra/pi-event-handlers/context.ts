@@ -6,6 +6,9 @@ import {
 	estimateTokens,
 } from "@earendil-works/pi-coding-agent";
 import type { SessionConfig } from "../../config/session-config.js";
+import { formatRecalledContext } from "../../domain/recall.js";
+import { tokenEstimate } from "../../domain/token-estimate.js";
+import type { InstrumentsHolder } from "../../use-cases/instruments-publisher.js";
 import type { ArchiveStore } from "../../use-cases/ports.js";
 import type { RecallCache } from "../../use-cases/recall-relevant-context.js";
 import { recallRelevantContext } from "../../use-cases/recall-relevant-context.js";
@@ -36,6 +39,7 @@ export function registerContextHandler(
 		config: SessionConfig;
 		store: ArchiveStore;
 		recallCache: RecallCache;
+		holder: InstrumentsHolder;
 	},
 ): void {
 	// One cell and one notifier per registration, which is one per factory call, so one per session.
@@ -65,7 +69,8 @@ export function registerContextHandler(
 
 		// Every value this request needs is built before the request changes.
 		const eligibleIds = readEligibleArchivedIds(ctx.sessionManager.getBranch());
-		const scorer = createPiJevScorerAdapter(ctx, state.config);
+		// The publisher installed for this session observes the call, and is a no-op while the instruments are off.
+		const scorer = createPiJevScorerAdapter(ctx, state.config, deps.holder.current());
 		const outputs = await recallRelevantContext(
 			{
 				promptKey: prompt.promptKey,
@@ -79,6 +84,8 @@ export function registerContextHandler(
 		);
 		if (outputs.length === 0) return;
 
+		// Measured here, after recall's messages exist, and evaluated by the publisher at the request that follows.
+		deps.holder.current().reportRecalled(() => ({ estimate: tokenEstimate(formatRecalledContext(outputs)) }));
 		return { messages: appendRecalledContextToMessages(event.messages, prompt.messageIndex, outputs) };
 	});
 }

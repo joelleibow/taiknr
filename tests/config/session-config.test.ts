@@ -13,6 +13,7 @@ const config: TaiknrConfig = {
 	minCharsToArchive: 100,
 	classifierTimeoutMs: 5000,
 	enabled: true,
+	jeffersonInstruments: true,
 };
 
 const ready: ResolvedSessionConfig = { status: "ready", config };
