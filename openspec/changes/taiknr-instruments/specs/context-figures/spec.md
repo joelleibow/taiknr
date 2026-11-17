@@ -28,7 +28,7 @@ taiknr SHALL publish each token figure as k × its own estimate, where k is the 
 #### Scenario: One ratio per model
 
 - **WHEN** k is chosen for a request
-- **THEN** the current pair is pi's own rule — `ctx.model`'s (provider, id), or, under a virtual selection, the (provider, model) of the newest valid response — and each k is held with the pair of the response it came from and used for an update posted under that pair: the current pair, or, at a valid response, the pair that response carries (OD3(a)); otherwise k reseeds from the branch's newest valid assistant message of the current pair, or is 1 with the flag on, because a ratio belongs to one model and a model switch voids it (T6; ruling 13)
+- **THEN** the current pair is pi's own rule — `ctx.model`'s (provider, id), or, under a virtual selection, the (provider, model) of the newest valid response — and each k is held with the pair of the response it came from and used for an update posted under that pair: the current pair, or, at a valid response, the pair that response carries (OD3(a)); otherwise k reseeds from the branch's newest valid assistant message of the current pair, or, when the current pair has no ratio of its own, is the ratio of the pair measured most recently with the flag on, because a ratio belongs to one model and a switch voids it as a calibration but not as the nearest estimate (T6; ruling 13; owner-rulings.md 2026-11-17)
 
 #### Scenario: When k is reseeded
 
@@ -38,7 +38,7 @@ taiknr SHALL publish each token figure as k × its own estimate, where k is the 
 #### Scenario: No sample yet
 
 - **WHEN** no valid response from the current provider and model has been seen
-- **THEN** k is 1 and every figure's flag reads *not yet calibrated* rather than *exact* (S1; T8; J11)
+- **THEN** k is the current pair's seed from the branch, or the borrowed ratio of the pair measured most recently, or 1 when no pair has a ratio, and every figure's flag reads *not yet calibrated* rather than *exact* (S1; T8; J11)
 
 #### Scenario: A resumed session seeds k
 
@@ -55,19 +55,28 @@ taiknr SHALL publish each token figure as k × its own estimate, where k is the 
 - **WHEN** the branch holds a `usage` entry of the kind a cache warm leaves
 - **THEN** it is not a sample, because taiknr built no request for it and only assistant messages carry the usage a sample needs (T5)
 
+### Requirement: A pair with no ratio of its own borrows the most recently measured one
+
+A pair with no ratio of its own SHALL borrow the ratio of the pair measured most recently — the pair of the newest live sample in this run, or else of the newest seed on the branch — with the flag on until its own first valid response, and k SHALL be 1 only when there is no current pair or no such ratio exists (owner-rulings.md 2026-11-17).
+
+#### Scenario: A switch to a model with no ratio borrows
+
+- **WHEN** the current pair changes to one with no live sample and no seed while another pair has a ratio
+- **THEN** its figures use the ratio of the pair measured most recently with the flag on, and its own first valid response replaces that ratio and turns the flag off (owner-rulings.md 2026-11-17)
+
 ### Requirement: Every figure is a finite number with the estimate flag beside it
 
 Every published figure SHALL be a finite number — never a string, `null` or a placeholder — and each SHALL carry, in a value of its own, one boolean shared by every figure, meaning *uncalibrated*: no valid response in this run has calibrated k for the pair the update is posted under. It SHALL never mean *measured* or *exact*, and there is no second flag (J11; T8; ruling 4).
 
 #### Scenario: Before any real usage exists
 
-- **WHEN** the session has seen no response yet
-- **THEN** the figures come from pi's characters ÷ 4 estimate and every flag reads uncalibrated (J11)
+- **WHEN** neither the branch nor this run holds a valid response from any model
+- **THEN** the figures come from pi's characters ÷ 4 estimate, k is 1, and every flag reads uncalibrated (J11)
 
 #### Scenario: What turns the flag on and off
 
 - **WHEN** the calibration state changes
-- **THEN** the flag is on while k is 1, stays on while k has only been seeded from persisted usage, turns off at the first valid live sample for the current model, and turns back on when the model changes to one with no live sample, because one calibration state serves every figure (J11; T8; ruling 4)
+- **THEN** the flag is on while k is 1, stays on while k has only been seeded from persisted usage or borrowed from another pair, turns off at the first valid live sample for the current model, and turns back on when the model changes to one with no live sample, because one calibration state serves every figure (J11; T8; ruling 4)
 
 #### Scenario: A negative figure
 
@@ -118,10 +127,10 @@ taiknr SHALL publish six figures — history before, withheld, stubbed, context 
 - **WHEN** a request carries recall's block
 - **THEN** total context does not include recalled, because the block is never in the persisted history (T4; ruling 5)
 
-#### Scenario: Context in turn before the session's first request
+#### Scenario: Context in turn before a history's first request
 
-- **WHEN** a session publishes its first figures before any request exists
-- **THEN** context in turn carries total context's value with the same flag, as a number like every figure, because zero would claim an empty request beside a non-empty history (J11; ruling 3)
+- **WHEN** figures are published for a history no request has been built from — at session start, or after a compaction or a `/tree` jump
+- **THEN** context in turn and history before carry total context's value with the same flag, and withheld, stubbed and recalled are 0, as numbers like every figure, because zero would claim an empty request beside a non-empty history (J11; ruling 3)
 
 ### Requirement: A request's saving is the difference between two figures
 

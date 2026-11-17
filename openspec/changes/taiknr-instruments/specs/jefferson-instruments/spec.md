@@ -64,10 +64,10 @@ Immediately after registering, taiknr SHALL post every field the registration de
 - **WHEN** the archive instrument reports the archive's items and their sizes
 - **THEN** its values come from the store, which is an optimistic cache over the branch, and not from pi's session (S6; T15; `branch-hydration` spec)
 
-#### Scenario: A compaction or a tree jump re-posts two figures
+#### Scenario: A compaction or a tree jump starts a history with no request
 
 - **WHEN** a compaction or a `/tree` jump re-hydrates the store
-- **THEN** total context and the archive are re-posted, after that re-hydration (S6; T15; ruling 9)
+- **THEN** total context and the archive are re-posted after that re-hydration, and the request figures are posted as before a history's first request (`context-figures` spec), so the bar never draws a request from a history that is gone (S6; T15; ruling 9)
 
 #### Scenario: A repeated value costs nothing
 
@@ -110,7 +110,7 @@ The indicator SHALL publish whether a classifier decision is running and how man
 
 ### Requirement: The context instrument offers a bar that resolves the jump
 
-`taiknr.context` SHALL offer a bar whose value is total context divided by the model's context window times 100, and `null` for a window ≤ 0, so a user's format can name it and read a percentage pi's own figure cannot give. The window is an input field and not one of the six figures, so the never-a-placeholder rule does not apply to it: when `ctx.getContextUsage()` is undefined it posts 0 (J5; S2; T1; ruling 22).
+`taiknr.context` SHALL offer a bar whose value is context in turn — the request the provider bills, recall's block included — divided by the model's context window times 100, and `null` for a window ≤ 0, so a user's format can name it and read a percentage pi's own figure cannot give. The window is an input field and not one of the six figures, so the never-a-placeholder rule does not apply to it: when `ctx.getContextUsage()` is undefined it posts 0 (J5; S2; T1; ruling 22).
 
 #### Scenario: A user's format names the bar
 
@@ -119,8 +119,13 @@ The indicator SHALL publish whether a classifier decision is running and how man
 
 #### Scenario: The percentage
 
-- **WHEN** total context and the window are both known
-- **THEN** the bar's value is total context divided by the window times 100, with the window taken from the same host call recall reads it from (S2)
+- **WHEN** context in turn and the window are both known
+- **THEN** the bar's value is context in turn divided by the window times 100, with the window taken from the same host call recall reads it from (S2)
+
+#### Scenario: The bar reads a provider's whole prompt
+
+- **WHEN** a response arrives from an OpenRouter model, through pi's `openai-completions` API
+- **THEN** context in turn is `input + cacheRead + cacheWrite`, which pi's parser makes that provider's prompt tokens as Anthropic's usage does, so the bar reads the billed request for either (owner-rulings.md 2026-11-17; `context-figures` spec)
 
 #### Scenario: No window
 

@@ -157,3 +157,23 @@ Stage 5 reached its five-round cap with one clean round, round 4. Round 5's one 
 > "b"
 
 - **→ (b).** Stage 5 closes, and the tasks gate is approved.
+
+## Live check, first look — what the bar draws (2026-11-17)
+
+During group 15, Joel compared `taiknr.context` with what Anthropic billed. Asked whether the bar draws context in turn, the whole request with recall's block (a), or total context, the stored history (b):
+
+> "1. I agree with A, your recomendation. I just want to be certain that we do isn't just because of how Anthropic is responding and applies with OpenRouter models, as well."
+
+- **→ (a).** The `taiknr.context` bar draws context in turn. It must hold for OpenRouter models as well as Anthropic. The conductor checked this against Joel's Gemini 4 Hydrogen session over OpenRouter.
+
+## Live check, first look — a model with no ratio yet (2026-11-17)
+
+Asked whether a model taiknr has not yet seen reply borrows the previous model's ratio until its first reply (a), or uses characters ÷ 4 (b):
+
+> "2 we should go with A, as well. It's more honest, isn't it?"
+
+- **→ (a).** A model with no measured ratio borrows the previous model's ratio until its own first valid reply. The `uncalibrated` flag stays on until then. (The conductor's answer to his question: (a) is more accurate, not more honest; the flag carries the honesty under either option.)
+
+## A defect found in the live check (2026-11-17)
+
+Joel's screenshot showed each instrument's name doubled (`taiknr ctx ctx`, `arc arc`, `save save`): every default label and default format both carry the short name. It is this change's own code, so it is fixed in this change.

@@ -88,7 +88,7 @@ Three consequences matter beyond the size of the gap:
 - Right after a compaction pi's figure is `null`, while taiknr's is still a number.
 - A recall block counts in a request's usage and never in the persisted history, so the two measurements part company on a recalling turn.
 
-`taiknr.context` is the reading for these. It carries a figure built from taiknr's own estimate of the persisted history, corrected by the ratio below, so it never swaps estimators mid-stream: it moves by what was added and what was stubbed, not by 40% at once, and it is never `null`. It also offers a bar, which reads as that figure's share of the model's window. A format naming `$bar` draws it, and a session whose host reports no window gets an empty track rather than a wrong fill.
+`taiknr.context` is the reading for these. Its default format shows `contextInTurn`, the request the provider bills with recall's block: k × taiknr's estimate while the request is in flight, and the provider's own prompt count once its reply lands, on OpenRouter models as on Anthropic. Its bar reads that figure's share of the model's window. `$totalContext`, the persisted history, is the figure that never swaps estimators mid-stream: it moves by what was added and stubbed, not by 40% at once, and it is never `null`. A format naming `$bar` draws the bar, and a session whose host reports no window gets an empty track rather than a wrong fill.
 
 ### What each figure means
 
@@ -103,9 +103,9 @@ The figures overlap, so they are never added together. `recalled` is part of `co
 
 Three more describe the archive rather than one request: `archiveItems`, `archiveWithheld` and `archiveStubbed` count the whole store, which keeps items from before a compaction, so `archiveWithheld` is larger than a request's `withheld` once the branch has been compacted.
 
-Every token figure is a character estimate times one ratio, `k`: the prompt tokens of the newest valid reply for a provider and model, divided by the estimate of the request that produced it. One ratio is kept per provider and model and seeded from the session's branch at start, so a model switch starts uncalibrated again.
+Every token figure is a character estimate times one ratio, `k`: the prompt tokens of the newest valid reply for a provider and model, divided by the estimate of the request that produced it. One ratio is kept per provider and model and seeded from the session's branch at start. A model with no ratio of its own borrows the ratio of the model measured most recently until its own first reply is measured, so a model switch starts uncalibrated but not at the raw estimate; `k` is 1 only while no model has been measured on the branch or in this run.
 
-The `~` beside a figure means the provider and model it was posted under have no live sample yet, and the figure is uncalibrated: `k` is 1, or a seed read from the branch. The flag never means exact, and there is no second flag. Once a reply from that model has been measured, the flag turns off and the figures are calibrated estimates rather than raw ones.
+The `~` beside a figure means the provider and model it was posted under have no live sample yet, and the figure is uncalibrated: `k` is a seed read from the branch, another model's ratio borrowed until this one replies, or 1 while nothing has been measured. The flag never means exact, and there is no second flag. Once a reply from that model has been measured, the flag turns off and the figures are calibrated estimates rather than raw ones.
 
 Every token figure but one stays an estimate. `contextInTurn` becomes measured once its own reply lands, and the measured value is published only as `contextInTurn`: the saving is always computed from estimates, because subtracting a measured request from an estimated history would mix two different measurements.
 
@@ -134,17 +134,17 @@ Copy these into `~/.pi/agent/pi-jefferson.json`. The rows append to whatever is 
   "instruments": {
     "taiknr.context": {
       "label": "🗜️",
-      "format": "$totalContext/$contextWindow $approx $bar",
+      "format": "$contextInTurn/$contextWindow $approx $bar",
       "style": { "fg": "accent" }
     },
     "taiknr.archive": {
       "format": "$archiveItems items, $archiveWithheld withheld, $archiveStubbed stubbed $approx"
     },
     "taiknr.savings": {
-      "format": "saved $savedTokensSinceStart tok $savedDollarsSinceStart usd $approx"
+      "format": "$savedTokensSinceStart tok $savedDollarsSinceStart usd since start $approx"
     },
     "taiknr.recall": {
-      "format": "recalled $recalled tok $deciding $approx"
+      "format": "$recalled tok $deciding $approx"
     }
   }
 }
