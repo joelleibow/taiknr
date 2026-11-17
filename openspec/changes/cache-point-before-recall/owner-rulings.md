@@ -25,3 +25,11 @@ Joel's words only, quoted and dated. This file binds every other artifact and is
 > "Yeah. That's exactly the sort of thing that I requested we explore for. We can't create a card without identifying these unknowns first."
 
 - **Unknowns are settled by probing before they are planned on.**
+
+## 2026-11-17 — orientation questions
+
+The questions from `michael-orientation.md` §5 went to Joel as multiple-choice. His answers are recorded as the options he chose.
+
+- **Q1, his attribution extension: (a), "Relax the guard for message points".** Joel changes his `anthropic-attribution` extension so that cache points inside messages may change. System, tools, identity and the 4-point limit stay protected. taiknr then serves his route the same way it serves pi's own provider. The extension lives outside this repository, so the change does not edit it. Joel's edit is a dependency for his route.
+- **Q2, the objective against the figure: (a), "Fix cost, make the figure honest".** The figure prices the rewrite as it really happens. It may still read negative when recall really costs more than stubbing saves; the README says why and names `decisionThreshold` as the lever. Cost-aware recall and any credit to recall are out of scope.
+- **Q3, unmeasured routes: (a), "Measured routes only".** The change acts on Anthropic direct (OAuth and API key), Anthropic via OpenRouter, and Joel's attribution route. Bedrock and the other Anthropic-format gateways keep today's payloads, and their under-reporting is recorded.
