@@ -72,7 +72,10 @@ export function seedTable(seeds: readonly PairRatio[]): RatioTable {
 	return { entries, latest: seeds[0]?.pair };
 }
 
-/** A `/tree` jump's table: every live entry survives, and every other pair takes the new branch's seed. */
+/**
+ * A `/tree` jump's table: every live entry survives, every other pair takes the new branch's seed, and
+ * the borrow source stays a live pair's own (D7 step 5).
+ */
 export function reseedTable(table: RatioTable, seeds: readonly PairRatio[]): RatioTable {
 	const entries = new Map<string, RatioEntry>();
 	for (const [key, entry] of table.entries) {
@@ -82,7 +85,9 @@ export function reseedTable(table: RatioTable, seeds: readonly PairRatio[]): Rat
 		const key = pairKey(pair);
 		if (!entries.has(key)) entries.set(key, { k, live: false });
 	}
-	return { entries, latest: seeds[0]?.pair ?? table.latest };
+	// A live sample is the stronger ratio and outlives the jump; a seed divides by a reconstruction of a request.
+	const keepsLatest = table.latest !== undefined && table.entries.get(pairKey(table.latest))?.live === true;
+	return { entries, latest: keepsLatest ? table.latest : seeds[0]?.pair };
 }
 
 /** A live sample replaces its own pair's entry, which is the only thing that turns the flag off. */

@@ -109,11 +109,25 @@ test("the borrow source is the newest seed, then each live sample in turn", () =
 	expect(ratioFor(table, C)).toEqual({ k: 1.62, uncalibrated: true });
 });
 
-test("a tree jump borrows from the new branch's newest seed, and from the last measured pair when it has none", () => {
+test("a tree jump keeps a live borrow source, and before any live sample takes the new branch's newest seed", () => {
 	const live = withLiveSample(seedTable([seed(A, 1.7)]), seed(A, 1.62));
 
-	expect(ratioFor(reseedTable(live, [seed(B, 0.9)]), C)).toEqual({ k: 0.9, uncalibrated: true });
+	// A's live sample outlives the jump, so a pair with no entry of its own keeps borrowing it.
+	expect(ratioFor(reseedTable(live, [seed(B, 0.9)]), C)).toEqual({ k: 1.62, uncalibrated: true });
 	expect(ratioFor(reseedTable(live, []), C)).toEqual({ k: 1.62, uncalibrated: true });
+
+	// With no live sample anywhere, the new branch's newest seed is the ratio to take.
+	const seeded = seedTable([seed(A, 1.7)]);
+	expect(ratioFor(reseedTable(seeded, [seed(B, 0.9), seed(A, 3)]), C)).toEqual({ k: 0.9, uncalibrated: true });
+});
+
+test("a second jump still borrows from the pair measured live before the first", () => {
+	const live = withLiveSample(seedTable([seed(A, 1.677)]), seed(A, 1.677));
+	const firstJump = reseedTable(live, [seed(B, 1.239)]);
+	const secondJump = reseedTable(firstJump, []);
+
+	expect(ratioFor(firstJump, C)).toEqual({ k: 1.677, uncalibrated: true });
+	expect(ratioFor(secondJump, C)).toEqual({ k: 1.677, uncalibrated: true });
 });
 
 test("a borrowing pair turns calibrated at its own sample", () => {
@@ -132,7 +146,7 @@ test("a pair holding its own seeded entry borrows nothing", () => {
 	expect(ratioFor(table, B)).toEqual({ k: 0.93, uncalibrated: true });
 });
 
-test("a latest whose entry a reseed dropped reads k 1", () => {
+test("a jump to a branch with no reply, before any live sample, leaves nothing to borrow", () => {
 	const reseeded = reseedTable(seedTable([seed(B, 0.93), seed(A, 1.7)]), []);
 
 	expect(ratioFor(reseeded, C)).toEqual({ k: 1, uncalibrated: true });
