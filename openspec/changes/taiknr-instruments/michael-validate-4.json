@@ -1,0 +1,58 @@
+{
+  "verdict": "approve",
+  "requirements": [
+    {
+      "requirement": "Case (a) closed: after a jump to a branch whose newest reply is B, a model with no ratio borrows the live pair measured in this run",
+      "evidence": "Run in a mktemp clone at 6216ef9 after `npm ci` (removed afterwards). A scratch test on the real `seedTable`, `withLiveSample`, `reseedTable` and `ratioFor` uses this session's measured ratios: A = Opus live at 1.677, B = Gemini seed 1.239, C = Fable with no entry. After `reseedTable(live, [B 1.239])`, `latest` is Opus and C reads `{ k: 1.677, uncalibrated: true }` (B keeps its own 1.239). Against Fable's true prompt (875,338 for an estimate of 528,004) that is 1.16% off, down from 25.3% when it borrowed Gemini's seed at 9ded10d.",
+      "status": "met"
+    },
+    {
+      "requirement": "Case (b) closed: a second jump, to a branch with no reply, still borrows the live pair rather than reading k 1",
+      "evidence": "In the same scratch test, `reseedTable(jumped, [])` leaves `latest` on Opus. C reads `{ k: 1.677, uncalibrated: true }` and A reads `{ k: 1.677, uncalibrated: false }`. At 9ded10d, C read k 1 (39.7% low) while A was live.",
+      "status": "met"
+    },
+    {
+      "requirement": "Task 4.5 code: `reseedTable` keeps `latest` while its entry is live, otherwise takes `seeds[0]?.pair`, with no `?? table.latest`",
+      "evidence": "`git show 6216ef9 -- src/domain/calibration.ts`: `const keepsLatest = table.latest !== undefined && table.entries.get(pairKey(table.latest))?.live === true; return { entries, latest: keepsLatest ? table.latest : seeds[0]?.pair };`. This is the remedy run in michael-validate-3.json, character for character. A one-line why-comment and an updated JSDoc came with it, and nothing else in `src` changed.",
+      "status": "met"
+    },
+    {
+      "requirement": "Task 4.5 tests, red first",
+      "evidence": "tests/domain/calibration.test.ts:\n- :112 is now *a tree jump keeps a live borrow source, and before any live sample takes the new branch's newest seed*: live A at 1.62 survives jumps to `[B 0.9]` and to `[]`; seeded-only A jumping to `[B 0.9, A 3]` gives 0.9.\n- *a second jump still borrows from the pair measured live before the first* is new: 1.677 after both jumps.\n- :135 is renamed to *a jump to a branch with no reply, before any live sample, leaves nothing to borrow*, still k 1.\n\nWith 4066711's `calibration.ts` restored under these tests, 2 fail (the two new cases) and 23 pass. With 6216ef9's, all pass.",
+      "status": "met"
+    },
+    {
+      "requirement": "Mutations named by 4.5 (and 4.4's reseed mutation) turn red; the dropped clause is equivalent",
+      "evidence": "Full suite each, restored after each run:\n- R1, restoring `seeds[0]?.pair ?? table.latest`: RED (2).\n- R3, always keeping `latest`: RED (1).\n- R4, never keeping it: RED (3).\n- R2, keeping it whenever its entry survives, live or not: RED (1).\n- 4.4's reseed ignoring `seeds[0]`: RED (1).\n- R5, `?? table.latest` on the non-live branch: GREEN, the equivalent mutant 4.5 names as dead code.",
+      "status": "met"
+    },
+    {
+      "requirement": "Bambadjan's D7 and tasks edits (4066711) carry michael-validate-3.json's required change",
+      "evidence": "Read `git show 4066711`:\n- D7 step 5 :290 takes the new `session_tree` rule with the pi `navigateTree` citation.\n- :295 drops the accepted k = 1 corner.\n- Step 7 :300 names the keep-live and second-jump cases.\n- The *Interfaces* `reseedTable` comment, 4.4's text and boundary cases, and the new 4.5 match.\n\nAn `rg` across design.md, tasks.md, proposal.md, the delta specs, README.md and ARCHITECTURE.md finds none of the old rule's phrases (\"keeping the old one\", \"its entry is gone\", \"accepted: rare\", \"no `latest` entry\"). The delta spec's SHALL (context-figures :60, \"the newest live sample in this run, or else of the newest seed\") and README:106 are unchanged and now describe the code.",
+      "status": "met"
+    },
+    {
+      "requirement": "Mechanical checks on the new head",
+      "evidence": "- `npm run check` exits 0: Biome 80 files with no fixes, tsc clean, vitest 37 files and 543 tests.\n- Load check: stderr is empty. Under the positive control it prints `Failed to load extension: ParseError: Missing semicolon.`\n- `git diff abaa6b0 -- src tests` has no `biome-ignore`, `@ts-ignore`, `@ts-expect-error`, `eslint-disable`, `@ts-nocheck`, `.skip(`, `.only(` or `as any`.\n- `openspec validate taiknr-instruments --strict` is valid.\n- `git diff --name-only 9cbcb94 6216ef9` touches only design.md, tasks.md, `src/domain/calibration.ts` and `tests/domain/calibration.test.ts`.",
+      "status": "met"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "minor",
+      "location": "openspec/changes/taiknr-instruments/tasks.md:273 (scenario coverage for *A pair with no ratio of its own borrows the most recently measured one*)",
+      "finding": "The coverage line maps the borrowing requirement to tasks 2.1, 4.1, 4.2, 4.4, 6.6, 6.9, 10.1 and 10.2. It omits 4.5, which carries the tree-jump half of that requirement. The test file the line names is the one 4.5 changed, so coverage itself holds and only the task list is short.",
+      "required_change": "At the archive step, with gate 3's three minors and the stale 14.6 count, add 4.5 to the task list on :273.",
+      "required_change_ran": false
+    }
+  ],
+  "later_gates": [
+    "The archive step: gate 3's three minors (13.6 and the tree-test row's wording, the mutation counts in 4.4, 6.8 and 6.9, ARCHITECTURE.md:54), the stale 14.6 count, and this round's :273 coverage line; then the sync of the delta specs into `openspec/specs/` and the merge of PR #6.",
+    "Joel's own pi for the parts group 15 accepted unwatched (15.3's `/compact` and `/tree`, 15.5's `deciding N` flash, 15.6's live OpenRouter half)."
+  ],
+  "not_covered": [
+    "No live pi session and no model call.",
+    "Cases (a) and (b) were reproduced through the real domain functions, not through a publisher-level `treeJumped` call. `treeJumped` hands its reading's seeds straight to `reseedTable`, and the publisher and tree-registrar suites stay green at 543.",
+    "Gate 3's full mutation set was not re-run. Only `src/domain/calibration.ts` changed since 2177499, and every mutation over `reseedTable` was re-run here."
+  ]
+}
