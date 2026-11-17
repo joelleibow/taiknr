@@ -48,12 +48,12 @@ function deciding(readings: ReadingsView): string {
 	return `deciding ${count(readings, "decidingItems") ?? "0"}`;
 }
 
-/** The used share of the model's window, and `null` below one, which draws an unfilled track (S2). */
+/** The request's share of the model's window, and `null` below one, which draws an unfilled track (S2). */
 function bar(readings: ReadingsView): number | null {
-	const total = readings.totalContext;
+	const request = readings.contextInTurn;
 	const window = readings.contextWindow;
-	if (typeof total !== "number" || typeof window !== "number" || window <= 0) return null;
-	return (total / window) * 100;
+	if (typeof request !== "number" || typeof window !== "number" || window <= 0) return null;
+	return (request / window) * 100;
 }
 
 /**
@@ -73,7 +73,7 @@ export const TAIKNR_REGISTRATION: Registration<"taiknr"> = {
 				contextWindow: (readings) => count(readings, "contextWindow"),
 				approx,
 			},
-			defaultFormat: "ctx $totalContext/$contextWindow $approx $bar",
+			defaultFormat: "$contextInTurn/$contextWindow $approx $bar",
 			defaultLabel: "taiknr ctx",
 			bar,
 		},
@@ -87,7 +87,7 @@ export const TAIKNR_REGISTRATION: Registration<"taiknr"> = {
 				stubbed: (readings) => count(readings, "stubbed"),
 				approx,
 			},
-			defaultFormat: "arc $archiveItems $archiveWithheld to $archiveStubbed $approx",
+			defaultFormat: "$archiveItems $archiveWithheld to $archiveStubbed $approx",
 			defaultLabel: "taiknr arc",
 		},
 		{
@@ -103,7 +103,7 @@ export const TAIKNR_REGISTRATION: Registration<"taiknr"> = {
 				approx,
 			},
 			defaultFormat:
-				"save $savedTokensRequest tok $savedDollarsRequest usd, $savedTokensSinceStart tokens not sent since start, $savedDollarsSinceStart usd net since start $approx",
+				"$savedTokensRequest tok $savedDollarsRequest usd, $savedTokensSinceStart tokens not sent since start, $savedDollarsSinceStart usd net since start $approx",
 			defaultLabel: "taiknr save",
 		},
 		{
@@ -114,7 +114,7 @@ export const TAIKNR_REGISTRATION: Registration<"taiknr"> = {
 				decidingItems: (readings) => count(readings, "decidingItems"),
 				approx,
 			},
-			defaultFormat: "rec $recalled tok $deciding $approx",
+			defaultFormat: "$recalled tok $deciding $approx",
 			defaultLabel: "taiknr recall",
 		},
 	],

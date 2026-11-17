@@ -13,6 +13,8 @@ import {
 
 const A: Pair = { provider: "anthropic", model: "claude-opus-5-5" };
 const B: Pair = { provider: "openrouter", model: "deepseek/deepseek-v4.1-flash" };
+/** A pair the table never holds an entry for, so every read of it borrows. */
+const C: Pair = { provider: "openai", model: "gpt-5-5" };
 
 const usage = (input: number, cacheRead = 0, cacheWrite = 0): UsageCounts => ({ input, cacheRead, cacheWrite });
 
@@ -84,16 +86,59 @@ test("a tree jump keeps the live entries and reseeds the rest from the new branc
 	expect(ratioFor(reseeded, B)).toEqual({ k: 0.9, uncalibrated: true });
 });
 
-test("a pair present only in the old branch has no entry after a tree jump", () => {
+test("a pair present only in the old branch loses its entry at a tree jump and borrows", () => {
 	const live = withLiveSample(seedTable([seed(A, 1.7), seed(B, 0.93)]), seed(A, 1.6));
 	const reseeded = reseedTable(live, []);
 
 	expect(ratioFor(reseeded, A)).toEqual({ k: 1.6, uncalibrated: false });
-	expect(ratioFor(reseeded, B)).toEqual({ k: 1, uncalibrated: true });
+	expect(ratioFor(reseeded, B)).toEqual({ k: 1.6, uncalibrated: true });
 });
 
-test("a pair with neither a live entry nor a seed reads k 1 with the flag on", () => {
-	expect(ratioFor(seedTable([seed(A, 1.7)]), B)).toEqual({ k: 1, uncalibrated: true });
+test("a pair with no entry borrows the most recently measured pair's k with the flag on", () => {
+	expect(ratioFor(seedTable([seed(A, 1.677)]), C)).toEqual({ k: 1.677, uncalibrated: true });
+});
+
+test("the borrow source is the newest seed, then each live sample in turn", () => {
+	let table = seedTable([seed(A, 1.7), seed(B, 0.93)]);
+	expect(ratioFor(table, C)).toEqual({ k: 1.7, uncalibrated: true });
+
+	table = withLiveSample(table, seed(B, 0.95));
+	expect(ratioFor(table, C)).toEqual({ k: 0.95, uncalibrated: true });
+
+	table = withLiveSample(table, seed(A, 1.62));
+	expect(ratioFor(table, C)).toEqual({ k: 1.62, uncalibrated: true });
+});
+
+test("a tree jump borrows from the new branch's newest seed, and from the last measured pair when it has none", () => {
+	const live = withLiveSample(seedTable([seed(A, 1.7)]), seed(A, 1.62));
+
+	expect(ratioFor(reseedTable(live, [seed(B, 0.9)]), C)).toEqual({ k: 0.9, uncalibrated: true });
+	expect(ratioFor(reseedTable(live, []), C)).toEqual({ k: 1.62, uncalibrated: true });
+});
+
+test("a borrowing pair turns calibrated at its own sample", () => {
+	let table = seedTable([seed(A, 1.677)]);
+	expect(ratioFor(table, B)).toEqual({ k: 1.677, uncalibrated: true });
+
+	table = withLiveSample(table, seed(B, 1.658));
+
+	expect(ratioFor(table, B)).toEqual({ k: 1.658, uncalibrated: false });
+	expect(ratioFor(table, C)).toEqual({ k: 1.658, uncalibrated: true });
+});
+
+test("a pair holding its own seeded entry borrows nothing", () => {
+	const table = withLiveSample(seedTable([seed(A, 1.7), seed(B, 0.93)]), seed(A, 1.6));
+
+	expect(ratioFor(table, B)).toEqual({ k: 0.93, uncalibrated: true });
+});
+
+test("a latest whose entry a reseed dropped reads k 1", () => {
+	const reseeded = reseedTable(seedTable([seed(B, 0.93), seed(A, 1.7)]), []);
+
+	expect(ratioFor(reseeded, C)).toEqual({ k: 1, uncalibrated: true });
+});
+
+test("an empty table reads k 1 with the flag on", () => {
 	expect(ratioFor(seedTable([]), A)).toEqual({ k: 1, uncalibrated: true });
 });
 

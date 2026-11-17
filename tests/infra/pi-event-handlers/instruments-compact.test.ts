@@ -85,19 +85,34 @@ test("a compaction re-posts both figures after re-hydration and keeps a pair's l
 		// The store's sizes are k-scaled too, at the live 0.62: 100 tokens and the 4-token stub.
 		archiveStubbed: 2,
 		archiveWithheld: 62,
+		// A compaction starts a history no request has been built from, so the bar reads the history (6.8).
+		contextInTurn: 155,
 		contextWindow: 200_000,
+		historyBefore: 155,
+		recalled: 0,
+		stubbed: 0,
 		totalContext: 155,
 		uncalibrated: false,
+		withheld: 0,
 	});
 });
 
-test("a compaction on a pair with no entry posts k 1 with the flag on", () => {
+test("a compaction on a pair with no entry borrows the measured pair's k with the flag on", () => {
 	const { start, fire, last } = harness();
 	start([{ pair: A, k: 0.5 }]);
 
 	fire({ model: OTHER, projectionMessages: [message(1000)], contextWindow: 0 });
 
-	expect(last()).toMatchObject({ totalContext: 250, uncalibrated: true });
+	// 250 tokens of the new history at A's 0.5: a pair with no ratio of its own borrows it (4.4).
+	expect(last()).toMatchObject({ totalContext: 125, uncalibrated: true });
+});
+
+test("a compaction on a branch with no ratio anywhere posts k 1 with the flag on", () => {
+	const { fire, last } = harness();
+
+	fire({ model: OTHER, projectionMessages: [message(1000)], contextWindow: 200_000 });
+
+	expect(last()).toMatchObject({ contextInTurn: 250, totalContext: 250, uncalibrated: true });
 });
 
 test("with the switch off nothing is posted and no host read happens", () => {

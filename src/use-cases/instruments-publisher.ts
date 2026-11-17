@@ -125,6 +125,14 @@ interface PendingRequest {
 	candidate: RequestCandidate;
 }
 
+/**
+ * A history no request has been built from: context in turn and history before carry the history's
+ * size and the three request figures are zero, so the bar never draws a request that is gone (D5).
+ */
+function noRequestYet(totalContext: number) {
+	return { contextInTurn: totalContext, historyBefore: totalContext, withheld: 0, stubbed: 0, recalled: 0 };
+}
+
 /** The smallest index among the stubs the baseline did not carry: a rewrite suffix start (D8). */
 function newStubStart(matches: readonly StubMatch[], baseline: RequestCandidate | undefined): number | undefined {
 	const carried = baseline?.stubs;
@@ -167,6 +175,12 @@ export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): Inst
 		deps.sink.post({ archiveItems: deps.store.size(), ...contextFigures(readings) });
 	};
 
+	/** A compaction or a tree jump starts a history, so its request figures are the opening ones (D5). */
+	const postNewHistory = (readings: CompactedReadings) => {
+		const figures = contextFigures(readings);
+		deps.sink.post({ archiveItems: deps.store.size(), ...figures, ...noRequestYet(figures.totalContext) });
+	};
+
 	/** The rewrite suffix's size, and whether the block rides a message the baseline never carried. */
 	const rewriteOf = (request: PendingRequest) => {
 		const previousLength = baseline?.length ?? 0;
@@ -195,11 +209,7 @@ export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): Inst
 			const { k, uncalibrated } = ratioFor(table, readings.pair);
 			const totalContext = posted(readings.projectionEstimate, k);
 			const opening: FigureValues = {
-				contextInTurn: totalContext,
-				historyBefore: totalContext,
-				withheld: 0,
-				stubbed: 0,
-				recalled: 0,
+				...noRequestYet(totalContext),
 				totalContext,
 				archiveItems: deps.store.size(),
 				...archiveSizes(k),
@@ -303,7 +313,7 @@ export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): Inst
 			const readings = read();
 			pending = undefined;
 			baseline = undefined;
-			postContextAndArchive(readings);
+			postNewHistory(readings);
 		},
 
 		treeJumped(read) {
@@ -311,7 +321,7 @@ export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): Inst
 			table = reseedTable(table, readings.seeds);
 			pending = undefined;
 			baseline = undefined;
-			postContextAndArchive(readings);
+			postNewHistory(readings);
 		},
 
 		reportRecalled(read) {

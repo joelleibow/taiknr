@@ -5,6 +5,7 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { expect, test } from "vitest";
+import { ratioFor, seedTable } from "../../../src/domain/calibration.js";
 import {
 	readCompacted,
 	readRequest,
@@ -225,4 +226,40 @@ test("an assistant message with no usage is not a sample, as pi's own rule has i
 	const ctx = context({ model: { ...MODEL, api: "pi-virtual" }, branch: manager.getBranch() });
 	expect(readSessionStarted(ctx).seeds).toEqual([{ pair: PAIR, k: 500 / estimateTokens(user("hi")) }]);
 	expect(readSessionStarted(ctx).pair).toEqual(PAIR);
+});
+
+test("seeds come newest pair first, so the first seed is the pair a model with no ratio borrows from", () => {
+	const gemini = { provider: "openrouter", model: "google/gemini-4-hydrogen" };
+	const manager = branchOf(
+		user("hi"),
+		assistant(),
+		user("again", 3),
+		assistant({ provider: gemini.provider, model: gemini.model, usage: { ...USAGE, input: 900 } }),
+	);
+	const ctx = context({ model: MODEL, branch: manager.getBranch() });
+	const seeds = readSessionStarted(ctx).seeds;
+
+	expect(seeds.map(({ pair }) => pair)).toEqual([gemini, PAIR]);
+	// The first seed is the one a pair with no ratio of its own borrows, so the order is what the borrow reads.
+	const produced = [user("hi"), assistant(), user("again", 3)].reduce(
+		(total, message) => total + estimateTokens(message),
+		0,
+	);
+	const stranger = { provider: "openai", model: "gpt-5-5" };
+	expect(ratioFor(seedTable(seeds), stranger)).toEqual({ k: 900 / produced, uncalibrated: true });
+});
+
+test("a newest reply that is not a sample leaves the order to the newest one that is", () => {
+	const gemini = { provider: "openrouter", model: "google/gemini-4-hydrogen" };
+	const manager = branchOf(
+		user("hi"),
+		assistant(),
+		user("again", 3),
+		assistant({ provider: gemini.provider, model: gemini.model, usage: { ...USAGE, input: 900 } }),
+		user("and again", 5),
+		assistant({ provider: "openrouter", model: "another-model", stopReason: "error" }),
+	);
+	const ctx = context({ model: MODEL, branch: manager.getBranch() });
+
+	expect(readSessionStarted(ctx).seeds.map(({ pair }) => pair)).toEqual([gemini, PAIR]);
 });

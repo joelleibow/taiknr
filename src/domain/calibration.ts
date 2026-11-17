@@ -23,8 +23,15 @@ export interface RatioEntry {
 	live: boolean;
 }
 
-/** Keyed by `pairKey`, which is private to this module, so a table is only read through the functions below. */
-export type RatioTable = ReadonlyMap<string, RatioEntry>;
+/**
+ * Keyed by `pairKey`, which is private to this module, so a table is only read through the functions
+ * below. `latest` is the pair whose ratio the table took most recently, held as a pair and never as a
+ * copied k, so a pair's ratio has one home (design D7).
+ */
+export type RatioTable = {
+	readonly entries: ReadonlyMap<string, RatioEntry>;
+	readonly latest: Pair | undefined;
+};
 
 /** One key per pair, with a separator no provider or model id carries. */
 function pairKey(pair: Pair): string {
@@ -57,37 +64,43 @@ export function sampleRatio(stopReason: string, usage: UsageCounts, estimate: nu
  * because a seed divides by a reconstruction of the request (D7).
  */
 export function seedTable(seeds: readonly PairRatio[]): RatioTable {
-	const table = new Map<string, RatioEntry>();
+	const entries = new Map<string, RatioEntry>();
 	for (const { pair, k } of seeds) {
 		const key = pairKey(pair);
-		if (!table.has(key)) table.set(key, { k, live: false });
+		if (!entries.has(key)) entries.set(key, { k, live: false });
 	}
-	return table;
+	return { entries, latest: seeds[0]?.pair };
 }
 
 /** A `/tree` jump's table: every live entry survives, and every other pair takes the new branch's seed. */
 export function reseedTable(table: RatioTable, seeds: readonly PairRatio[]): RatioTable {
-	const reseeded = new Map<string, RatioEntry>();
-	for (const [key, entry] of table) {
-		if (entry.live) reseeded.set(key, entry);
+	const entries = new Map<string, RatioEntry>();
+	for (const [key, entry] of table.entries) {
+		if (entry.live) entries.set(key, entry);
 	}
 	for (const { pair, k } of seeds) {
 		const key = pairKey(pair);
-		if (!reseeded.has(key)) reseeded.set(key, { k, live: false });
+		if (!entries.has(key)) entries.set(key, { k, live: false });
 	}
-	return reseeded;
+	return { entries, latest: seeds[0]?.pair ?? table.latest };
 }
 
 /** A live sample replaces its own pair's entry, which is the only thing that turns the flag off. */
 export function withLiveSample(table: RatioTable, sample: PairRatio): RatioTable {
-	const tableWithSample = new Map(table);
-	tableWithSample.set(pairKey(sample.pair), { k: sample.k, live: true });
-	return tableWithSample;
+	const entries = new Map(table.entries);
+	entries.set(pairKey(sample.pair), { k: sample.k, live: true });
+	return { entries, latest: sample.pair };
 }
 
-/** The k an update is posted under, and whether that pair has no live sample in this run. */
+/**
+ * The k an update is posted under, and whether that pair has no live sample in this run. A pair with
+ * no ratio of its own borrows the one measured most recently, which keeps a model switch from pricing
+ * at the raw estimate (owner-rulings.md 2026-11-17).
+ */
 export function ratioFor(table: RatioTable, pair: Pair | undefined): { k: number; uncalibrated: boolean } {
-	const entry = pair === undefined ? undefined : table.get(pairKey(pair));
-	if (entry === undefined) return { k: 1, uncalibrated: true };
-	return { k: entry.k, uncalibrated: !entry.live };
+	if (pair === undefined) return { k: 1, uncalibrated: true };
+	const entry = table.entries.get(pairKey(pair));
+	if (entry !== undefined) return { k: entry.k, uncalibrated: !entry.live };
+	const borrowed = table.latest === undefined ? undefined : table.entries.get(pairKey(table.latest));
+	return { k: borrowed?.k ?? 1, uncalibrated: true };
 }

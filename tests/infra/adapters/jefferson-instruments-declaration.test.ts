@@ -86,6 +86,24 @@ test("every default format names only declared fields and the two derived variab
 	}
 });
 
+test("every default format leaves the instrument's name to its label", () => {
+	expect(TAIKNR_REGISTRATION.instruments.map(({ defaultFormat }) => defaultFormat)).toEqual([
+		"$contextInTurn/$contextWindow $approx $bar",
+		"$archiveItems $archiveWithheld to $archiveStubbed $approx",
+		"$savedTokensRequest tok $savedDollarsRequest usd, $savedTokensSinceStart tokens not sent since start, $savedDollarsSinceStart usd net since start $approx",
+		"$recalled tok $deciding $approx",
+	]);
+
+	for (const { defaultLabel, defaultFormat } of TAIKNR_REGISTRATION.instruments) {
+		// Jefferson writes the label, one space, then the format, so a short name in both prints twice.
+		const literalWords = defaultFormat.replace(/\$\w+/g, " ").split(/\W+/);
+		const labelWords = (defaultLabel ?? "").split(/\W+/).filter((word) => word !== "" && word !== "taiknr");
+		for (const word of labelWords) expect(literalWords, `${word} in ${defaultFormat}`).not.toContain(word);
+	}
+
+	expect(declaration("taiknr.context").defaultFormat.endsWith("$bar")).toBe(true);
+});
+
 test("the savings format carries the since-start label in its own words", () => {
 	expect(declaration("taiknr.savings").defaultFormat).toContain("$savedTokensSinceStart tokens not sent since start");
 });
@@ -97,15 +115,25 @@ test("the bar is declared on the context instrument alone", () => {
 	}
 });
 
-test("the bar is the used share of the window, and null when there is no window", () => {
+test("the bar is the request's share of the window, and null when there is no window", () => {
 	const bar = declaration("taiknr.context").bar;
 	if (bar === undefined) throw new Error("the context instrument declares no bar");
 
-	expect(bar({ ...everyField(), totalContext: 50_000, contextWindow: 200_000 })).toBe(25);
-	expect(bar({ ...everyField(), totalContext: 0, contextWindow: 200_000 })).toBe(0);
-	expect(bar({ ...everyField(), totalContext: 1000, contextWindow: 0 })).toBeNull();
-	expect(bar({ ...everyField(), totalContext: 1000, contextWindow: -1 })).toBeNull();
-	expect(bar({ ...everyField(), totalContext: undefined, contextWindow: 200_000 })).toBeNull();
+	expect(bar({ ...everyField(), contextInTurn: 50_000, totalContext: 10_000, contextWindow: 200_000 })).toBe(25);
+	expect(bar({ ...everyField(), contextInTurn: 0, contextWindow: 200_000 })).toBe(0);
+	expect(bar({ ...everyField(), contextInTurn: 1000, contextWindow: 0 })).toBeNull();
+	expect(bar({ ...everyField(), contextInTurn: 1000, contextWindow: -1 })).toBeNull();
+	expect(bar({ ...everyField(), contextInTurn: undefined, contextWindow: 200_000 })).toBeNull();
+});
+
+test("an OpenRouter response's prompt fills the bar as an Anthropic one does", () => {
+	const bar = declaration("taiknr.context").bar;
+	if (bar === undefined) throw new Error("the context instrument declares no bar");
+
+	// pi's openai-completions parser sets input = max(0, prompt − cacheRead − cacheWrite), so the sum is prompt_tokens.
+	const geminiPrompt = 3274 + 19_644 + 0;
+
+	expect(bar({ ...everyField(), contextInTurn: geminiPrompt, contextWindow: 1_000_000 })).toBeCloseTo(2.2918, 9);
 });
 
 test("the estimate flag renders a tilde while uncalibrated and nothing once calibrated", () => {

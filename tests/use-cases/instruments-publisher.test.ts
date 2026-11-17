@@ -13,6 +13,8 @@ import {
 
 const A: Pair = { provider: "anthropic", model: "claude-opus-5-5" };
 const B: Pair = { provider: "openrouter", model: "deepseek/deepseek-v4.1-flash" };
+/** The pair of the measured model switch: Opus 5.5 → Fable 5.2 (owner-rulings.md 2026-11-17). */
+const FABLE: Pair = { provider: "anthropic", model: "claude-fable-5-2" };
 
 /** Read $1.50/M and write $18.75/M, the design's dollar-table rates. */
 const READ = 1.5e-6;
@@ -80,6 +82,21 @@ const CONTEXT_KEYS = [
 	"contextWindow",
 	"totalContext",
 	"uncalibrated",
+];
+
+/** A branch event that starts a history: the six context fields and the five a request-less history posts. */
+const NEW_HISTORY_KEYS = [
+	"archiveItems",
+	"archiveStubbed",
+	"archiveWithheld",
+	"contextInTurn",
+	"contextWindow",
+	"historyBefore",
+	"recalled",
+	"stubbed",
+	"totalContext",
+	"uncalibrated",
+	"withheld",
 ];
 
 const UNPRICED_KEYS = ["archiveStubbed", "archiveWithheld", "contextWindow", "totalContext", "uncalibrated"];
@@ -709,15 +726,78 @@ test.each(["compacted", "treeJumped"] as const)("a %s keeps the uncharged spend"
 	expect(last().savedDollarsRequest).toBeCloseTo(96 * READ - 0.001, 9);
 });
 
-test("settled, compacted and a tree jump each post exactly the six context and archive fields", () => {
+test("a settlement posts the six context and archive fields alone", () => {
+	const { publisher, last, start } = harness({ items: [ONE] });
+	start({ pair: A });
+
+	publisher.settled(() => ({ pair: A, projectionEstimate: 700, contextWindow: 200_000 }));
+
+	expect(Object.keys(last()).sort()).toEqual(CONTEXT_KEYS);
+	expect(last()).toEqual({
+		archiveItems: 1,
+		archiveStubbed: 4,
+		archiveWithheld: 100,
+		contextWindow: 200_000,
+		totalContext: 700,
+		uncalibrated: true,
+	});
+});
+
+test("compacted and a tree jump post the six context fields and the request figures of a history with no request yet", () => {
 	const { publisher, recorded, start } = harness({ items: [ONE] });
 	start({ pair: A });
 
-	publisher.settled(contextReading);
-	publisher.compacted(contextReading);
-	publisher.treeJumped(() => ({ ...contextReading(), seeds: [] }));
+	publisher.compacted(() => ({ pair: A, projectionEstimate: 700, contextWindow: 200_000 }));
+	publisher.treeJumped(() => ({ pair: A, projectionEstimate: 300, contextWindow: 200_000, seeds: [] }));
 
-	for (const post of recorded.posts.slice(-3)) expect(Object.keys(post).sort()).toEqual(CONTEXT_KEYS);
+	const [compacted, jumped] = recorded.posts.slice(-2);
+	expect(Object.keys(compacted).sort()).toEqual(NEW_HISTORY_KEYS);
+	expect(compacted).toEqual({
+		archiveItems: 1,
+		archiveStubbed: 4,
+		archiveWithheld: 100,
+		contextInTurn: 700,
+		contextWindow: 200_000,
+		historyBefore: 700,
+		recalled: 0,
+		stubbed: 0,
+		totalContext: 700,
+		uncalibrated: true,
+		withheld: 0,
+	});
+	expect(Object.keys(jumped).sort()).toEqual(NEW_HISTORY_KEYS);
+	expect(jumped).toMatchObject({ contextInTurn: 300, historyBefore: 300, totalContext: 300, withheld: 0 });
+});
+
+test("a compaction that starts an empty history still posts its request figures", () => {
+	const { publisher, last, start } = harness();
+	start({ pair: A });
+
+	publisher.compacted(() => ({ pair: A, projectionEstimate: 0, contextWindow: 0 }));
+
+	expect(Object.keys(last()).sort()).toEqual(NEW_HISTORY_KEYS);
+	expect(last()).toEqual({
+		archiveItems: 0,
+		archiveStubbed: 0,
+		archiveWithheld: 0,
+		contextInTurn: 0,
+		contextWindow: 0,
+		historyBefore: 0,
+		recalled: 0,
+		stubbed: 0,
+		totalContext: 0,
+		uncalibrated: true,
+		withheld: 0,
+	});
+});
+
+test("a tree jump whose reading carries no pair posts the history at k 1", () => {
+	const { publisher, last, start } = harness();
+	start({ pair: A, seeds: [{ pair: A, k: 1.5 }] });
+
+	publisher.treeJumped(() => ({ pair: undefined, projectionEstimate: 200, contextWindow: 1000, seeds: [] }));
+
+	expect(last()).toMatchObject({ contextInTurn: 200, historyBefore: 200, totalContext: 200, uncalibrated: true });
 });
 
 test("a settled reading's pair takes its live k, and a seeded pair's k with the flag on", () => {
@@ -729,8 +809,32 @@ test("a settled reading's pair takes its live k, and a seeded pair's k with the 
 	publisher.settled(() => ({ pair: A, projectionEstimate: 1000, contextWindow: 2000 }));
 	expect(last()).toMatchObject({ totalContext: 620, uncalibrated: false });
 
+	// A pair with no entry borrows the most recently measured pair's k, and stays uncalibrated (4.4).
 	publisher.settled(() => ({ pair: B, projectionEstimate: 1000, contextWindow: 2000 }));
-	expect(last()).toMatchObject({ totalContext: 1000, uncalibrated: true });
+	expect(last()).toMatchObject({ totalContext: 620, uncalibrated: true });
+});
+
+test("a switch to a model with no ratio borrows the last measured model's k until its own first valid reply", () => {
+	const { publisher, last, start } = harness();
+	start({ pair: A });
+	publisher.requestBuilt(() => reading({ pair: A, messageEstimates: [100_000] }));
+	publisher.responseReceived(response({ input: 167_700 }), () => ({
+		pair: A,
+		projectionEstimate: 0,
+		contextWindow: 200_000,
+	}));
+	expect(last().uncalibrated).toBe(false);
+
+	publisher.requestBuilt(() => reading({ pair: FABLE, messageEstimates: [528_004] }));
+	expect(last()).toMatchObject({ contextInTurn: Math.round(1.677 * 528_004), uncalibrated: true });
+
+	publisher.responseReceived(response({ input: 875_338 }, { pair: FABLE }), () => ({
+		pair: FABLE,
+		projectionEstimate: 0,
+		contextWindow: 200_000,
+	}));
+
+	expect(last()).toMatchObject({ contextInTurn: 875_338, uncalibrated: false });
 });
 
 test("a compaction keeps the table, and a tree jump keeps every live entry and reseeds the rest", () => {
