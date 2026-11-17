@@ -252,14 +252,16 @@ Each registrar is called through the gated pi, registers exactly its one event, 
 
 ## 15. Joel observes the instruments in his own pi — his group, not the coder's
 
+Ticked 2026-11-17 on Joel's words, recorded in owner-rulings.md under "Joel's live check, group 15": "It's working and I'm seeing the instruments actively updating. I love that." / "I think we're good here." The unwatched parts are listed there.
+
 The runtime acceptance of this change. No test can make it: only Joel's own pi shows whether Jefferson accepts the registration and every update (J2; T10), and it is the last hand-off in `design.md`'s Migration Plan. The coder never ticks these; the conductor ticks each with Joel's observation in his own words. They are not part of the implementation gate.
 
-- [ ] 15.1 **(Joel's.)** With the rows design.md's Migration Plan hand-off 2 adds, `/reload` and confirm no *not a known instrument* warning for any of the four rows and that a `taiknr.savings` since-start figure that read non-zero before the `/reload` reads `0 tokens not sent since start` and `0.0000 usd net since start` after it, until the next priced response, which is what a fresh Jefferson registering for the first time looks like (ruling 12).
-- [ ] 15.2 **(Joel's.)** Watch `taiknr.context` in a real session: the figures, and the bar if his format names `$bar`, updating at each request and response — and the reading not jumping after a settlement, which is the jump this change exists to answer (J5; M1; T1).
-- [ ] 15.3 **(Joel's.)** Watch `taiknr.archive` across a settlement: the item count and both sizes move when the store does, at the settlement and after a compaction or tree jump (S6; T15).
-- [ ] 15.4 **(Joel's.)** Watch `taiknr.savings` at a response: the per-request and since-start pair in tokens and dollars, rendering a negative figure as itself (J12; T19).
-- [ ] 15.5 **(Joel's.)** Watch `taiknr.recall` while recall's classifier call runs: it reads `deciding N` for as long as the call runs and returns to `idle` on every exit (J13; T23).
-- [ ] 15.6 **(Joel's.)** After the fixes, `taiknr.context`'s number and bar read the request (recall's block included) on an Anthropic and an OpenRouter model, and after a compaction they read the new history, not the last request. Each instrument's name shows once (owner-rulings.md 2026-11-17).
+- [x] 15.1 **(Joel's.)** With the rows design.md's Migration Plan hand-off 2 adds, `/reload` and confirm no *not a known instrument* warning for any of the four rows and that a `taiknr.savings` since-start figure that read non-zero before the `/reload` reads `0 tokens not sent since start` and `0.0000 usd net since start` after it, until the next priced response, which is what a fresh Jefferson registering for the first time looks like (ruling 12).
+- [x] 15.2 **(Joel's.)** Watch `taiknr.context` in a real session: the figures, and the bar if his format names `$bar`, updating at each request and response — and the reading not jumping after a settlement, which is the jump this change exists to answer (J5; M1; T1).
+- [x] 15.3 **(Joel's.)** Watch `taiknr.archive` across a settlement: the item count and both sizes move when the store does, at the settlement and after a compaction or tree jump (S6; T15).
+- [x] 15.4 **(Joel's.)** Watch `taiknr.savings` at a response: the per-request and since-start pair in tokens and dollars, rendering a negative figure as itself (J12; T19).
+- [x] 15.5 **(Joel's.)** Watch `taiknr.recall` while recall's classifier call runs: it reads `deciding N` for as long as the call runs and returns to `idle` on every exit (J13; T23).
+- [x] 15.6 **(Joel's.)** After the fixes, `taiknr.context`'s number and bar read the request (recall's block included) on an Anthropic and an OpenRouter model, and after a compaction they read the new history, not the last request. Each instrument's name shows once (owner-rulings.md 2026-11-17).
 
 ## Scenario coverage
 

@@ -177,3 +177,24 @@ Asked whether a model taiknr has not yet seen reply borrows the previous model's
 ## A defect found in the live check (2026-11-17)
 
 Joel's screenshot showed each instrument's name doubled (`taiknr ctx ctx`, `arc arc`, `save save`): every default label and default format both carry the short name. It is this change's own code, so it is fixed in this change.
+
+## Joel's live check, group 15 (2026-11-17)
+
+Joel ran the instruments in his own pi on this branch, first before the live-check fixes and then after them, with the defaults and with his own formats, on Opus 5.5, Fable 5.2 and an OpenRouter Gemini 4 Hydrogen session.
+
+> "First things first, this is super cool!!!! It's working and I'm seeing the instruments actively updating. I love that."
+
+> "No. I think we're good here. We can follow up if anything odd arises."
+
+- **Group 15 accepted.** What his screenshots showed:
+  - after `/reload`, single-name rows, no warning, and since-start totals at 0;
+  - in flight, pi's bar jumping from 52.6% to 90.0% while `taiknr.context` held near 900k, with the `~` clearing at the first live reply; at settlement, pi falling back to 53.0% while taiknr held at 904,677;
+  - the archive growing from 85 to 86 items at a settlement;
+  - savings of 579,009 then 925,738 tokens not sent since start, at +$0.1140 then +$0.1570 net;
+  - recall showing `2029 tok` after a recalling message;
+  - taiknr's figure within about 0.1% of Anthropic's bill (899,938 against 899,367).
+- **Accepted without being watched:** 15.3's `/compact` and `/tree` part; 15.5's `deciding N` flash, which lasts about 250 ms; and 15.6's OpenRouter half, which the conductor checked against Joel's Gemini 4 Hydrogen session file (input + cacheRead equal totalTokens − output on every reply) rather than live.
+
+> "FWIW, I do find that irrelevant recalls sneaking in to be a bit of a concern but that could just be a confidence ranking tweak in settings."
+
+- **Out of scope here.** Irrelevant items reach recall at the default `decisionThreshold` of 0.5. This goes to the board's threshold-tuning card.
