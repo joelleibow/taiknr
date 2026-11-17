@@ -1,0 +1,54 @@
+{
+  "findings": [
+    {
+      "finding": "Bambadjan did not replace the requirement sentence as written; he split it into two requirements. *A saving is priced at the rates the request's own response reported* now holds *A cold request*, the new *A warm request that read only part of its prefix* and *The edges the design decides*. *Dollar savings are net of cache rewrites and of recall's classifier spend* keeps the rest. The rule is what I asked for, and `openspec validate taiknr-instruments --strict` passes.\n\nThe split left tasks.md's Scenario coverage stale. Line 265 still lists *A cold request* and *The edges the design decides* under the net-dollars requirement and has no line for the new requirement or its new scenario. The scenario is proven: the publisher test \"a %s between two requests clears the rewrite baseline\" asserts read-rate pricing on the first priced request after a compaction and after a tree jump. Only the coverage map is out of date, and the fix is documentation only.",
+      "location": "openspec/changes/taiknr-instruments/tasks.md:265 (Scenario coverage, `context-figures`)",
+      "required_change": "Route to Bambadjan at the archive step.\n\n1. Split tasks.md:265 into two lines.\n2. First line: \"*A saving is priced at the rates the request's own response reported* — *A cold request*, *A warm request that read only part of its prefix*, *The edges the design decides* → tasks 5.1, 6.3, 6.4; `tests/domain/savings-dollars.test.ts`, `tests/use-cases/instruments-publisher.test.ts` (\\\"a %s between two requests clears the rewrite baseline\\\"). A7.\"\n3. Second line: keep the net-dollars requirement's remaining five scenarios, with the tasks and tests they already cite.",
+      "required_change_ran": false,
+      "severity": "minor"
+    }
+  ],
+  "later_gates": [
+    "Joel's live look (group 15): Jefferson renders the four formats and the bar; a `/reload` shows no *not a known instrument* warning and resets the since-start totals; `deciding N` returns to `idle`.",
+    "Bambadjan's sync and archive, which carries the split `context-figures` requirements into `openspec/specs/` and fixes the tasks.md coverage line (finding 1).",
+    "The deferred follow-up that moves the recall test fixtures to one home under `tests/support/`."
+  ],
+  "not_covered": [
+    "I did not re-run gate 2's full mutation set. The only `src` change since gate 2 is the one-line filter in `assistantEntries`, which I checked red/green.",
+    "I read the README only at the two lines finding 3 and finding 4 touched, plus the counterfactual paragraph above them at line 114. I did not re-read the rest of the docs pass.",
+    "Jefferson's TUI rendering and its verdict on each live update. Those remain Joel's group 15."
+  ],
+  "requirements": [
+    {
+      "evidence": "Setup: a `mktemp -d` clone at `5b6f2d4` with `npm ci` (Node v26.8.1, vitest 5.1.0, Biome 2.6.7).\n\n- `npm run check` exited 0: Biome checked 80 files with no fixes, `tsc` was clean, and vitest ran 37 files and 527 tests.\n- `npm install` after `npm ci` left `git status` clean.\n- The suppression search over `git diff abaa6b0 HEAD -- src tests` found nothing, and the boundary search found no `@earendil-works/pi-` or `pi-jefferson` import in `src/domain` or `src/use-cases`.\n- Since my round-1 adjudication, only `pi-instrument-readings.ts` and its test changed under `src` and `tests`.\n\nThe clone was removed.",
+      "requirement": "The gate on the branch head: `npm run check` green at `5b6f2d4`",
+      "status": "met"
+    },
+    {
+      "evidence": "**The text.** `025b603` makes `specs/context-figures/spec.md` say \"A stub's saving SHALL be priced at the read rate on a warm request and the write rate on a cold one, including a warm request that read only part of its prefix, whose saving is then an estimate low by the difference between the two rates\", and prices recall's block by position. It adds the scenario *A warm request that read only part of its prefix* (\"the first priced request after a compaction or a tree jump\"). design.md D8 row 11 now reads \"low by (write − read) on each saved token in the rewritten portion … the first priced request after a compaction or a tree jump is this case\".\n\n**The 0.000144 case, re-run against that text.** In the copy I added a publisher case: `start`, then `compacted`, then a request carrying ONE's stub at index 1, then a response with `cacheRead` 50 and `cacheWrite` 30. It posted `savedDollarsRequest` 0.000144. That is the 96-token saving × $1.50/M, against 0.0018 at the write rate, and it passed `toBeCloseTo(saving * READ, 12)`. The code now matches the SHALL.\n\n**The scenario has a proving test.** The existing test \"a %s between two requests clears the rewrite baseline\" asserts `(2/3) × 192 × READ` after `compacted` and after `treeJumped`. In round 1, pricing that case at the write rate turned 10 tests red.\n\n**Structure.** Bambadjan split my sentence into two requirements rather than replacing it; the rule is unchanged. `openspec validate taiknr-instruments --strict` (openspec 1.14.3) reports the change valid. The stale coverage line this left in tasks.md is finding 1.",
+      "requirement": "Round-1 finding 1 closed: the dollar requirement states the approved rule (stub saving at the read rate on any warm request; block priced by position), and D8 row 11's direction is corrected",
+      "status": "met"
+    },
+    {
+      "evidence": "`5b6f2d4` adds `entry.message.usage !== undefined` to `assistantEntries`, with a comment citing pi's rule, and adds my test unchanged.\n\nI ran the red/green in the copy:\n- **Red:** with only the source file reverted to `2e9ca6a`, the test failed with `TypeError: Cannot read properties of undefined (reading 'input')` (1 failed, 15 passed).\n- **Green:** with the fix restored, all 16 passed.\n\nEvery branch walk goes through `assistantEntries`, both `readPair` under `pi-virtual` and `seedsFrom`. The only other `usage` read, `instruments-response.ts`, reads pi's own live message.",
+      "requirement": "Round-1 finding 2 closed: a persisted assistant message with no usage is not a sample",
+      "status": "met"
+    },
+    {
+      "evidence": "README.md:116 now reads \"`decidingItems` for the latest call's count on its own: 0 before any call, and it keeps that call's count after it ends, while `deciding` reads `idle`\". That is my remedy word for word, and it matches design D5 (\"`finished` leaves it\").",
+      "requirement": "Round-1 finding 3 closed: the README says `decidingItems` keeps the latest call's count",
+      "status": "met"
+    },
+    {
+      "evidence": "README.md:161 drops the parenthetical, so the sentence stands without it. An `rg` for `research-chidi` and `openspec/changes` across README.md, ARCHITECTURE.md, AGENTS.md and ADR 0008 finds nothing, so no doc cites a path the archive will move.",
+      "requirement": "Round-1 finding 4 closed: the README cites no file the archive moves",
+      "status": "met"
+    },
+    {
+      "evidence": "Round 1's rulings on the judge's other findings still hold:\n- **`handler-gate.ts`:** its JSDoc was licensed by gate-2 finding 2.\n- **`-0`:** it never repaints, because Jefferson 0.14.0 compares with `!==` (`provider-fields.ts:86`).\n- **Judge's code fix:** rejected; it prices a warm `/reload` 12.5× high.\n- **The archive step:** it comes after Joel's observation, per `references/review.md`.\n\nNone of the files those rulings rest on has changed since.",
+      "requirement": "Judge Gen's remaining findings, as adjudicated in round 1",
+      "status": "met"
+    }
+  ],
+  "verdict": "approve"
+}
