@@ -30,12 +30,10 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 
 type PayloadObject = Record<string, unknown>;
 
-/** One marked node in a payload, and where it sat: the message it belongs to and the block inside it. */
-interface Marker {
+/** One marked node in a payload, and where it sat. */
+interface Marker extends Position {
 	node: PayloadObject;
 	value: PayloadObject;
-	message: number;
-	block: number;
 }
 
 /** The message recall appended its block to: the carrier the before point is placed in. */
@@ -85,63 +83,45 @@ function canonicalJson(value: unknown): string {
 	return JSON.stringify(value) ?? "null";
 }
 
+/** Where a marked node sits: the message it belongs to, and the content block inside that message. */
+interface Position {
+	message: number;
+	block: number;
+}
+
 /**
  * Every marked node under `root`, in payload order, by the walk §5.3 (4) describes: it descends into
  * a `tool_result`'s content and not into a tool's `input_schema` or a `tool_use`'s `input`.
  */
-function markersUnder(root: unknown): Marker[] {
+function markersUnder(root: unknown, at: Position = { message: -1, block: -1 }): Marker[] {
 	const found: Marker[] = [];
-	const visit = (value: unknown, message: number, block: number): void => {
+	const visit = (value: unknown, where: Position): void => {
 		if (Array.isArray(value)) {
-			for (const item of value) visit(item, message, block);
+			for (const item of value) visit(item, where);
 			return;
 		}
 		if (!isObject(value)) return;
 		if (isMarker(value.cache_control)) {
-			found.push({ node: value, value: value.cache_control as PayloadObject, message, block });
+			found.push({ ...where, node: value, value: value.cache_control as PayloadObject });
 		}
 		for (const [key, child] of Object.entries(value)) {
 			if (key === "cache_control" || DATA_KEYS.has(key)) continue;
 			if (key === "content" && Array.isArray(child)) {
 				child.forEach((item, index) => {
-					visit(item, message, index);
+					visit(item, { ...where, block: index });
 				});
 				continue;
 			}
-			visit(child, message, block);
+			visit(child, where);
 		}
 	};
-	visit(root, -1, -1);
+	visit(root, at);
 	return found;
 }
 
 /** Every marker under the messages, each knowing which message and block it sits in. */
 function messageMarkers(messages: readonly unknown[]): Marker[] {
-	return messages.flatMap((message, index) => {
-		const found: Marker[] = [];
-		const visit = (value: unknown, block: number): void => {
-			if (Array.isArray(value)) {
-				for (const item of value) visit(item, block);
-				return;
-			}
-			if (!isObject(value)) return;
-			if (isMarker(value.cache_control)) {
-				found.push({ node: value, value: value.cache_control as PayloadObject, message: index, block });
-			}
-			for (const [key, child] of Object.entries(value)) {
-				if (key === "cache_control" || DATA_KEYS.has(key)) continue;
-				if (key === "content" && Array.isArray(child)) {
-					child.forEach((item, at) => {
-						visit(item, at);
-					});
-					continue;
-				}
-				visit(child, block);
-			}
-		};
-		visit(message, -1);
-		return found;
-	});
+	return messages.flatMap((message, index) => markersUnder(message, { message: index, block: -1 }));
 }
 
 /** D3's one carve-out: where system carries two marked blocks, the first system block's marker goes. */
@@ -239,12 +219,10 @@ export function editPayload(
 		return { output: changedByCarveOut ? clone : undefined, nextCarrier: carrier, applied: null };
 	}
 
-	const [piMarker] = marked as [Marker];
+	const [piMarker] = marked;
 	const carrierMessage = carrierIn(messages, recallBlock);
 	const beforeTarget =
-		carrierMessage === undefined || carrierMessage.content.length < 2
-			? undefined
-			: carrierMessage.content[carrierMessage.content.length - 2];
+		carrierMessage !== undefined && carrierMessage.content.length >= 2 ? carrierMessage.content.at(-2) : undefined;
 	const wanted = [beforeTarget, fingerprintedBlock(messages, carrier)]
 		.filter((target): target is PayloadObject => isObject(target))
 		.filter((target, index, targets) => target !== piMarker.node && targets.indexOf(target) === index);
@@ -262,14 +240,13 @@ export function editPayload(
 		}
 	}
 
-	const fingerprinted = carrierMessage === undefined ? undefined : carrierMessage.content.at(-2);
-	const nextCarrier =
-		recallBlock !== null && isObject(fingerprinted) && isMarker(fingerprinted.cache_control)
-			? {
-					index: (carrierMessage as CarrierMessage).index,
-					fingerprint: fingerprintOf(fingerprinted),
-					block: recallBlock,
-				}
+	// The next record is this payload's carrier, and only when the finished clone marks its own block (D6).
+	const nextCarrier: CarrierRecord | null =
+		carrierMessage !== undefined &&
+		recallBlock !== null &&
+		isObject(beforeTarget) &&
+		isMarker(beforeTarget.cache_control)
+			? { index: carrierMessage.index, fingerprint: fingerprintOf(beforeTarget), block: recallBlock }
 			: null;
 
 	return {
