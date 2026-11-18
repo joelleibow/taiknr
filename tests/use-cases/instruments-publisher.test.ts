@@ -10,6 +10,7 @@ import {
 	type ResponseMessage,
 	type SessionStartedReadings,
 } from "../../src/use-cases/instruments-publisher.js";
+import type { AppliedPlacement } from "../../src/use-cases/payload-cache.js";
 
 const A: Pair = { provider: "anthropic", model: "claude-opus-5-5" };
 const B: Pair = { provider: "openrouter", model: "deepseek/deepseek-v4.1-flash" };
@@ -161,6 +162,9 @@ function response(
 		...overrides,
 	};
 }
+
+/** The reading a response whose finished payload placed what `applied` says reports (D7, D8). */
+const placed = (applied: AppliedPlacement | null) => () => ({ ...contextReading(), applied });
 
 /** The reading at a response: 500 tokens persisted, a 200k window, and no message-level edit priced. */
 const contextReading = (pair: Pair | undefined = A) => ({
@@ -493,7 +497,8 @@ test("a shrunk block on the same carried message charges the suffix behind it", 
 	publisher.requestBuilt(() => reading({ latestUser: { index: 0, timestamp: 7, tailText: "sm" } }));
 	publisher.responseReceived(response({ cacheRead: 30, cacheWrite: 40 }), contextReading);
 
-	expect(last().savedDollarsRequest).toBeCloseTo(-0.7 * 20 * READ - 0.7 * 100 * (WRITE - READ), 9);
+	// D8: no request ever cached this block, so it is a write even though the message is the carried one.
+	expect(last().savedDollarsRequest).toBeCloseTo(-0.7 * 20 * WRITE - 0.7 * 100 * (WRITE - READ), 9);
 });
 
 test("a carried message whose block is gone charges the suffix and prices nothing as recalled", () => {
@@ -948,4 +953,115 @@ test("a request whose own reading throws still clears the stored recall reading"
 	publisher.requestBuilt(() => reading());
 
 	expect(last().recalled).toBe(0);
+});
+
+test("the rewrite starts after the carrier's own content when this request read through it", () => {
+	const { publisher, last, start } = harness();
+	start({ pair: A });
+	publisher.reportRecalled(() => ({ estimate: 40 }));
+	publisher.requestBuilt(() => reading({ latestUser: { index: 0, timestamp: 7, tailText: "block" } }));
+	publisher.responseReceived(response({ cacheRead: 30, cacheWrite: 40 }), contextReading);
+
+	publisher.reportRecalled(() => ({ estimate: 20 }));
+	publisher.requestBuilt(() => reading({ latestUser: { index: 0, timestamp: 7, tailText: "sm" } }));
+	// The coincident carry reports the same placement, so its figure is this one.
+	publisher.responseReceived(
+		response({ cacheRead: 30, cacheWrite: 40 }),
+		placed({ carrierRead: "block", block: "cached" }),
+	);
+
+	expect(last().savedDollarsRequest).toBeCloseTo(-0.7 * 20 * WRITE, 9);
+});
+
+test("carrierRead naming a different block keeps today's start", () => {
+	const { publisher, last, start } = harness();
+	start({ pair: A });
+	publisher.reportRecalled(() => ({ estimate: 40 }));
+	publisher.requestBuilt(() => reading({ latestUser: { index: 0, timestamp: 7, tailText: "block" } }));
+	publisher.responseReceived(response({ cacheRead: 30, cacheWrite: 40 }), contextReading);
+
+	publisher.reportRecalled(() => ({ estimate: 20 }));
+	publisher.requestBuilt(() => reading({ latestUser: { index: 0, timestamp: 7, tailText: "sm" } }));
+	publisher.responseReceived(
+		response({ cacheRead: 30, cacheWrite: 40 }),
+		placed({ carrierRead: "a different block", block: "cached" }),
+	);
+
+	expect(last().savedDollarsRequest).toBeCloseTo(-0.7 * 20 * WRITE - 0.7 * 100 * (WRITE - READ), 9);
+});
+
+test("a request the edit did not reach keeps today's start", () => {
+	const { publisher, last, start } = harness();
+	start({ pair: A });
+	publisher.reportRecalled(() => ({ estimate: 40 }));
+	publisher.requestBuilt(() => reading({ latestUser: { index: 0, timestamp: 7, tailText: "block" } }));
+	publisher.responseReceived(response({ cacheRead: 30, cacheWrite: 40 }), contextReading);
+
+	publisher.reportRecalled(() => ({ estimate: 20 }));
+	publisher.requestBuilt(() => reading({ latestUser: { index: 0, timestamp: 7, tailText: "sm" } }));
+	publisher.responseReceived(response({ cacheRead: 30, cacheWrite: 40 }), placed(null));
+
+	expect(last().savedDollarsRequest).toBeCloseTo(-0.7 * 20 * WRITE - 0.7 * 100 * (WRITE - READ), 9);
+});
+
+test("a block on the request that left it uncached is charged the input rate", () => {
+	const { publisher, last, start } = harness();
+	start({ pair: A });
+	publisher.reportRecalled(() => ({ estimate: 2597 }));
+	publisher.requestBuilt(() => reading({ latestUser: { index: 0, timestamp: 7, tailText: "block" } }));
+	publisher.responseReceived(
+		response({ input: 40, cacheWrite: 100 }),
+		placed({ carrierRead: "previous", block: "uncached" }),
+	);
+
+	expect(last().savedDollarsRequest).toBeCloseTo(-1.4 * 2597 * 15e-6, 9);
+});
+
+test("a block that first appears on a message the last priced request carried is charged the write rate", () => {
+	const { publisher, last, start } = harness();
+	start({ pair: A });
+	publisher.requestBuilt(() => reading({ latestUser: { index: 0, timestamp: 7, tailText: "why?" } }));
+	publisher.responseReceived(response({ cacheRead: 30, cacheWrite: 40 }), contextReading);
+
+	publisher.reportRecalled(() => ({ estimate: 40 }));
+	publisher.requestBuilt(() => reading({ latestUser: { index: 0, timestamp: 7, tailText: "block" } }));
+	publisher.responseReceived(
+		response({ cacheRead: 30, cacheWrite: 40 }),
+		placed({ carrierRead: null, block: "cached" }),
+	);
+
+	expect(last().savedDollarsRequest).toBeCloseTo(-0.7 * 40 * WRITE, 9);
+});
+
+test("a block the last priced request left uncached is a write, then a read", () => {
+	const { publisher, last, start } = harness();
+	const sameBlock = () => ({
+		pair: A,
+		messageEstimates: [100],
+		toolResults: [],
+		latestUser: { index: 0, timestamp: 7, tailText: "block" },
+	});
+	start({ pair: A });
+	publisher.reportRecalled(() => ({ estimate: 40 }));
+	publisher.requestBuilt(sameBlock);
+	publisher.responseReceived(
+		response({ cacheRead: 30, cacheWrite: 40 }),
+		placed({ carrierRead: null, block: "uncached" }),
+	);
+
+	publisher.reportRecalled(() => ({ estimate: 40 }));
+	publisher.requestBuilt(sameBlock);
+	publisher.responseReceived(
+		response({ cacheRead: 30, cacheWrite: 40 }),
+		placed({ carrierRead: null, block: "cached" }),
+	);
+	expect(last().savedDollarsRequest).toBeCloseTo(-0.7 * 40 * WRITE, 9);
+
+	publisher.reportRecalled(() => ({ estimate: 40 }));
+	publisher.requestBuilt(sameBlock);
+	publisher.responseReceived(
+		response({ cacheRead: 30, cacheWrite: 40 }),
+		placed({ carrierRead: "block", block: "cached" }),
+	);
+	expect(last().savedDollarsRequest).toBeCloseTo(-0.7 * 40 * READ, 9);
 });

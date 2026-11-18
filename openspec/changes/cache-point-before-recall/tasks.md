@@ -154,7 +154,7 @@ For the untouched cases `editPayload` returns `{ output: undefined, nextCarrier:
 
 `src/use-cases/instruments-publisher.ts`, `src/infra/adapters/pi-instrument-readings.ts`, `src/infra/pi-event-handlers/instruments-response.ts` and `src/domain/savings-dollars.ts`. The publisher's tests drive `responseReceived` with scripted `usage` and `cost`, because the session harness rewrites every response's usage to characters ÷ 4 at zero cost (`AGENTS.md` Traps).
 
-- [ ] 5.1 The readings: `ResponseReadings` gains `applied`, `readResponse` returns `CompactedReadings`, and the registrar takes the payload state and adds `applied` (§5.4; §4; `redgreen-derek.md` Gap 7).
+- [x] 5.1 The readings: `ResponseReadings` gains `applied`, `readResponse` returns `CompactedReadings`, and the registrar takes the payload state and adds `applied` (§5.4; §4; `redgreen-derek.md` Gap 7).
   - The one shape, stated here and nowhere else:
 
     ```ts
@@ -173,7 +173,7 @@ For the untouched cases `editPayload` returns `{ output: undefined, nextCarrier:
   - **Verified by:** `npx vitest run tests/infra/pi-event-handlers/instruments-response.test.ts tests/use-cases/instruments-publisher.test.ts tests/infra/pi-event-handlers/instruments-compact.test.ts tests/infra/pi-event-handlers/instruments-tree.test.ts tests/infra/pi-event-handlers/instruments-request.test.ts`, then `npm run typecheck`, because `applied` is required and every construction site lands in this task.
   - **Error behavior:** a fault in `applied` lands in the registrar and not in the payload handler (§5.4). The third parameter is the one signature exception this change adds to `AGENTS.md`:23, and the docs pass writes it (design §4, §10).
 
-- [ ] 5.2 D7 and D8 together: the rewrite start in `rewriteOf`, and the block's one pricing rule in the domain and in the publisher (§5.4; D7; D8). One task, not two, because no measured state separates them: the spike ran E1–E9 and M2/M5 against the complete D7+D8 code, and D7-without-D8 or D8-without-D7 was never run.
+- [x] 5.2 D7 and D8 together: the rewrite start in `rewriteOf`, and the block's one pricing rule in the domain and in the publisher (§5.4; D7; D8). One task, not two, because no measured state separates them: the spike ran E1–E9 and M2/M5 against the complete D7+D8 code, and D7-without-D8 or D8-without-D7 was never run.
   - `rewriteOf` reads this request's `readings.applied`. It is a private helper, so passing it as `rewriteOf(request, readings.applied)` is local.
   - When `blockChanged` holds and `applied?.carrierRead === carried.text`, the start is `carried.index + 1`; otherwise it is `carried.index`, today's rule.
   - `PricedRequest` gains `blockUncached: boolean`, and the block's rate becomes `blockUncached ? inputRate : (warm && !blockInNewTail ? readRate : writeRate)`.

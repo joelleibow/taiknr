@@ -14,6 +14,10 @@ function dollarsAtDefaultRates(usage: UsageCounts): CostCounts {
 }
 
 const WARM: UsageCounts = { input: 0, cacheRead: 150_000, cacheWrite: 10_000 };
+/** A warm request that also billed input tokens, so the input rate is readable beside the cache rates. */
+const WARM_WITH_INPUT: UsageCounts = { input: 4000, cacheRead: 150_000, cacheWrite: 10_000 };
+/** A request whose cache had expired: no read at all, and the input rate still readable. */
+const COLD: UsageCounts = { input: 4000, cacheRead: 0, cacheWrite: 210_000 };
 
 /** A request with nothing pending, priced for no classifier spend. */
 function request(overrides: Partial<PricedRequest> = {}): PricedRequest {
@@ -22,6 +26,7 @@ function request(overrides: Partial<PricedRequest> = {}): PricedRequest {
 		stubSaving: 0,
 		recalled: 0,
 		blockInNewTail: false,
+		blockUncached: false,
 		suffixEstimate: 0,
 		classifierSpend: 0,
 		...overrides,
@@ -135,6 +140,27 @@ const rows: Row[] = [
 		priced: request({ recalled: 2000, suffixEstimate: 2400 }),
 		expected: -0.0444,
 	},
+	{
+		case: "an uncached block on a warm request is the input rate, not the read rate",
+		usage: WARM_WITH_INPUT,
+		cost: dollarsAtDefaultRates(WARM_WITH_INPUT),
+		priced: request({ recalled: 2597, blockUncached: true }),
+		expected: -0.038955,
+	},
+	{
+		case: "an uncached block on a cold request is the input rate, not the write rate",
+		usage: COLD,
+		cost: dollarsAtDefaultRates(COLD),
+		priced: request({ recalled: 2597, blockUncached: true }),
+		expected: -0.038955,
+	},
+	{
+		case: "a cached block on a cold request is still the write rate",
+		usage: COLD,
+		cost: dollarsAtDefaultRates(COLD),
+		priced: request({ recalled: 2597 }),
+		expected: -0.04869375,
+	},
 ];
 
 test.each(rows)("$case", ({ usage, cost, priced, expected }) => {
@@ -182,4 +208,18 @@ test("a response with no cached tokens is cold, and an input rate of zero divide
 			request({ stubSaving: 4960 }),
 		),
 	).toBe(0);
+});
+
+test("the split alone changes no figure: the poisoned and the fixed split both net −0.02285", () => {
+	// M2's request at Opus 5.5's catalogue prices: input $4/M, read $0.2/M, write $5/M.
+	const price = (usage: UsageCounts): CostCounts => ({
+		input: usage.input * 4 * MICRO,
+		cacheRead: usage.cacheRead * 0.2 * MICRO,
+		cacheWrite: usage.cacheWrite * 5 * MICRO,
+	});
+	const priced = request({ stubSaving: 37_301, suffixEstimate: 6_315 });
+	const poisoned: UsageCounts = { input: 4, cacheRead: 35_731, cacheWrite: 139_169 };
+	const fixed: UsageCounts = { input: 4, cacheRead: 168_585, cacheWrite: 6_315 };
+	expect(netDollars(responseRates(poisoned, price(poisoned)), priced)).toBeCloseTo(-0.02285, 5);
+	expect(netDollars(responseRates(fixed, price(fixed)), priced)).toBeCloseTo(-0.02285, 5);
 });

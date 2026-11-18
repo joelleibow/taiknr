@@ -131,6 +131,9 @@ interface PendingRequest {
 	candidate: RequestCandidate;
 }
 
+/** The baseline the next request compares against: the last priced request, and where it left the block. */
+type Baseline = RequestCandidate & { blockUncached: boolean };
+
 /**
  * A history no request has been built from: context in turn and history before carry the history's
  * size and the three request figures are zero, so the bar never draws a request that is gone (D5).
@@ -153,7 +156,7 @@ function newStubStart(matches: readonly StubMatch[], baseline: RequestCandidate 
 export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): InstrumentPublisher {
 	let table: RatioTable = seedTable([]);
 	let pending: PendingRequest | undefined;
-	let baseline: RequestCandidate | undefined;
+	let baseline: Baseline | undefined;
 	let reportedRecall: (() => { estimate: number }) | undefined;
 	let unchargedSpend = 0;
 	let savedTokensSinceStart = 0;
@@ -188,7 +191,7 @@ export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): Inst
 	};
 
 	/** The rewrite suffix's size, and whether the block rides a message the baseline never carried. */
-	const rewriteOf = (request: PendingRequest) => {
+	const rewriteOf = (request: PendingRequest, applied: AppliedPlacement | null) => {
 		const previousLength = baseline?.length ?? 0;
 		const starts: number[] = [];
 		if (request.candidate.stubSuffixStart !== undefined) starts.push(request.candidate.stubSuffixStart);
@@ -197,7 +200,8 @@ export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): Inst
 		const blockChanged =
 			carried !== undefined &&
 			(latestUser === undefined || latestUser.timestamp !== carried.timestamp || latestUser.tailText !== carried.text);
-		if (blockChanged) starts.push(carried.index);
+		// D7: a request the edit reached read through the carrier's own content, so its charge starts after it.
+		if (blockChanged) starts.push(applied?.carrierRead === carried.text ? carried.index + 1 : carried.index);
 		const suffixEstimate =
 			starts.length === 0
 				? 0
@@ -205,7 +209,12 @@ export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): Inst
 						.slice(Math.min(...starts), previousLength)
 						.reduce((total, estimate) => total + estimate, 0);
 		const block = request.candidate.block;
-		return { suffixEstimate, blockInNewTail: block !== undefined && block.index >= previousLength };
+		// D8: the block is new to the baseline's end, changed on its message, on a message the baseline
+		// never carried, or on one the baseline left with no marker at or after it.
+		const blockInNewTail =
+			block !== undefined &&
+			(carried === undefined || blockChanged || block.index >= previousLength || baseline?.blockUncached === true);
+		return { suffixEstimate, blockInNewTail };
 	};
 
 	return {
@@ -278,12 +287,15 @@ export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): Inst
 
 			table = withLiveSample(table, { pair: response.pair, k });
 			const { figures } = request;
-			const { suffixEstimate, blockInNewTail } = rewriteOf(request);
+			// One reading decides both the charge's shape and where it starts, and the baseline keeps it (D8).
+			const blockUncached = readings.applied?.block === "uncached";
+			const { suffixEstimate, blockInNewTail } = rewriteOf(request, readings.applied);
 			const net = netDollars(responseRates(response.usage, response.cost), {
 				k,
 				stubSaving: figures.withheld - figures.stubbed,
 				recalled: figures.recalled,
 				blockInNewTail,
+				blockUncached,
 				suffixEstimate,
 				classifierSpend: unchargedSpend,
 			});
@@ -291,7 +303,7 @@ export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): Inst
 			savedTokensSinceStart += savedTokensRequest;
 			savedDollarsSinceStart += net;
 			unchargedSpend = 0;
-			baseline = request.candidate;
+			baseline = { ...request.candidate, blockUncached };
 
 			const { usage } = response;
 			deps.sink.post({
