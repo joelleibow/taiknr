@@ -37,3 +37,9 @@ The questions from `michael-orientation.md` §5 went to Joel as multiple-choice.
 ## 2026-11-17 — design-review churn
 
 - **Churn rule, standing: (a), "Settle it, and make the rule standing".** Round 2 of Stage 3 stopped on churn: 9 of 12 fixes landed on sections round 1 had patched, all wording or consistency follow-ups to Michael's own remedies. They are settled as Michael resolved them. From now on, on any change, churn whose remedy Michael has measured and chosen is settled without coming to Joel. Product behaviour, user-facing contract, scope and cost still go to him.
+
+## 2026-11-17 — design-review cap
+
+> "Keep  going but drop that2 clean  rounds requirement.  we just need to major or  serious findings"
+
+- **Stage 3 continues past the 5-round cap.** It ends at the first round in which no blocking or major finding needs a fix. The requirement of two consecutive clean rounds is dropped.
