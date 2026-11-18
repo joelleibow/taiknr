@@ -49,7 +49,7 @@ On the routes the predicate covers, a request carrying recall's block SHALL carr
 #### Scenario: A handoff that recalls nothing
 
 - **WHEN** a request carries no block, and the previous request's carrier is present and no longer ends with recall's block
-- **THEN** it carries the carry point anyway, because the carry is defined by a changed carrier and not by whether this request recalls (N3; N7; ruling "byte-identical scope")
+- **THEN** it carries the carry point anyway, because the carrier's last block still equals the fingerprint the previous request recorded, and a request need not recall for the carry to apply (N3; N7; ruling "byte-identical scope")
 
 ### Requirement: Only routes the predicate covers change
 
@@ -98,7 +98,7 @@ taiknr SHALL change the payload only where one predicate holds, read from `ctx.m
 #### Scenario: A payload pi marked nowhere
 
 - **WHEN** pi places no message-level cache marker on a payload, as with `cacheRetention` none
-- **THEN** the payload goes out unchanged, because the edit is a no-op where there is no marker to copy and no boundary to work from (ruling "marker allowance")
+- **THEN** no message-level marker is placed or removed, and the payload goes out unchanged except where the carve-out removes a system marker, because the edit has no marker to copy and no boundary to work from (ruling "marker allowance"; ruling "carve-out")
 
 ### Requirement: The payload edit keeps other extensions' changes and the provider's limits
 
@@ -112,17 +112,17 @@ taiknr SHALL build the request from a copy of the payload, keep every marker ano
 #### Scenario: The budget decides, and pi's marker yields
 
 - **WHEN** taiknr counts the room for its points
-- **THEN** the budget is four minus every marker on the payload except pi's last-message marker — the top-level marker, every system and tools marker and any message marker from another extension — and if the wanted points exceed it the payload goes out unchanged; if there is room for one more, pi's last-message marker stays where pi put it; otherwise it is removed, and it is the only existing marker taiknr may remove, apart from the carve-out (N3; ruling "marker allowance")
+- **THEN** the budget is four minus every marker on the normalized clone except pi's last-message marker — the top-level marker, the system markers left after the carve-out and the tools marker — and if the wanted points exceed it the payload goes out with no message-level edit, carrying only the carve-out where it applies; if there is room for one more, pi's last-message marker stays where pi put it; otherwise it is removed, and it is the only existing marker taiknr may remove, apart from the carve-out (N3; ruling "marker allowance")
 
 #### Scenario: Another extension's marker survives
 
-- **WHEN** another extension marked a block before taiknr's handler runs
-- **THEN** its marker is still there in what goes out, because the payload was copied and never mutated in place, and it was subtracted from the budget (`michael-orientation.md` §2)
+- **WHEN** another extension placed a marker anywhere under `messages`
+- **THEN** its marker goes out byte-identical and taiknr makes no message-level edit to that request, because with two message markers pi's cannot be told apart; a foreign top-level, system or tools marker is counted in the budget and goes out byte-identical (`michael-orientation.md` §2; N3)
 
 #### Scenario: The budget is spent, so nothing moves
 
 - **WHEN** the markers already on the payload, pi's last-message one included, leave no room for the wanted points
-- **THEN** the payload goes out as it arrived, and no fifth point is ever placed, because a fifth is a 400 and not a silent drop (Chidi #2; ruling "marker allowance")
+- **THEN** apart from the carve-out's system marker on pi's OAuth shape the payload goes out as it arrived, and no fifth point is ever placed, because a fifth is a 400 and not a silent drop (Chidi #2; ruling "marker allowance")
 
 #### Scenario: Tools, the top-level marker and foreign markers are untouched
 
@@ -166,8 +166,8 @@ taiknr SHALL build the request from a copy of the payload, keep every marker ano
 
 #### Scenario: A request taiknr built nothing for
 
-- **WHEN** the payload belongs to a request taiknr's own state knows nothing about, as a cache-warmer replay, a retry or a classifier call
-- **THEN** nothing is edited and nothing throws, and a replay of the same payload yields the same edit twice rather than a second carry (ruling "handler inputs")
+- **WHEN** the hook fires for a cache-warmer replay, a strict-tools rebuild, an auto-retry, or a request that is never answered validly
+- **THEN** nothing throws, record (b) changes only at a valid assistant `message_end`, and a re-fired request computes the same edit as its first firing (ruling "handler inputs")
 
 ### Requirement: The one carve-out on a four-point payload
 
@@ -190,8 +190,13 @@ On a covered payload whose system carries two marked blocks — pi's OAuth shape
 
 #### Scenario: The route cannot be switched mid-session
 
-- **WHEN** an operator changes `enabled` or the model during a session
-- **THEN** the payload edit's shape does not change, because config is read at session start and a change needs `/reload`, which is a new session (ruling "carve-out")
+- **WHEN** an operator changes `enabled` during a session
+- **THEN** the edit's shape does not change, because config is read at session start and a change needs `/reload`, which is a new session (ruling "carve-out")
+
+#### Scenario: The model is switched mid-session
+
+- **WHEN** `/model` changes the selection between requests
+- **THEN** D1 is evaluated per request from `ctx.model`; record (b) carries across and is checked against its fingerprint; a carry on a request with no matching entry adds no cost, and the first request on the new model is cold, so no rewrite is charged (ruling "carve-out")
 
 ### Requirement: The payload edit is inert while taiknr is off
 
