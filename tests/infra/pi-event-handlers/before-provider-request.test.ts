@@ -47,7 +47,9 @@ function emptyState(): PayloadCacheState {
 	return { recallBlock: null, carrier: null, nextCarrier: null, applied: null };
 }
 
-function harness(options: { enabled?: boolean; rejected?: boolean; state?: PayloadCacheState } = {}) {
+function harness(
+	options: { enabled?: boolean; publishing?: boolean; rejected?: boolean; state?: PayloadCacheState } = {},
+) {
 	const fake = createFakePi();
 	const session = createSessionConfig();
 	const state = options.state ?? emptyState();
@@ -59,7 +61,14 @@ function harness(options: { enabled?: boolean; rejected?: boolean; state?: Paylo
 			error: new TaiknrConfigError("/work/pi-taiknr.json", undefined, "unreadable"),
 		});
 	} else {
-		session.assign({ status: "ready", config: { ...DEFAULT_TAIKNR_CONFIG, enabled: options.enabled ?? true } });
+		session.assign({
+			status: "ready",
+			config: {
+				...DEFAULT_TAIKNR_CONFIG,
+				enabled: options.enabled ?? true,
+				jeffersonInstruments: options.publishing ?? true,
+			},
+		});
 	}
 
 	/** Fire the registered handler once, as pi's runner does before the provider call. */
@@ -115,9 +124,10 @@ test("the route is re-read per request, so a switch to an uncovered model stops 
 });
 
 test("publishing off still edits the payload, because only the gate decides inertness", () => {
-	const { state, fire } = harness();
+	const { state, fire, session } = harness({ publishing: false });
 	state.recallBlock = "block";
 
+	expect(session.state).toMatchObject({ status: "ready", config: { jeffersonInstruments: false } });
 	expect(fire(RECALLING, COVERED)).toBeDefined();
 	expect(state.applied).toEqual({ carrierRead: null, block: "cached" });
 });

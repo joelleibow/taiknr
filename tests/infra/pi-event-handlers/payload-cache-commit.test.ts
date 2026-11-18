@@ -108,13 +108,26 @@ test("two handoff calls with no message_end between them carry the carry both ti
 	expect(state.carrier).toEqual(RECORD);
 });
 
+/** A recalling request: recall's block is the last block of the newest user message, after its own text. */
+const RECALLING = { ...HANDOFF, messages: [{ role: "user", content: [text("own"), text("block", PI)] }] };
+
 test("a valid assistant response commits the record the payload call computed", () => {
-	const { state, fire } = harness();
-	fire("before_provider_request", HANDOFF);
+	const { state, fire } = harness({
+		state: { recallBlock: "block", carrier: null, nextCarrier: null, applied: null },
+	});
+	const computed: CarrierRecord = { index: 0, fingerprint: "own", block: "block" };
+
+	fire("before_provider_request", RECALLING);
+	expect(state.nextCarrier).toEqual(computed);
+	expect(state.carrier).toBeNull();
 
 	fire("message_end", assistant());
+	expect(state.carrier).toEqual(computed);
 
-	expect(state.nextCarrier).toBeNull();
+	// A handoff carries no block, so the record it computes and commits is empty.
+	state.recallBlock = null;
+	fire("before_provider_request", HANDOFF);
+	fire("message_end", assistant());
 	expect(state.carrier).toBeNull();
 });
 
@@ -165,13 +178,17 @@ test("a commit with no payload call before it invents no record, so the next han
 	expect(fire("before_provider_request", HANDOFF)).toBeUndefined();
 });
 
-test("two valid commits in a row keep the record the second one saw", () => {
-	const { state, fire } = harness();
-	fire("before_provider_request", HANDOFF);
-	fire("message_end", assistant());
+test("two valid commits in a row promote the record each payload call computed", () => {
+	const { state, fire } = harness({
+		state: { recallBlock: "block", carrier: null, nextCarrier: null, applied: null },
+	});
+	const later = { ...RECALLING, messages: [{ role: "user", content: [text("later"), text("block", PI)] }] };
 
-	fire("before_provider_request", HANDOFF);
+	fire("before_provider_request", RECALLING);
 	fire("message_end", assistant());
+	expect(state.carrier).toEqual({ index: 0, fingerprint: "own", block: "block" });
 
-	expect(state.carrier).toBeNull();
+	fire("before_provider_request", later);
+	fire("message_end", assistant());
+	expect(state.carrier).toEqual({ index: 0, fingerprint: "later", block: "block" });
 });

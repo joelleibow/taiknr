@@ -92,8 +92,10 @@ function toolUse(command: string): Block {
 	return { type: "tool_use", id: "t1", name: "bash", input: { command } };
 }
 
-function toolResult(...content: Block[]): Message {
-	return { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content }] };
+/** A tool result message. pi marks the `tool_result` block itself, so `mark` lands on that block. */
+function toolResult(content: Block[], mark?: Block): Message {
+	const block: Block = { type: "tool_result", tool_use_id: "t1", content };
+	return { role: "user", content: [mark === undefined ? block : { ...block, cache_control: { ...mark } }] };
 }
 
 /** An API-key request: pi marks the first system block and the last tool, so three points in all. */
@@ -264,7 +266,7 @@ test("a foreign message marker beside pi's stops every message-level edit", () =
 });
 
 test("a marker inside a tool_result's content counts, so nothing is edited", () => {
-	const input = payload([user(text("own"), text("block", PI)), toolResult(text("inner", PI))]);
+	const input = payload([user(text("own"), text("block", PI)), toolResult([text("inner", PI)])]);
 
 	expect(edit(input, "block", null)).toEqual({
 		output: undefined,
@@ -538,13 +540,14 @@ test("an in-turn request marks the block before the one recall appended to the s
 		assistant(text("A")),
 		user(text("own"), text("B")),
 		assistant(toolUse("ls")),
-		toolResult(text("out", PI)),
+		toolResult([text("out")], PI),
 	]);
 	const record: CarrierRecord = { index: 2, fingerprint: "own", block: "B" };
 
 	const { output, nextCarrier, applied } = changed(input, "B", record);
 
-	expect(markerPaths(output)).toEqual(["system[0]", "tools[1]", "m[2].content[0]", "m[4].content[0].content[0]"]);
+	expect(markerPaths(output)).toEqual(["system[0]", "tools[1]", "m[2].content[0]", "m[4].content[0]"]);
+	expect(withoutMarkers(output)).toEqual(withoutMarkers(input));
 	expect(nextCarrier).toEqual(record);
 	expect(applied).toEqual({ carrierRead: "B", block: "cached" });
 });
