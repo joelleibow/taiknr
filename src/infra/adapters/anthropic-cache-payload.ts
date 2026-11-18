@@ -30,6 +30,12 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 
 type PayloadObject = Record<string, unknown>;
 
+/** Where a marked node sits: the message it belongs to, and the content block inside that message. */
+interface Position {
+	message: number;
+	block: number;
+}
+
 /** One marked node in a payload, and where it sat. */
 interface Marker extends Position {
 	node: PayloadObject;
@@ -81,12 +87,6 @@ function canonicalJson(value: unknown): string {
 		return `{${entries.join(",")}}`;
 	}
 	return JSON.stringify(value) ?? "null";
-}
-
-/** Where a marked node sits: the message it belongs to, and the content block inside that message. */
-interface Position {
-	message: number;
-	block: number;
 }
 
 /**
