@@ -15,6 +15,7 @@ import { InMemoryArchiveStore, TAIKNR_SIDE_STORE_TYPE } from "../../../src/infra
 import { registerContextHandler } from "../../../src/infra/pi-event-handlers/context.js";
 import { registerInstrumentsRequestHandler } from "../../../src/infra/pi-event-handlers/instruments-request.js";
 import { createInstrumentsPublisher, type Publication } from "../../../src/use-cases/instruments-publisher.js";
+import type { PayloadCacheState } from "../../../src/use-cases/payload-cache.js";
 import type { RecallCache } from "../../../src/use-cases/recall-relevant-context.js";
 import { createContextStub, createFakePi } from "../../support/fake-pi.js";
 
@@ -106,7 +107,8 @@ function harness(options: { config?: Partial<TaiknrConfig>; contextWindow?: numb
 		classify: vi.fn((_model, context) => Promise.resolve(answered(context))),
 	};
 	const gated = createGatedPi(fake.pi, session);
-	registerContextHandler(gated, { config: session, store, recallCache, holder });
+	const payloadCache: PayloadCacheState = { recallBlock: null, carrier: null, nextCarrier: null, applied: null };
+	registerContextHandler(gated, { config: session, store, recallCache, holder, payloadCache });
 	registerInstrumentsRequestHandler(gated, holder);
 	session.assign({ status: "ready", config: { ...CONFIG, ...options.config } });
 

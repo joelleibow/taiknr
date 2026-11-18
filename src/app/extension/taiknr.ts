@@ -15,6 +15,7 @@ import { registerSessionStartHandler } from "../../infra/pi-event-handlers/sessi
 import { registerSessionTreeHandler } from "../../infra/pi-event-handlers/session-tree.js";
 import { registerToolCallHandler } from "../../infra/pi-event-handlers/tool-call.js";
 import { registerTurnEndHandler } from "../../infra/pi-event-handlers/turn-end.js";
+import type { PayloadCacheState } from "../../use-cases/payload-cache.js";
 import type { RecallCache } from "../../use-cases/recall-relevant-context.js";
 import { createGatedPi } from "./handler-gate.js";
 import { createInstrumentsHolder } from "./instruments-holder.js";
@@ -31,6 +32,7 @@ export default function taiknr(pi: ExtensionAPI): void {
 	const pendingOutputs: ArchivedToolOutput[] = [];
 	const originalContentByEntryId = new Map<string, unknown[]>();
 	const recallCache: RecallCache = { lastPromptKey: "", lastRecalledIds: [] };
+	const payloadCache: PayloadCacheState = { recallBlock: null, carrier: null, nextCarrier: null, applied: null };
 	const holder = createInstrumentsHolder();
 
 	// Handlers stay thin Pi event bridges; adapters translate Pi DTOs to domain contracts. Each
@@ -54,7 +56,7 @@ export default function taiknr(pi: ExtensionAPI): void {
 		pendingOutputs,
 		originalContentByEntryId,
 	});
-	registerContextHandler(gatedPi, { config: session, store, recallCache, holder });
+	registerContextHandler(gatedPi, { config: session, store, recallCache, holder, payloadCache });
 	registerInstrumentsRequestHandler(gatedPi, holder);
 	registerInstrumentsResponseHandler(gatedPi, holder);
 	registerInstrumentsSettledHandler(gatedPi, holder);
