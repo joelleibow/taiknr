@@ -135,7 +135,7 @@ For the untouched cases `editPayload` returns `{ output: undefined, nextCarrier:
 
 ## 3. The commit handler
 
-- [ ] 3.1 Create `src/infra/pi-event-handlers/payload-cache-commit.ts` and register `message_end` through the gate (§5.1; §5.3 (5)).
+- [x] 3.1 Create `src/infra/pi-event-handlers/payload-cache-commit.ts` and register `message_end` through the gate (§5.1; §5.3 (5)).
   - **Test first:** C1, two `before_provider_request` calls with the same handoff payload and no `message_end` between, where the second output carries the carry and base's does not; C4, a valid assistant `message_end` where `carrier` equals the previous `nextCarrier` and base's stays null; C2 (**pin**) and C3 (**pin**), an `error` and an `aborted` response and a payload call with no `message_end` after it, neither of which commits; C5 (**pin**), a user message's `message_end`, which commits nothing.
   - **Boundary cases:** an assistant message with an invalid usage; a `message_end` whose message is a tool result; two commits in a row; no payload call before the commit.
   - **Verified by:** `npx vitest run tests/infra/pi-event-handlers/payload-cache-commit.test.ts`.
