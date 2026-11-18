@@ -1,0 +1,134 @@
+{
+  "round_status": "needs_fixes",
+  "resolutions": [
+    {
+      "finding_id": "gap-1",
+      "disposition": "propose_fix",
+      "target_artifact": "design.md §8.3 \"Assertions on turn 2, request 1\"",
+      "rationale": "The assertions are right, but the design never says which case R1 is, so Derek checked them against the wrong log.\n\nThe script's precondition \"no request of turn 1 carries a `<recalled_context` text block\" means record (b) is null at turn 2's first request, so only the before point is wanted. One point plus one fits a budget of 2 on every covered route, including pi's OAuth shape after the carve-out. So pi's marker stays on recall's block and the block is written, not billed as input (spec \"A recalling request after a turn that recalled nothing\").\n\nDerek's failures (2,597 input) came from N3/N5/N7/M4. Those runs recalled from turn 1, so their turn 2 opens on a handoff, which the precondition excludes. N9 is the probe log built the way the script is, and there both assertions hold. The fix is one sentence of missing context.",
+      "evidence": "I replayed N9 (`s-key-h45-r23.log`):\n- turn 2's first request (req 14) carried `m[26][0]` and `m[26][1]` with input 3, against a bound of 1,040.\n\nDerek's live runs on the change (redgreen-derek.md L2, L4):\n- R1 marks the block before recall's block and recall's block itself;\n- input 3 against 1,297.\n\nDerek's failing logs recalled from turn 1 (`probe2.ts`, `PROBE_RECALL_TURNS=\"1,2\"`).",
+      "required_change": "Add this under \"Assertions on turn 2, request 1\":\n\n\"Turn 1 carries no block (a precondition). So this request is a recalling request after a turn that recalled nothing: record (b) is null and no carry is wanted, and the before point plus pi's marker fit the budget on every covered route (on pi's OAuth shape, after the carve-out). The provider therefore writes the block (spec \\\"A recalling request after a turn that recalled nothing\\\"; N9: 3 input, `m[26][0]` and `m[26][1]` marked). N3, N5, N7, M4 and M5 recalled from their first turn, so their second turn opens on a handoff and is not this case.\"\n\nI replayed N9 and checked Derek's live tables; there is no code to change.",
+      "locations": [
+        "design.md §8.3 \"Assertions on turn 2, request 1\""
+      ]
+    },
+    {
+      "finding_id": "gap-2",
+      "disposition": "propose_fix",
+      "target_artifact": "design.md §8.3 \"Assertions on H\"",
+      "rationale": "The inequality is sound. What is wrong is the evidence the design gives for it.\n\nThe parentheticals (\"passes on M5, N3, N5 and N7 (6,814–15,324 against 1,278)\") come from an earlier mapping. There, the probe's turn 1 played the script's turn 2, so `read_R1` was 0 (cold) and the 1,278 margin was ⌈chars/8⌉ of the 800-entry pad. Under the script's own turn labels, those runs' turn 2 sent about 230 characters, not a table.\n\nDerek replayed them with his mapping but the design's 1,278 margin, and that produced the 42/256/362 \"failures\". With the text each run actually sent, the bound holds on N3, N5 and N7, and on N9, which has the script's structure.\n\nThe divisor is safe for the script's table, so I contest Derek's \"1,236–1,314 tokens\":\n- 1,314 is the script's own ⌈chars/8⌉, not a token count;\n- the table tokenises at about 2 characters a token: on L4, turn 2's first request wrote 11,163 tokens, of which the block was 6,133, leaving 5,030 tokens of turn-2 text and turn-1 tail against a margin of 1,314.\n\nDropping the `read_R1` term would kill discrimination, because the base reads exactly `read_R1` or less. So the term stays, and only the cited evidence changes.",
+      "evidence": "My replay of the probe logs, with each run's real turn-2 text (⌈226/8⌉ = 29):\n- N3: 8,132 ≥ 6,896 + 29;\n- N5: 7,836 ≥ 6,814 + 29;\n- N7: 16,240 ≥ 15,324 + 29;\n- N9: 8,130 ≥ 8,030 + 29.\n\nWith 1,278 in place of 29, all three of N3/N5/N7 fail, which reproduces Derek's 42/256/362.\n\nLive, redgreen-derek.md:\n- change: anthropic-key 11,885 ≥ 6,852 + 1,314; openrouter 11,775 ≥ 6,771 + 1,314;\n- base: 6,852 against 6,852 + 1,314; 6,769 against 6,769 + 1,314.\n\nMy own base run with a 13-request turn 2 (`michael/rg-v1-key-1.out`): `read_H` 0 against 6,852 + 1,307, `write_H` 19,159.\n\nWrite and input bounds:\n- `write_H`: change 131 ≤ 401 and 953 ≤ 1,223; base 11,287 > 401 and 11,246 > 383; N9 1,144 ≤ 1,390;\n- `input_H`: change 6,133 and 6,136 ≥ 1,297; base 3.",
+      "required_change": "In \"Assertions on H\", replace the three probe parentheticals. Keep the formulas.\n\n- `read_H`: \"which fails on the base commit (6,852 against 6,852 + 1,314 over an API key; 6,769 against 6,769 + 1,314 through OpenRouter; 0 against 6,852 + 1,307 when turn 2 made 13 requests) and passes on the change (11,885 against 6,852 + 1,314; 11,775 against 6,771 + 1,314) and on N9 (8,130 against 8,030 + 29). ⌈chars/8⌉ is a lower bound for the script's table, which tokenises at about 2 characters a token (turn 2's first request wrote 5,030 tokens beside its 6,133-token block, against a margin of 1,314) (redgreen-derek.md L2–L5; `michael/rg-v1-key-1.out`)\".\n- `write_H`: \"fails on the base (11,287 against 401; 11,246 against 383) and passes on the change (131 against 401; 953 against 1,223) and on N9 (1,144 against 1,390)\".\n- `input_H`: \"6,133 and 6,136 on the change against 1,297; 3 on the base\".\n\nRun status: the replays and the live tables are computed above. Nothing in the script changes.",
+      "locations": [
+        "design.md §8.3 \"Assertions on H\""
+      ]
+    },
+    {
+      "finding_id": "gap-3",
+      "disposition": "propose_fix",
+      "target_artifact": "design.md §8.3 \"Preconditions\" and §8.2 \"Run status\"",
+      "rationale": "Two claims cannot be reproduced under the script's turn structure.\n- §8.2 says \"the inequalities and the preconditions ran against M4, M5, N3, N5 and N7\".\n- §8.3 cites \"9,408–17,918 on every measured run\" for \"turn 1's second request reads more than 0\". Those reads are the probes' recalling first turn.\n\nThose probes have no quiet first turn, so the turn-1 preconditions do not apply to them. N9 meets every precondition, and so do Derek's live runs. Those are what should be cited.\n\nThe preconditions themselves are right. The design just states evidence that is false under its own labels.",
+      "evidence": "N9 against each precondition:\n- turn 1's second request read 6,896;\n- turn 1 carried no block;\n- every turn-2 request carried one;\n- turn 2 made 13 requests.\n\nTurn 1's second request read 6,769–6,853 in every live run (redgreen-derek.md L2–L5; `michael/rg-v0-key-1`, `rg-v1-key-1..3`).\n\nM4, M5, N3, N5 and N7 recalled from turn 1 (`probe2.ts`, `longprobe.ts`).",
+      "required_change": "**§8.3 Preconditions.** \"(9,408–17,918 on every measured run)\" becomes \"(6,769–6,896 on N9 and on every live run, redgreen-derek.md L2–L5)\".\n\n**§8.2 Run status.** Replace its first sentence with:\n\n\"The script ran live on `anthropic-key` and `openrouter`, failing seven assertions on the base commit and passing all twelve on the change (redgreen-derek.md L2–L5). Every precondition and assertion also holds on N9, the one probe log with the script's turn structure. M4, M5, N3, N5 and N7 recalled from their first turn, so their turns sit one earlier than the script's and the turn-1 preconditions do not apply to them.\"\n\nKeep the credential and symlink sentence and the no-OAuth-call sentence.\n\nThe N9 replay was run; there is no code to change.",
+      "locations": [
+        "design.md §8.3 \"Preconditions\"",
+        "design.md §8.2 \"Run status\""
+      ]
+    },
+    {
+      "finding_id": "gap-4",
+      "disposition": "propose_fix",
+      "target_artifact": "design.md §8.2",
+      "rationale": "The finding is correct, and it blocks an owner-required route. Joel's ruling makes the API-key route verified, and Derek's anthropic-key green run (L4) exited 3 on \"turn 2 made at least 12 requests\".\n\nThe precondition must stay. It is what makes the run prove the long-turn (lookback) case rather than only the shape.\n\nRewording does not make the model comply. I ran the script's prompts on anthropic-key four times, with and without the question about the output: three runs made 13 requests and one made 2. Across Derek's runs and mine, 5 of 9 complied. Compliance is the model's, and it is not reliable.\n\nThe smallest complete fix is procedural, with no code added. A run that exits 3 on this precondition is re-run, bounded, with every attempt kept. A retry loop inside the script would add unmeasured code for the same effect.",
+      "evidence": "Runs on the base commit's worktree (`michael/rg-*.out`), with the turn-2 prompt as written (v0) and without \"What was the last number the first command printed?\" (v1):\n- v0: 13 requests;\n- v1: 13, 13 and 2 requests.\n\nDerek's runs:\n- anthropic-key: 13 (his earlier change run), 2 (L4), 2 (L5);\n- openrouter: 13 (L2), 2 (L3).\n\nThat is 5 of 9 meeting the precondition. The script is at `michael/rg-live-v1.mjs` and the worktree was removed. Spend: four Haiku 4.5 API-key sessions plus classifier calls, a few cents each.",
+      "required_change": "Add to §8.2, after the invocation line:\n\n\"How many calls turn 2 makes is the model's choice: twelve were made in 5 of 9 runs on `anthropic-key` and `openrouter`, with or without the question about the output (redgreen-derek.md L2–L5 and its earlier `anthropic-key` run; `michael/rg-v0-key-1`, `rg-v1-key-1..3`). A run that exits 3 on \\\"turn 2 made at least 12 requests\\\" and on no other precondition proves nothing, and is re-run from the start, keeping every attempt's printed table. A route's acceptance is the first run that passes every precondition. Three such exits in a row on one route is a Validate finding, not a pass.\"\n\nThe prompts and the precondition stay as §8.3 gives them.\n\nRun status: the compliance rate behind this rule was measured above. The rule is a procedure, so there is no code to run.",
+      "locations": [
+        "design.md §8.2 (after \"Invocation\")"
+      ]
+    },
+    {
+      "finding_id": "gap-5",
+      "disposition": "propose_fix",
+      "target_artifact": "design.md §5.3 (5) and §8.1",
+      "rationale": "The finding is correct: the design gives the mechanics but never states the consequence. §5.3 (5) already makes the next record null when no carrier is found, and a handoff request carries no block, so the carry lasts exactly one hop.\n\nThat is the intended behaviour. Once the block has left, the prefix carries no block, and pi's own last-message marker reaches each previous request's entry exactly as it does without taiknr. A later recalling turn records its own carrier.\n\nThis is missing context, so it is fixed with one sentence and one test. It is not contested.",
+      "evidence": "- N3 turn 3 (`s-key-h45.log`, a handoff that recalled nothing): request 27 carried the carry and read 8,132 / wrote 1,142. Request 28 had no carry and read 9,274 / wrote 81.\n- `probe2.ts` does the same: `prev = carrier >= 0 ? … : undefined`.\n- Derek's A28 pins it.",
+      "required_change": "**§5.3 (5).** After the next-record paragraph, add:\n\n\"The carry is one hop. A handoff request carries no block, so its next record is null and nothing is carried after it. Once the block has left, the prefix carries no block, and pi's own marker reaches each previous request's entry as it does without taiknr (N3 turn 3: the second request read 9,274 and wrote 81 with no carry). A later recalling turn records its own carrier.\"\n\n**§8.1 adapter tests.** Add: \"a handoff that recalls nothing records null, and the request after it places no carry.\"\n\nRun status: read off N3's log. The adapter test is Derek's A28.",
+      "locations": [
+        "design.md §5.3 (5)",
+        "design.md §8.1 adapter tests"
+      ]
+    },
+    {
+      "finding_id": "gap-6",
+      "disposition": "propose_fix",
+      "target_artifact": "design.md §4 tests row",
+      "rationale": "The finding is correct. Three existing test files have to change and §4 does not name them, so a task list derived from §4 would miss them.\n- `ResponseReadings.applied` is required, and three existing tests pass readings to `responseReceived` directly.\n- `instruments-request.test.ts` also builds `registerContextHandler`'s deps, which gain the state (gap 8).",
+      "evidence": "- `tests/infra/pi-event-handlers/instruments-compact.test.ts:56`, `instruments-tree.test.ts:70` and `instruments-request.test.ts:184` call `holder.current().responseReceived(…)`.\n- `instruments-request.test.ts:109` calls `registerContextHandler(gated, { config: session, store, recallCache, holder })`.",
+      "required_change": "Add these three files to §4's tests row:\n- `tests/infra/pi-event-handlers/instruments-compact.test.ts` and `instruments-tree.test.ts`: they hand readings to `responseReceived`, which now carry `applied`;\n- `instruments-request.test.ts`: the same, plus the context handler's deps now carry the payload state.\n\nNot run: this is a file list.",
+      "locations": [
+        "design.md §4, tests row"
+      ]
+    },
+    {
+      "finding_id": "gap-7",
+      "disposition": "propose_fix",
+      "target_artifact": "design.md §4",
+      "rationale": "The finding is correct. `readResponse` in `pi-instrument-readings.ts` returns `ResponseReadings` today. `applied` comes from the registrar, which holds the state, and not from the adapter. So `readResponse` returns `CompactedReadings` and the registrar adds `applied`. The source file changes, and §4 does not list it.",
+      "evidence": "- `src/infra/adapters/pi-instrument-readings.ts:14` and `:155`: `export function readResponse(...): ResponseReadings`.\n- `src/use-cases/instruments-publisher.ts:59`: `export type ResponseReadings = CompactedReadings`.",
+      "required_change": "Add a §4 row:\n\n\"`src/infra/adapters/pi-instrument-readings.ts` | infra, adapters | **Modify** | `readResponse` returns `CompactedReadings`; the `message_end` registrar adds `applied` from the state to form `ResponseReadings`.\"\n\nNot run: this is a file list.",
+      "locations": [
+        "design.md §4, new row for src/infra/adapters/pi-instrument-readings.ts"
+      ]
+    },
+    {
+      "finding_id": "gap-8",
+      "disposition": "propose_fix",
+      "target_artifact": "design.md §4 context.ts row",
+      "rationale": "Derek's call is right, and the design should make it rather than leave it to him.\n\n`registerContextHandler(pi, deps)` already takes a deps object, and the instruments card widened that object with `holder` without touching the signature. Adding the payload state as one more field keeps the `(pi, deps)` signature, so `AGENTS.md:23` needs no exception for it. The only enumerated exception stays the `message_end` registrar's third parameter.\n\nI name the field `payloadCache` rather than Derek's `payload`, because `payload` reads as `event.payload` in a handler that never sees one.",
+      "evidence": "- `git show 402bc0c -- src/infra/pi-event-handlers/context.ts` adds `holder: InstrumentsHolder` to `deps`.\n- Before that change (`36cffa6`) the deps object has no `holder`.",
+      "required_change": "In §4's `context.ts` row, append:\n\n\"It takes the state as a `payloadCache: PayloadCacheState` field of its existing deps object, as the instruments card added `holder` there (402bc0c). Its `(pi, deps)` signature does not change, so `AGENTS.md`:23 needs no exception for it.\"\n\nNot run: wording only.",
+      "locations": [
+        "design.md §4, src/infra/pi-event-handlers/context.ts row"
+      ]
+    },
+    {
+      "finding_id": "gap-9",
+      "disposition": "contest",
+      "target_artifact": "design.md §8.2–§8.3 (anthropic-oauth route)",
+      "rationale": "It is true that no route Derek owns has pi's two-marked-system shape. It is not true that the carve-out lacks live proof.\n\nThe script's existing assertions can only pass on pi's OAuth shape if the carve-out ran, so Joel's `anthropic-oauth` run (L6) is that proof. The arithmetic:\n- Without the carve-out the budget is 4 − (system[0] + system[1] + tools) = 1.\n- At R1, before + 1 = 2 > 1, so pi's marker is removed. \"R1 marks recall's block\" fails, and so does R1's input bound.\n- At H, carry + before = 2 > 1, which is a no-fit, so no carry is placed and \"H marks the last block of turn 2's user message\" fails.\n- With the carve-out the budget is 2 and every one of those passes.\n\nThe carve-out's billing was also measured on pi's own OAuth (N6). Nothing needs adding.",
+      "evidence": "- Chidi #3: pi's OAuth marks system[0], system[1], the last tool and the last message.\n- Design §5.3 (4): the budget rule.\n- N6 (`s-oauth-h45.log`, `s-oauth-h45-b.log`): system[1] + tools + two message points, no 400; the handoff that also recalled read 15,565.",
+      "required_change": "",
+      "locations": []
+    },
+    {
+      "finding_id": "gap-10",
+      "disposition": "decline",
+      "target_artifact": "design.md §8.2; specs/context-figures/spec.md \"The block's charge, by placement and request\"",
+      "rationale": "The observation is correct, and no artifact overstates it. The spec's uncached row cites the provider's measured billing of the block as input: 2,597 on N3 and, live, 6,133 and 6,136 at H. The figure's pricing of that row is proven by E4 and E7. §8.2 runs with publishing off by design, so the live runs prove placement and billing, not the figure. No artifact claims the figure's uncached row was measured live, so nothing changes.",
+      "evidence": "- specs/context-figures/spec.md, row 1: \"Measured at 2,597 on N3's handoff request\". That is provider billing.\n- redgreen-derek.md E4 and E7.\n- design §8.2: `jeffersonInstruments: false`.",
+      "required_change": "",
+      "locations": []
+    },
+    {
+      "finding_id": "gap-11",
+      "disposition": "propose_fix",
+      "target_artifact": "design.md §10 \"After the merge, in the docs pass\"",
+      "rationale": "`.gitignore` needs no change; that was already settled. The docs-pass list in §10 misstates the counts it sends Bambadjan to fix, and it leaves out the new script.\n- `AGENTS.md:42` says \"twelve non-`session_start` registrations\", not \"thirteen over nine events\". That wording is `ARCHITECTURE.md:46`.\n- `ARCHITECTURE.md:47` says \"Six of the twelve gated registrations\".\n- The live-script trap at `AGENTS.md:39` should name `test-cache-point-live.mjs`, which now exists.\n\nThe remedy edits documentation only, so this is minor.",
+      "evidence": "- `rg`: `AGENTS.md:39` (the trap), `:42` (\"The twelve non-`session_start` registrations\"); `ARCHITECTURE.md:46` (\"Thirteen registrations over nine events\"), `:47` (\"Six of the twelve gated registrations publish\").\n- Derek's F1: fifteen registrations over ten events.",
+      "required_change": "In §10, replace the counts clause with:\n\n\"`ARCHITECTURE.md`:46's 'Thirteen registrations over nine events' becomes fifteen over ten; `ARCHITECTURE.md`:47's 'of the twelve gated registrations' becomes 'of the fourteen'; `AGENTS.md`:42's 'twelve non-`session_start` registrations' becomes fourteen.\"\n\nAdd that `AGENTS.md`:39's live-script trap names `test-cache-point-live.mjs`, beside the removal of the files that are not in the tree.\n\nNot run: documentation only.",
+      "locations": [
+        "design.md §10 \"After the merge, in the docs pass\""
+      ]
+    }
+  ],
+  "settled_findings": [
+    "`read_H ≥ read_R1(turn 2) + ⌈chars(turn 2's own text)/8⌉` is safe and discriminating for the script's own turns. It holds on N3/N5/N7/N9 with the text each run sent, and live on the change (11,885 and 11,775). It fails on the base (6,852 = 6,852; 0 when turn 2 is long). The table tokenises at about 2 characters a token, so ⌈chars/8⌉ is a lower bound.",
+    "Turn 2's first request in the live script is always a recalling request after a quiet turn, because the turn-1 precondition guarantees it. So pi's marker stays on recall's block there, on every covered route.",
+    "The carry is one hop by construction. After a handoff the prefix carries no block and pi's own marker serves (N3 turn 3: 9,274 read, 81 written with no carry).",
+    "D3's live proof is Joel's `anthropic-oauth` run. Without the carve-out, the R1 and H marker assertions cannot pass on pi's four-point OAuth shape. The billing was measured in N6.",
+    "Turn 2's twelve-call compliance is the model's (5 of 9 runs). Rewording, including dropping the output question, did not change it. The precondition stays, and a failing run is re-run under §8.2's rule.",
+    "The context handler receives the payload state as a `payloadCache` field of its existing deps object (precedent 402bc0c). There is no new signature exception.",
+    "Derek's change to the \"shrunk block on the same carried message\" expectation, from read rate to write rate, is D8's specified fix: the spec row \"cached, and changed in place … the write rate, not the read rate\". It is not an expectation edited to make a test pass."
+  ],
+  "owner_decisions": []
+}

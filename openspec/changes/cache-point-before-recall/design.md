@@ -48,17 +48,18 @@ The layout follows `ARCHITECTURE.md` §1: `domain` holds pure rules, `use-cases`
 | `src/infra/pi-event-handlers/payload-cache-commit.ts` | infra, handlers | **Create** | Register `message_end` through the gate; for an assistant message whose usage is valid, commit `state.carrier = state.nextCarrier`. No rules in it. |
 | `src/infra/adapters/anthropic-cache-payload.ts` | infra, adapters | **Create** | The route predicate (D1) and the whole edit (§5.3), plus the applied result and the next record derived from the finished clone. Owns every provider-shape fact, including the local lone-surrogate rule and the whole comparison of D5. |
 | `src/use-cases/payload-cache.ts` | use-cases | **Create** | The pi-free types `CarrierRecord`, `AppliedPlacement` and `PayloadCacheState`. No instance and no logic. |
-| `src/infra/pi-event-handlers/context.ts` | infra, handlers | **Modify** | Write cell (a) after recall returns; clear it at every `context_with_system`. |
+| `src/infra/pi-event-handlers/context.ts` | infra, handlers | **Modify** | Write cell (a) after recall returns; clear it at every `context_with_system`. It takes the state as a `payloadCache: PayloadCacheState` field of its existing deps object, as the instruments card added `holder` there (402bc0c). Its `(pi, deps)` signature does not change, so `AGENTS.md`:23 needs no exception for it. |
 | `src/app/extension/taiknr.ts` | app, composition | **Modify** | Create the state as an inline literal beside `recallCache`, and compose and register the two new handlers. |
 | `src/domain/savings-dollars.ts` | domain | **Modify** | The block's one pricing rule (D8): `PricedRequest` gains `blockUncached: boolean`, which selects the input rate over read or write. The rewrite term and its inputs are unchanged. Pi-free. |
 | `src/use-cases/instruments-publisher.ts` | use-cases | **Modify** | `ResponseReadings` gains `applied`, imported as the plain pi-free `AppliedPlacement` type from `payload-cache.ts`; fold it in at `responseReceived` as §5.4 says; `rewriteOf` is the home of D7's start; keep the `baseline` as the pricing home. No publisher method is added. |
 | `src/infra/pi-event-handlers/instruments-response.ts` | infra, handlers | **Modify** | `registerInstrumentsResponseHandler(pi, holder, state)` takes the payload state as a third parameter, passed from `taiknr.ts`. This is a second enumerated exception to `AGENTS.md`:23's fixed signatures, beside `session_start`'s. The registrar has no deps object to widen, and the holder is not widened to carry the state (rulings "state homes", "no publisher getter"). It also adds `applied` to the read closure it hands the publisher at `message_end`. |
-| `tests/infra/pi-event-handlers/before-provider-request.test.ts`, `tests/infra/pi-event-handlers/payload-cache-commit.test.ts`, `tests/infra/adapters/anthropic-cache-payload.test.ts`, `tests/infra/pi-event-handlers/context.test.ts`, `tests/infra/pi-event-handlers/instruments-response.test.ts`, `tests/domain/savings-dollars.test.ts`, `tests/use-cases/instruments-publisher.test.ts`, `tests/app/extension/taiknr.test.ts` | tests | **Create / Modify** | Mirrors of the layers above. `taiknr.test.ts` pins the registration list, so it changes with the new registrations; `instruments-response.test.ts` is the registrar's, and it gains the `applied` reading; `payload-cache-commit.test.ts` is the commit handler's. |
+| `src/infra/adapters/pi-instrument-readings.ts` | infra, adapters | **Modify** | `readResponse` returns `CompactedReadings`; the `message_end` registrar adds `applied` from the state to form `ResponseReadings`. |
+| `tests/infra/pi-event-handlers/before-provider-request.test.ts`, `tests/infra/pi-event-handlers/payload-cache-commit.test.ts`, `tests/infra/adapters/anthropic-cache-payload.test.ts`, `tests/infra/pi-event-handlers/context.test.ts`, `tests/infra/pi-event-handlers/instruments-response.test.ts`, `tests/domain/savings-dollars.test.ts`, `tests/use-cases/instruments-publisher.test.ts`, `tests/infra/pi-event-handlers/instruments-compact.test.ts`, `tests/infra/pi-event-handlers/instruments-tree.test.ts`, `tests/infra/pi-event-handlers/instruments-request.test.ts`, `tests/app/extension/taiknr.test.ts` | tests | **Create / Modify** | Mirrors of the layers above. `taiknr.test.ts` pins the registration list, so it changes with the new registrations; `instruments-response.test.ts` is the registrar's, and it gains the `applied` reading; `payload-cache-commit.test.ts` is the commit handler's; `instruments-compact.test.ts` and `instruments-tree.test.ts` hand readings to `responseReceived`, which now carry `applied`; and `instruments-request.test.ts` does the same, plus it builds the context handler's deps, which now carry the payload state. |
 | `test-cache-point-live.mjs` | root | **Create** | The live check of §8.2, outside lint, tsc and vitest, like the live scripts `AGENTS.md` describes. |
 
 The adapter, both handlers and the instruments registrar import their types from `src/use-cases/payload-cache.ts`, so no layer imports `app/extension` and the state's one declaration serves all of them.
 
-Two files the proposal's first draft missed are here because the change cannot land without them: `context.ts`, which writes cell (a), and `tests/app/extension/taiknr.test.ts`, which pins the registration list (ruling "documentation targets"; C9).
+Three files the proposal's first draft missed are here because the change cannot land without them: `context.ts`, which writes cell (a); `tests/app/extension/taiknr.test.ts`, which pins the registration list; and `pi-instrument-readings.ts`, whose `readResponse` stops returning `ResponseReadings` once `applied` is the registrar's to add (ruling "documentation targets"; C9).
 
 Documentation is not a task and does not appear in `tasks.md`: `README.md`:40 and :112 plus the under-reporting record, `docs/adr/0009`, `ARCHITECTURE.md`:46-47 and `AGENTS.md`:42's registration counts, and `.gitignore`:12 which is already in place. They are in §10 and in the docs pass (ruling "documentation targets"; C8, R12).
 
@@ -135,6 +136,8 @@ The route predicate plus the edit, in `anthropic-cache-payload.ts`, is specified
 **5. Commit.** The adapter is one pure function, `edit(payload, model, recallBlock, carrier) → { output, nextCarrier, applied }`, that mutates nothing it was given. `applied` is derived from the finished clone for every covered payload carrying exactly one message-level marker (§5.3 (4)), including one where nothing was placed or the wanted points did not fit. It is null only for the untouched payloads of (3), for zero-or-two-or-more message markers, and after a throw. Its derivation: `carrierRead` is as §5.2 says; `block` is as D8 says, null when no carrier is found, which includes a request carrying no block.
 
 For a covered payload carrying exactly one message-level marker, no-fit included, the next record is that payload's carrier when the finished clone carries a marker on the carrier's fingerprint block: the before point, or pi's marker coinciding with it. Otherwise it is null: no carrier found, or a no-fit request where nothing marks that block. For the untouched payloads of (3), for zero-or-two-or-more message markers, and after a throw, the next record is the committed record unchanged. Neither `nextCarrier` nor `applied` is written until `edit` has returned; §5.1 gives the order and the failure path. Record (b) is committed only at a valid assistant `message_end` (§5.1, §5.3 (6)); an errored, aborted or replayed attempt never commits.
+
+The carry is one hop. A handoff request carries no block, so its next record is null and nothing is carried after it. Once the block has left, the prefix carries no block, and pi's own marker reaches each previous request's entry as it does without taiknr (N3 turn 3: the second request read 9,274 and wrote 81 with no carry). A later recalling turn records its own carrier.
 
 **6. Replays and retries.** A replay is derived from its payload and the record the previous request left, so record (b) is idempotent under replay. The edit may differ: a replay sent after a handoff places no carry, and it reads the entries the original wrote.
 
@@ -216,6 +219,7 @@ Payload shape is testable with no network and no model call. The adapter's tests
 - a carrier `[image, R]` recorded, then `[image]` unmarked at the same index: the carry is placed;
 - a different last block at the recorded index places no carry, and the payload equals the input on a three-point route;
 - a carrier that still ends with recall's block places no carry, so only the before point is placed;
+- a handoff that recalls nothing records null, and the request after it places no carry;
 - over an API key, cell (a) set and record (b) null, so only the before point is wanted: the output carries the before point on the block before recall's block, pi's marker stays on recall's block, there are four markers in all, and `applied.block` is "cached";
 - over an API key, with a top-level marker, cell (a) set and record (b) null: pi's marker is removed, the before point is placed, and `applied.block` is "cached";
 - the same with a second tools marker in place of the top-level one: `applied.block` is "uncached";
@@ -269,6 +273,8 @@ The billing scenarios are inequalities, not recorded numbers, computable from us
 
 **Invocation:** `direnv exec . node test-cache-point-live.mjs <route>`, one route per run.
 
+How many calls turn 2 makes is the model's choice: twelve were made in 5 of 9 runs on `anthropic-key` and `openrouter`, with or without the question about the output (redgreen-derek.md L2–L5 and its earlier `anthropic-key` run; `michael/rg-v0-key-1`, `rg-v1-key-1..3`). A run that exits 3 on "turn 2 made at least 12 requests" and on no other precondition proves nothing, and is re-run from the start, keeping every attempt's printed table. A route's acceptance is the first run that passes every precondition. Three such exits in a row on one route is a Validate finding, not a pass.
+
 | Route | Run by | Key and model |
 |---|---|---|
 | `anthropic-key` | Derek | `ANTHROPIC_API_KEY` from `CLAUDE_API_KEY`, model `claude-haiku-4-5` |
@@ -282,7 +288,7 @@ All four routes run with `PI_CODING_AGENT_DIR` and cwd set to fresh `mktemp -d` 
 
 **Discrimination, once at Validate:** `git worktree add --detach <mktemp -d>/base <base commit>`, then `cd <mktemp>/base && direnv exec <repo> node <repo>/test-cache-point-live.mjs anthropic-key`, then `git worktree remove` it. direnv takes the repo's `.envrc`, and the extension comes from the worktree. Record the printed `read_H` line against its bound (§8.3).
 
-**Run status.** The inequalities and the preconditions ran against M4, M5, N3, N5 and N7, except the turn-1 block precondition, which was not run, and the turn 2, request 1 input bound, which was checked against N9's log and §8.3's character counts. The credential check and the symlink semantics were measured with no model call (`dr-s3-r3-auth.log`: `pi auth check --provider anthropic --no-refresh` prints `ready` through the symlink; a write through a symlink lands in its target; removing the directory leaves the target). No OAuth model call was run. The script itself was not run: it does not exist yet, and running it would spend model and classifier calls.
+**Run status.** The script ran live on `anthropic-key` and `openrouter`, failing seven assertions on the base commit and passing all twelve on the change (redgreen-derek.md L2–L5). Every precondition and assertion also holds on N9, the one probe log with the script's turn structure. M4, M5, N3, N5 and N7 recalled from their first turn, so their turns sit one earlier than the script's and the turn-1 preconditions do not apply to them. The credential check and the symlink semantics were measured with no model call (`dr-s3-r3-auth.log`: `pi auth check --provider anthropic --no-refresh` prints `ready` through the symlink; a write through a symlink lands in its target; removing the directory leaves the target). No OAuth model call was run. The script ran from the spike's copy of the project rather than from this checkout, so its invocation, its preconditions and its printed output are measured rather than planned, and `anthropic-key`'s run on the change exited 3 on the request-count precondition (L4), so under the rule above that route's acceptance is a fresh run rather than that one.
 
 ### 8.3 The live script
 
@@ -296,7 +302,7 @@ All four routes run with `PI_CODING_AGENT_DIR` and cwd set to fresh `mktemp -d` 
 - Turn 2: a second 800-entry table, a question about the output, and twelve sequential calls, `echo s1` through `echo s12`, to exceed the 20-position lookback.
 - Turn 3: `echo three`. At threshold 0 recall fires again, so H, turn 3's first request, is the two-point handoff.
 
-**Preconditions.** Exit 3 with the reason if any fails: turn 1's second request reads more than 0 (9,408–17,918 on every measured run); every request of turns 2 and 3 carries a user message ending with a `<recalled_context` text block; no request of turn 1 carries a `<recalled_context` text block; turn 2 made at least 12 requests; D1 holds for the model `ctx.model` reports, otherwise exit 3 with "route not covered by D1: <provider>/<api>/<baseUrl>"; and for the two OAuth routes, `pi auth check --provider anthropic --no-refresh` run against the temporary agent directory prints `ready`, otherwise exit 3 with "no OAuth credential reachable through the symlink".
+**Preconditions.** Exit 3 with the reason if any fails: turn 1's second request reads more than 0 (6,769–6,896 on N9 and on every live run, redgreen-derek.md L2–L5); every request of turns 2 and 3 carries a user message ending with a `<recalled_context` text block; no request of turn 1 carries a `<recalled_context` text block; turn 2 made at least 12 requests; D1 holds for the model `ctx.model` reports, otherwise exit 3 with "route not covered by D1: <provider>/<api>/<baseUrl>"; and for the two OAuth routes, `pi auth check --provider anthropic --no-refresh` run against the temporary agent directory prints `ready`, otherwise exit 3 with "no OAuth credential reachable through the symlink".
 
 **Assertions on turn 2, request 1.** Evaluated and printed like H's:
 
@@ -305,15 +311,17 @@ All four routes run with `PI_CODING_AGENT_DIR` and cwd set to fresh `mktemp -d` 
 - a marker on the block before it;
 - `input_R1(turn 2) < ⌈chars(turn 2's block) / 8⌉`, which passes on N9's turn 2, request 1 (3 against 1,040).
 
+Turn 1 carries no block (a precondition). So this request is a recalling request after a turn that recalled nothing: record (b) is null and no carry is wanted, and the before point plus pi's marker fit the budget on every covered route (on pi's OAuth shape, after the carve-out). The provider therefore writes the block (spec "A recalling request after a turn that recalled nothing"; N9: 3 input, `m[26][0]` and `m[26][1]` marked). N3, N5, N7, M4 and M5 recalled from their first turn, so their second turn opens on a handoff and is not this case.
+
 **Assertions on H.** The script evaluates every assertion on H, prints each with both sides and pass or fail, and exits 1 if any failed:
 
 - at most 4 markers;
 - a marker on the last block of turn 2's user message;
 - a marker on the block before recall's block in turn 3's user message;
 - no marker on recall's block or any block after it;
-- `read_H ≥ read_R1(turn 2) + ⌈chars(turn 2's own text) / 8⌉`, which fails on M4 (0 against 1,278) and passes on M5, N3, N5 and N7 (6,814–15,324 against 1,278);
-- `write_H ≤ Σ write of turn 2's later requests + output of turn 2's last request + ⌈chars(turn 3's own text) / 2⌉ + 256`, which fails on M4 (10,659 against 1,402) and passes on N3, N5 and N7 (916–1,236 against 1,202–1,500);
-- `input_H ≥ ⌈chars(turn 3's block) / 8⌉`.
+- `read_H ≥ read_R1(turn 2) + ⌈chars(turn 2's own text) / 8⌉`, which fails on the base commit (6,852 against 6,852 + 1,314 over an API key; 6,769 against 6,769 + 1,314 through OpenRouter; 0 against 6,852 + 1,307 when turn 2 made 13 requests) and passes on the change (11,885 against 6,852 + 1,314; 11,775 against 6,771 + 1,314) and on N9 (8,130 against 8,030 + 29). ⌈chars / 8⌉ is a lower bound for the script's table, which tokenises at about 2 characters a token: turn 2's first request wrote 5,030 tokens beside its 6,133-token block, against a margin of 1,314 (redgreen-derek.md L2–L5; `michael/rg-v1-key-1.out`);
+- `write_H ≤ Σ write of turn 2's later requests + output of turn 2's last request + ⌈chars(turn 3's own text) / 2⌉ + 256`, which fails on the base (11,287 against 401; 11,246 against 383) and passes on the change (131 against 401; 953 against 1,223) and on N9 (1,144 against 1,390);
+- `input_H ≥ ⌈chars(turn 3's block) / 8⌉`: 6,133 and 6,136 on the change against 1,297, and 3 on the base.
 
 **Output:** a table with one row per request — turn, request, wire markers, block characters, input, read, write, output — and a failure prints both sides of the failing assertion.
 
@@ -346,7 +354,7 @@ From N1, Haiku 4.5 never continues a thread, so every payload is on the wire. `A
 
 **Merge-time facts.** `.envrc` is `.gitignore`:12, committed in `1b773fe`; the entry stays as it is. ADRs 0001–0008 exist, so the new record is `docs/adr/0009`, and ADR 0007's body is not touched (`AGENTS.md` Conventions; ruling "documentation targets").
 
-**After the merge, in the docs pass:** `README.md`:40 and :112 plus the under-reporting record in its instruments section; `docs/adr/0009`; `ARCHITECTURE.md`:46-47 and `AGENTS.md`:42's registration counts (thirteen over nine events becomes fifteen over ten, because `message_end` gains a second taiknr handler); `AGENTS.md`:23's enumeration gains the `message_end` instruments registrar's third parameter, the payload state; `AGENTS.md`'s stale live-script trap (§8.3) and `ARCHITECTURE.md`:5's sentence naming `jev-context-poc.ts` and `test-jev-poc.mjs`, which are not in the tree. Documents never block a feature (Joel, standing).
+**After the merge, in the docs pass:** `README.md`:40 and :112 plus the under-reporting record in its instruments section; `docs/adr/0009`; the registration counts — `ARCHITECTURE.md`:46's "Thirteen registrations over nine events" becomes fifteen over ten, because `before_provider_request` is a new event with one handler and `message_end` gains a second; `ARCHITECTURE.md`:47's "of the twelve gated registrations" becomes "of the fourteen"; `AGENTS.md`:42's "twelve non-`session_start` registrations" becomes fourteen; `AGENTS.md`:23's enumeration gains the `message_end` instruments registrar's third parameter, the payload state; `AGENTS.md`:39's live-script trap names `test-cache-point-live.mjs`, beside the removal of the files that are not in the tree (§8.3), and `ARCHITECTURE.md`:5's sentence naming `jev-context-poc.ts` and `test-jev-poc.mjs` is corrected the same way. Documents never block a feature (Joel, standing).
 
 **Follow-up, not this card:** a card for stub-only lookback losses, which the payload guard does not cover (D10). Its frequency is unmeasured; before recall merged, stub-only losses ran 2k–18k (M1).
 
