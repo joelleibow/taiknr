@@ -60,7 +60,7 @@ export function createContextStub(options: {
 	branch?: SessionEntry[];
 	/** Omitted means the host reports no usage at all, as it does with no model. */
 	contextWindow?: number;
-	model?: { provider: string; id: string; api?: string };
+	model?: { provider: string; id: string; api?: string; baseUrl?: string };
 	signal?: AbortSignal;
 	/** Either a stub or a real `ModelRegistry`, passed through as given. */
 	modelRegistry?: unknown;
