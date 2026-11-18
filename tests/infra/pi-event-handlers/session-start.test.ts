@@ -332,3 +332,17 @@ test("hydration appends no session entry and prints nothing", () => {
 	expect(manager.getEntries().length).toBe(entriesBefore);
 	for (const spy of spies) expect(spy).not.toHaveBeenCalled();
 });
+
+test("a config file edited after session start changes nothing until the next session start", () => {
+	agentConfigFile('{"enabled":true}');
+	const session = createSessionConfig();
+	const fake = register(session);
+	startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: [] }));
+	expect(readyConfig(session.state).enabled).toBe(true);
+
+	agentConfigFile('{"enabled":false}');
+	expect(readyConfig(session.state).enabled).toBe(true);
+
+	startSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: [] }));
+	expect(readyConfig(session.state).enabled).toBe(false);
+});

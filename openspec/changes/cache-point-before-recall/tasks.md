@@ -73,14 +73,14 @@ For the untouched cases `editPayload` returns `{ output: undefined, nextCarrier:
 
 `editPayload` catches nothing. §5.3 (3)'s three untouched cases — a route `coversRoute` rejects, a payload that is not an object, a payload with no `messages` array — are checked before the clone, return `{ output: undefined, nextCarrier: carrier, applied: null }` and never throw. Every other payload is deep-cloned with `structuredClone`, and whatever is thrown from there on propagates to the handler. That includes `structuredClone`'s `DOMException` on a function, a symbol or a throwing getter. The handler's `catch` (§5.1 step 3; task 2.2, B1) is the single fail-open path.
 
-- [ ] 1.1 Create `src/use-cases/payload-cache.ts` with `CarrierRecord`, `AppliedPlacement` and `PayloadCacheState` (§5.2), and `src/infra/adapters/anthropic-cache-payload.ts` with `RouteModel` and `coversRoute` (D1; §5.3 (3)).
+- [x] 1.1 Create `src/use-cases/payload-cache.ts` with `CarrierRecord`, `AppliedPlacement` and `PayloadCacheState` (§5.2), and `src/infra/adapters/anthropic-cache-payload.ts` with `RouteModel` and `coversRoute` (D1; §5.3 (3)).
   - **Test first:** A1 as `coversRoute` rows — one boolean assertion per row of D1's boundary list, so every covered row asserts `true` and every uncovered row `false`. The red is the missing module.
   - **Covered rows:** `anthropic` / `anthropic-messages` / `https://api.anthropic.com`; and `openrouter` / `anthropic-messages` with an `anthropic/` model id.
   - **Uncovered rows:** `https://api.anthropic.com.corp-proxy.internal` and `https://gw.corp/api.anthropic.com/`, both proxies because host equality is exact; a missing `baseUrl`; a `baseUrl` `new URL` cannot parse; `openrouter` / `openai-completions` with the model id `anthropic/claude-haiku-4.5`, which fails on the api alone; `openrouter` / `anthropic-messages` with the model id `google/gemini-2.5-pro`, which is the false side of D1's `anthropic/` prefix clause, so a predicate that drops the clause turns this row red; an undefined model; and bedrock, minimax, opencode, cloudflare-ai-gateway, vercel-ai-gateway, fireworks and github-copilot, none of which has a covered row (spec `tail-recall` "Only routes the predicate covers change").
   - **Verified by:** `npx vitest run tests/infra/adapters/anthropic-cache-payload.test.ts`, then `npm run typecheck`.
   - **Error behavior:** `coversRoute` returns `false` for an undefined model, an unparsable or missing `baseUrl`, and any uncovered row, and never throws (§6.2).
 
-- [ ] 1.2 Add `PayloadEdit` and `editPayload`, the whole of §5.3: the carve-out, the marker walk and pi's message marker, the carrier search and the before point, the budget, the carry, the next record and the applied result (§5.3; D2; D3; D5; D8).
+- [x] 1.2 Add `PayloadEdit` and `editPayload`, the whole of §5.3: the carve-out, the marker walk and pi's message marker, the carrier search and the before point, the budget, the carry, the next record and the applied result (§5.3; D2; D3; D5; D8).
   - **Test first:** A2–A28, plus the in-turn test, the throw test and the quiet test below.
   - **A2's fixture** is A13's pi-OAuth-shaped payload, which a covered model would normalize, passed once with each uncovered model from 1.1. Expected: `output` undefined, `nextCarrier` equal to the given carrier, `applied` null. A payload that is not an object and a payload with no `messages` array give the same; an empty `messages` array is covered.
   - **The carve-out** (§5.3 (4), "Normalization first"; D3): A13, on pi's OAuth shape with no block and no handoff, where base removes no carve-out; A15, with no message marker at all. Both assert the output equals its input except `system[0]`'s marker. A12, a handoff that also recalls — both points placed, pi's last-message marker removed, `system[0]` unmarked, `system[1]` and tools marked, four markers, green as `m[0][0] m[4][0] system[1] tools[0]`; and A14, the same shape on a no-fit request carrying a top-level marker, which places no message-level point and moves none.
@@ -102,13 +102,13 @@ For the untouched cases `editPayload` returns `{ output: undefined, nextCarrier:
 
 `src/infra/pi-event-handlers/before-provider-request.ts` (§5.1), tested in `tests/infra/pi-event-handlers/before-provider-request.test.ts` through the gated fake pi with a ready holder and the test's own state. The handler registers one event and holds no rules.
 
-- [ ] 2.1 Extend `tests/support/fake-pi.ts` so `createContextStub`'s `model` option takes `baseUrl?: string`, then create the handler and its registration (§8.1; §5.1).
+- [x] 2.1 Extend `tests/support/fake-pi.ts` so `createContextStub`'s `model` option takes `baseUrl?: string`, then create the handler and its registration (§8.1; §5.1).
   - **Test first:** B2, a covered request edits the payload and stores the placement it computed, where base stores nothing; B4, the route re-read per request, so `/model` to an uncovered route stops the edit; B6, publishing off with the edit still made, where base makes no edit.
   - **Boundary cases:** an uncovered `ctx.model`; an undefined `ctx.model`; a rejected config (2.2's B5); publishing on and off.
   - **Verified by:** `npx vitest run tests/infra/pi-event-handlers/before-provider-request.test.ts`.
   - **Error behavior:** the handler never throws out; `undefined` means no edit and leaves the payload as earlier handlers left it.
 
-- [ ] 2.2 Add the §5.1 ordering and the failure path, and pin where the session's config comes from.
+- [x] 2.2 Add the §5.1 ordering and the failure path, and pin where the session's config comes from.
   - **Test first:** B1, the order that matters — assign `state.applied` a non-null value and `state.nextCarrier` a record different from `state.carrier`, fire `before_provider_request` on a covered `ctx.model` with a payload carrying a function value, and assert the handler returns `undefined`, does not throw, sets `applied` to null, leaves `nextCarrier` deep-equal to `carrier`, and leaves `carrier` unchanged. At base `applied` stays non-null. B3, a covered request followed by an uncovered one, which leaves `applied` null, where base keeps the stale placement. B5 (**pin**), inertness with `enabled` false and with a rejected config.
   - **The session-start pin**, in `tests/infra/pi-event-handlers/session-start.test.ts`. B5 proves the handler is inert on a config it read; this proves the config is read once, at session start, which is what makes one read enough for a session:
 

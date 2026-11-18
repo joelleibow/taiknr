@@ -133,3 +133,39 @@ test.each([
 	expect(state.applied).toBeNull();
 	expect(state.nextCarrier).toBeNull();
 });
+
+test("a payload the adapter cannot copy leaves no placement behind: compute first, commit after", () => {
+	const carrier: CarrierRecord = { index: 0, fingerprint: "own", block: "block" };
+	const state: PayloadCacheState = {
+		recallBlock: "block",
+		carrier,
+		nextCarrier: { index: 1, fingerprint: "other", block: "block" },
+		applied: { carrierRead: null, block: "cached" },
+	};
+	const { fire } = harness({ state });
+	const withGetter = { ...RECALLING };
+	Object.defineProperty(withGetter, "leftover", {
+		enumerable: true,
+		get() {
+			throw new Error("a getter that throws");
+		},
+	});
+
+	for (const given of [{ ...RECALLING, leftover: () => 1 }, { ...RECALLING, leftover: Symbol("nope") }, withGetter]) {
+		expect(() => fire(given, COVERED)).not.toThrow();
+		expect(fire(given, COVERED)).toBeUndefined();
+		expect(state.applied).toBeNull();
+		expect(state.nextCarrier).toEqual(carrier);
+		expect(state.carrier).toEqual(carrier);
+	}
+});
+
+test("a covered request followed by an uncovered one leaves applied null, so no request prices a stale placement", () => {
+	const { state, fire } = harness();
+	state.recallBlock = "block";
+
+	expect(fire(RECALLING, COVERED)).toBeDefined();
+	expect(state.applied).not.toBeNull();
+	expect(fire(RECALLING, UNCOVERED)).toBeUndefined();
+	expect(state.applied).toBeNull();
+});
