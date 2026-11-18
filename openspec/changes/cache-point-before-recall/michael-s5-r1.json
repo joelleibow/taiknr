@@ -1,0 +1,273 @@
+{
+  "owner_decisions": [],
+  "resolutions": [
+    {
+      "disposition": "propose_fix",
+      "evidence": "**Measured this pass**\n- In a `git worktree --detach` copy of HEAD `d21c80b`, with `npm ci`, I made each required-field change alone and ran `tsc --noEmit` (`.pi/marbleization/cache-point-before-recall/michael/s5-type-ripples.log`).\n- Each change broke exactly the sites listed under \"The ripples\" below.\n- I then applied the regrouped order cumulatively, and tsc reported 0 errors after every step:\n  1. group 1's types;\n  2. the deps field, the state literal and the two test deps sites;\n  3. (c) + (d) + `readResponse` returning `CompactedReadings` + `taiknr.ts:59` + the fixtures carrying `applied: null`;\n  4. (b) + the publisher's value + the helper default.\n- `vitest run` then ran 37 files and 543 tests, all green.\n\n**The ripples**\n- **(a) `payloadCache` required in the context handler's deps:** `taiknr.ts:57`, `context.test.ts:112`, `instruments-request.test.ts:109`.\n- **(b) `PricedRequest.blockUncached` required:** `instruments-publisher.ts:276`, `savings-dollars.test.ts:20`.\n- **(c) `ResponseReadings.applied` required:**\n  - `pi-instrument-readings.ts:158`;\n  - `instruments-compact.test.ts:63`, `instruments-tree.test.ts:77`, `instruments-request.test.ts:191`;\n  - 45 sites in `instruments-publisher.test.ts`.\n- **(d) the registrar's third parameter:** `taiknr.ts:59` and `instruments-response.test.ts:80, :191, :215`.\n\n**Gate:** `package.json`: `check` = `lint && typecheck && test`; `tsconfig.json` include is `src/**/*.ts` and `tests/**/*.ts`.",
+      "finding_id": "readiness-r1-1",
+      "locations": [
+        "tasks.md preamble",
+        "tasks.md File Boundary (rows src/app/extension/taiknr.ts, src/use-cases/instruments-publisher.ts, src/infra/pi-event-handlers/instruments-response.ts, src/infra/adapters/pi-instrument-readings.ts, and the test rows)",
+        "tasks.md 4.1",
+        "tasks.md 5.1",
+        "tasks.md 6.1",
+        "tasks.md 6.2",
+        "tasks.md 7.1",
+        "tasks.md 8.1",
+        "tasks.md Scenario Coverage (task numbers)",
+        "tasks.md 10.1 (re-run list)"
+      ],
+      "rationale": "The finding is correct, and I measured it. tsc covers `tests/**`, and `npm run check` runs tsc. Each required field breaks every construction site that is still untouched:\n- 4.1's deps field breaks `taiknr.ts:57`, which 8.1 owns.\n- 5.1's `blockUncached` breaks the `netDollars` literal at `instruments-publisher.ts:276`, which 6.2 owns.\n- 6.1's `applied` breaks `readResponse`, which 7.1 owns.\n- 7.1's third parameter breaks `taiknr.ts:59`, which 8.1 owns.\n\nSo groups 4 through 7 each end red, and 4.1's and 6.1's \"Verified by: npm run typecheck\" fails as written.\n\nThe fix is to land each widening together with its construction sites. In the order below, every task leaves typecheck clean. I measured that cumulatively.",
+      "required_change": "Regroup so each widening lands with its construction sites.\n\n**Preamble.** \"Each group lands its own tests and leaves `npm run check` green, and each task leaves `npm run typecheck` clean, because a required field lands in the same task as every site that constructs it (`s5-type-ripples.log`).\"\n\n**Group 4, \"Cell (a) and the session state\" (4.1).** 4.1 also does three things:\n- creates the state in `src/app/extension/taiknr.ts` beside `recallCache`: `const payloadCache: PayloadCacheState = { recallBlock: null, carrier: null, nextCarrier: null, applied: null };`\n- passes it at `:57` as `{ config: session, store, recallCache, holder, payloadCache }`;\n- adds `payloadCache` to the deps literals at `tests/infra/pi-event-handlers/context.test.ts:112` and `tests/infra/pi-event-handlers/instruments-request.test.ts:109`.\n\nVerified by vitest on those two files, then `npm run typecheck`.\n\n**Group 5, \"The figures and the readings\".** Old groups 5, 6 and 7 merge here, as three tasks in this order.\n\n- **5.1, the readings** (old 6.1's type plus old 7.1).\n  - `ResponseReadings` becomes `interface ResponseReadings extends CompactedReadings { applied: AppliedPlacement | null }`. `applied` is required, and null means no message-level edit or an untouched payload.\n  - `readResponse` returns `CompactedReadings`.\n  - `registerInstrumentsResponseHandler(pi, holder, state: PayloadCacheState)`, and its closure is `() => ({ ...readResponse(event, ctx), applied: state.applied })`.\n  - `taiknr.ts:59` passes `payloadCache`.\n  - Every reading handed to `responseReceived` in the tests carries `applied: null`. That covers `tests/use-cases/instruments-publisher.test.ts`'s `contextReading` helper (:166) and every inline reading tsc names there (`s5-type-ripples.log` (c)), plus `instruments-compact.test.ts:63`, `instruments-tree.test.ts:77` and `instruments-request.test.ts:191`.\n  - `instruments-response.test.ts`'s three registrations (:80, :191, :215) pass a state literal.\n  - Test first: G1. Verified by vitest on those files, then `npm run typecheck`.\n- **5.2, D7's start in `rewriteOf`** (old 6.1's logic). E1, E2 and the coincident-carry case. No type change.\n- **5.3, D8 whole** (old 5.1 plus old 6.2).\n  - `PricedRequest.blockUncached`; `netDollars`' block rate.\n  - At `instruments-publisher.ts:276` the publisher passes `blockUncached: readings.applied?.block === \"uncached\"`, and stores the baseline as readiness-r1-8 states.\n  - The `blockInNewTail` clause.\n  - `tests/domain/savings-dollars.test.ts`'s `request()` helper (:20) defaults `blockUncached: false`.\n  - Tests: E3–E9, the driven case, and the one mandated expectation change.\n  - Verified by vitest on both files, then `npm run check`.\n\n**Group 6, \"The composition\" (6.1, old 8.1).** Narrowed to registering the two new handlers and F1. The state literal already exists from 4.1.\n\n**Renumbering.** Old 9→7, 10→8, 11→9, 12→10. Renumber every reference to them: Scenario Coverage, Residuals, and 10.1's re-run list.\n\n**File Boundary.**\n- `taiknr.ts` row: \"4.1 creates the state literal and passes it to `registerContextHandler`; 5.1 passes it to `registerInstrumentsResponseHandler`; 6.1 registers the two new handlers.\"\n- Each test row names the task that edits it.\n\nRun status: the cumulative order was run in a copy, with tsc 0 errors at each step and 543 of 543 tests green. The behavioural tests are design statements, because the code does not exist yet.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "- design.md §6.1, the row for a payload carrying a value `structuredClone` cannot copy: \"`edit` throws before anything is committed\".\n- design.md §6.2: the same.\n- design.md §5.1, steps 1–3: try, commit, catch.\n- `redgreen-derek.md` B1 (a function value) and M1 (the catch stops resetting → only B1 goes red).\n- `structuredClone({ messages: [], leftover: () => 1 })` throws `DOMException`, measured in Node 26 in an earlier pass.",
+      "finding_id": "readiness-r1-2",
+      "locations": [
+        "tasks.md 1.1 Error behavior",
+        "tasks.md 1.2 Error behavior",
+        "tasks.md group 1 preamble (the editPayload paragraph)"
+      ],
+      "rationale": "The finding is correct.\n- 1.1 says editPayload \"never throws\", and 1.2 calls it \"total over its four inputs\".\n- Design §5.1, §6.1 and §6.2 instead have `edit` throw on a payload `structuredClone` cannot copy, and have the handler's catch reset `applied` and `nextCarrier`.\n- B1 drives exactly that, and mutation M1 is caught by B1 alone.\n\nIf the adapter swallows the error, the handler's catch becomes dead code, M1 stops being caught, and the one stateful failure path has no test. The adapter must not catch.",
+      "required_change": "**Group 1 preamble** (after the `editPayload` signature):\n\n> \"`editPayload` catches nothing. §5.3 (3)'s three untouched cases — a route `coversRoute` rejects, a payload that is not an object, a payload with no `messages` array — are checked before the clone, return `{ output: undefined, nextCarrier: carrier, applied: null }` and never throw. Every other payload is deep-cloned with `structuredClone`, and whatever is thrown from there on propagates to the handler. That includes `structuredClone`'s `DOMException` on a function, a symbol or a throwing getter. The handler's `catch` (§5.1 step 3; task 2.2, B1) is the single fail-open path.\"\n\n**1.1 Error behavior:** \"`coversRoute` returns `false` for an undefined model, an unparsable or missing `baseUrl`, and any uncovered row, and never throws.\"\n\n**1.2 Error behavior:** replace \"none reaches the caller; the function is total over its four inputs\" with \"the untouched cases return `output: undefined`. A throw is not caught here; it is the handler's (2.2, B1, M1).\"\n\nNot run: wording. The behaviour it describes is the one B1 and M1 ran in the spike.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "- `redgreen-derek.md` §1 A1–A28 and §5. The spike ran the complete adapter green; M3 turns A12–A15 red, and M4 turns eight labels red.\n- design.md §5.3 (4), \"Nothing wanted\": a covered payload with nothing wanted and no carve-out returns `undefined`.\n- The live script source `derek/test-cache-point-live.mjs.txt:34-47`: its `covered(model)` takes the model alone, which is the form 1.1 tests.",
+      "finding_id": "readiness-r1-3",
+      "locations": [
+        "tasks.md group 1 (tasks 1.1–1.7)",
+        "tasks.md Scenario Coverage (group 1 task numbers)"
+      ],
+      "rationale": "The finding is correct.\n- A1 and A2 assert \"edited\", which needs `editPayload`; 1.1 adds only `coversRoute`.\n- A18, A19 and A20 need the before point (1.4), the carry (1.6) and the budget (1.5).\n- A8's \"pi's marker stays, four markers\" is the budget's rule, which is 1.5.\n- 1.3 even credits M4, a mutation of 1.5's code, with turning A18 red.\n\nThe spike proved every A-label green against the complete adapter only. Splitting one pure function into seven tasks whose tests depend on later tasks would force the coder to invent interim placement code.\n\nThe smallest decision-free structure is the one the spike ran: the route predicate on its own, then the whole edit. A1's covered row also needs a named fixture. The predicate is better proven on `coversRoute` directly, row by row, and the \"covered payloads are edited\" half belongs to A8 and A12.",
+      "required_change": "Replace tasks 1.1–1.7 with two tasks.\n\n**1.1, the types and `coversRoute`.** Creates `src/use-cases/payload-cache.ts` and the `coversRoute` half of `src/infra/adapters/anthropic-cache-payload.ts`.\n- Test first: A1 as `coversRoute` rows, one boolean assertion per row of the current boundary list.\n- Covered rows: `anthropic` / `anthropic-messages` / `https://api.anthropic.com`, and `openrouter` / `anthropic-messages` with an `anthropic/` id.\n- Uncovered rows: the two proxy hosts, a missing `baseUrl`, an unparsable one, `openai-completions`, an undefined model, and each named gateway.\n- The red is the missing module.\n\n**1.2, `editPayload`, the whole of §5.3.** Its test list is A2–A28 plus readiness-r1-4's in-turn test. Two fixtures are named here:\n- **A2's fixture** is A13's pi-OAuth-shaped payload, which a covered model would normalize, passed once with each uncovered model from 1.1. Expected: `output` undefined, `nextCarrier` equal to the given carrier, `applied` null. A non-object payload and a payload with no `messages` array give the same.\n- **A19 and A20** are recalling requests over an API key with record (b) null: a `tool_use` input carrying `cache_control`, and an empty `role:system` effort message after pi's marker. In each, the before point is placed.\n\nAssign A18 (the `input_schema` property, with a handoff that also recalls placing both points) here as written.\n\n**Mutations.** At the end of 1.2, run M3 (A12–A15 red) and M4 (A3, A5, A7, A8, A9, A10, A12, A18 red), each restored afterwards.\n\n**Verified by:** vitest on the adapter test file, then `npm run typecheck`.\n\nRun status: not run as a partition. The two-task form is the shape the spike ran green, a predicate that is independent of the edit and the complete edit.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "**In-turn shape on the wire.** Derek's live L2 rows, change on openrouter, turn 2 requests 10–13: `system[0] tools[3] m[4][0]:text m[22][0]:tool_result` through `m[28][0]:tool_result` (`.pi/marbleization/cache-point-before-recall/derek/live-runs.md:75-78`). That is the in-turn shape from his real adapter.\n\n**N2:** `michael/ttl-carry-h55.log`, read 8,138 / write 3,850.\n\n**The \"route cannot be switched\" pin, run this pass.** I appended the test to a copy of base's `tests/infra/pi-event-handlers/session-start.test.ts` and ran vitest: 1 passed. The file is kept at `michael/s5-session-start.test.ts`.\n\n**`setEnabled`** is called by nothing in `src/` outside `session-config.ts` (`rg setEnabled src`).",
+      "finding_id": "readiness-r1-4",
+      "locations": [
+        "tasks.md 1.2 (adapter test list)",
+        "tasks.md Scenario Coverage, tail-recall rows \"In-turn requests\", \"Only the cache markers differ\", \"A turn longer than the entry's remaining lifetime\", \"The route cannot be switched mid-session\"",
+        "tasks.md File Boundary (new row tests/infra/pi-event-handlers/session-start.test.ts)",
+        "tasks.md Residuals item 6"
+      ],
+      "rationale": "The finding is correct on all four rows. A wrong mapping reads as proven when it is not.\n- **\"In-turn requests\".** A9 is the yield case, and A8 is a first request. No label places the before point earlier in the array with pi's marker untouched on a later `tool_result`, which is the shape Derek's live run put on the wire.\n- **\"Only the cache markers differ\".** It cites only no-edit cases.\n- **The lifetime scenario.** A3 proves the `ttl` copy, not the lifetime. Its billing half cannot be observed by an automated test, because the harness rewrites usage, and the live script does not run 7.5 minutes. Its shape half can be: the before point rides every request that carries the block. That is the mechanism N2 measured.\n- **\"The route cannot be switched mid-session\".** B5 proves inertness, not that config is read once. A pin on the session-start reader proves that, and I ran it.",
+      "required_change": "**1.2 gains an in-turn test.** It is new, not a spike label.\n- **Fixture.** API key. `[U1, A, U2 = [own text, B], assistant tool_use, user tool_result marked by pi]`, with cell (a) = B and record (b) = `{ index of U2, fingerprint: own text, block: B }`.\n- **Expected.**\n  - the before point on U2's own text, a copy of pi's marker;\n  - pi's marker untouched on the last `tool_result`;\n  - no carry;\n  - exactly four markers;\n  - `applied` = `{ carrierRead: B, block: \"cached\" }`;\n  - `nextCarrier` deep-equal to the record.\n- **Evidence:** live L2, `live-runs.md:75-78`.\n\n**A8 and A12 gain one assertion each.** The output and the input are deep-equal once every `cache_control` key is removed at every depth.\n\n**Scenario Coverage rows.**\n- \"In-turn requests\": 1.2, the in-turn test; live L2 (`live-runs.md:75-78`). Drop the A9 note.\n- \"Only the cache markers differ\": 1.2, A8 and A12 with the stripped deep-equal.\n- \"A turn longer than the entry's remaining lifetime\":\n  - shape: A8 and the in-turn test, which show the before point on every request that carries the block, the mechanism N2 depends on;\n  - billing: N2 (`ttl-carry-h55.log`, read 8,138 / write 3,850), probe-measured and not re-run, because no automated test observes a TTL and the live script does not run 7.5 minutes.\n  - Residual 6 points to this row instead of restating it.\n- \"The route cannot be switched mid-session\": the new pin below, not B5.\n\n**A new pin** in `tests/infra/pi-event-handlers/session-start.test.ts`. Add a File Boundary row for it as Modify, one pin test, and make the pin part of 8.1's re-run.\n\n```ts\ntest(\"a config file edited after session start changes nothing until the next session start\", () => {\n\tagentConfigFile('{\"enabled\":true}');\n\tconst session = createSessionConfig();\n\tconst fake = register(session);\n\tstartSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: [] }));\n\texpect(readyConfig(session.state).enabled).toBe(true);\n\n\tagentConfigFile('{\"enabled\":false}');\n\texpect(readyConfig(session.state).enabled).toBe(true);\n\n\tstartSession(fake, createContextStub({ cwd: workDirectory, trusted: false, branch: [] }));\n\texpect(readyConfig(session.state).enabled).toBe(false);\n});\n```\n\nRun status: the pin ran green at base this pass. The in-turn test and the stripped deep-equal are design statements whose expected shape Derek's live L2 rows show. The adapter does not exist yet.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "**The source script:** `.pi/marbleization/cache-point-before-recall/derek/test-cache-point-live.mjs.txt`.\n- Exports `evaluate` at :155, `report` at :244, `parseObserverLog` at :271.\n- Main guard with `realpathSync` at :349-352.\n- Turn-2 precondition at :174-178.\n- design.md §8.3 Preconditions: \"every request of turns 2 and 3 carries a user message ending with a `<recalled_context` text block\".\n\n**L1 ran this pass.** From the repository root, `node .pi/marbleization/cache-point-before-recall/derek/live-assertions-offline.mjs <tmp> long-added.log long-carry.log`, against the source as it is and against the widened precondition:\n- both versions give `FAIL H marks the last block of turn 2's user message: carry message 26: unmarked` on long-added;\n- both give `pass … carry message 26: marked` on long-carry.\n\nThe temporary copy was removed afterwards.",
+      "finding_id": "readiness-r1-5",
+      "locations": [
+        "tasks.md 7.1 (old 9.1) and its L1 \"Test first\""
+      ],
+      "rationale": "The finding is correct. The prompt wording decides how often the twelve-request precondition holds: 5 of 9 runs, design §8.2. A re-invented prompt therefore invalidates the red/green evidence, and L1 imports `evaluate` and `report`. The working copy exists on this machine, so the task should name it.\n\nOne divergence has to be fixed on the way in. The source checks \"every request of turn 2 carries a recall block\", while design §8.3 requires turns 2 and 3. The narrower check lets three of H's assertions pass vacuously when turn 3 recalls nothing:\n- \"H marks the block before recall's block\" and \"H marks nothing on recall's block or after it\", both guarded by `H.blockChars === 0 ||` at :206-216;\n- `input_H ≥ ⌈chars/8⌉`, which becomes ≥ 0.\n\nThe widened precondition holds on every measured live run: turn 3's requests carried 10,374 or 10,386 block characters in L2–L5 (`live-runs.md:15-16, 49-50, 79-80, 105-106`).",
+      "required_change": "**7.1 (old 9.1)** creates `test-cache-point-live.mjs` at the repository root by copying `.pi/marbleization/cache-point-before-recall/derek/test-cache-point-live.mjs.txt` byte for byte, with one change:\n- the precondition at :174-178 becomes \"every request of turns 2 and 3 carries a recall block\", over `[...turn2, ...turn3]` (design §8.3).\n\nThe prompts, the observer string, the exit codes and the `realpathSync` main-module guard stay as they are.\n\n**Required named exports:** `evaluate(requests)`, `report(route, run)`, `parseObserverLog(text)`. The observer is a string written into the run's temporary cwd, not an export.\n\n**L1.** From the repository root, run `node .pi/marbleization/cache-point-before-recall/derek/live-assertions-offline.mjs . long-added.log long-carry.log`. The driver reads its logs from `.pi/marbleization/cache-point-before-recall/michael/`, relative to the cwd. The check is the carry assertion:\n- red on long-added: `carry message 26: unmarked`;\n- green on long-carry: `marked`.\n\nThe probe logs fail the turn-1 preconditions by construction (`redgreen-derek.md` Gap 3), so L1 judges that one assertion only.\n\nRun status: L1 ran on both versions this pass and gave the same carry result. The widened precondition was checked against the four live tables.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "**Existing tests, by title** (listed this pass):\n- `tests/use-cases/instruments-publisher.test.ts`: :297 \"a valid response makes its pair live…\", :387 \"an invalid response consumes the pending request…\", :428 \"a block larger than the stub saving publishes a negative pair and a falling total\", :450 \"…minus zero\", :667 \"two calls before one valid response add up and are subtracted once\", :700 \"an absent, non-finite or negative cost counts as no spend\".\n- `tests/domain/savings-dollars.test.ts`: rows at :84, :91, :98, :112 and the test at :164.\n\n**The split test, run this pass.** In a copy at base, the new test passes. With the change's `blockUncached` field and helper default it also passes, and tsc reports 0 errors. Mutating `responseRates` so `warm` reads `cacheRead > cacheWrite` turns it red, along with two existing tests. Restored, all 20 pass. The file is kept at `michael/s5-savings-dollars.test.ts`.",
+      "finding_id": "readiness-r1-6",
+      "locations": [
+        "tasks.md Scenario Coverage, context-figures rows \"The split alone changes no figure\", \"Recall's classifier spend is inside the net\", \"A negative total is published as it is\", \"The pair publishes together at the response\", \"A warm request that read only part of its prefix\", \"The edges the design decides\"",
+        "tasks.md 5.3 (the domain test list)"
+      ],
+      "rationale": "The finding is correct. A pin proves something only if it names a test that fails when the behaviour is deleted. Each pinned row now gets one.\n\nNo existing test carries the split scenario's numbers. So I wrote that test, with M2's inputs at Opus 5.5's catalogue prices, and ran it:\n- it is green at base and green with the change's types;\n- a mutation that makes the figure read the split turns it red.\n\nSo it is a real pin.",
+      "required_change": "**Scenario Coverage rows: name each pin.**\n- **The split alone changes no figure:** a new test in `tests/domain/savings-dollars.test.ts` (task 5.3), green at base.\n\n```ts\ntest(\"the split alone changes no figure: the poisoned and the fixed split both net −0.02285\", () => {\n\t// M2's request at Opus 5.5's catalogue prices: input $4/M, read $0.2/M, write $5/M.\n\tconst price = (usage: UsageCounts): CostCounts => ({\n\t\tinput: usage.input * 4 * MICRO,\n\t\tcacheRead: usage.cacheRead * 0.2 * MICRO,\n\t\tcacheWrite: usage.cacheWrite * 5 * MICRO,\n\t});\n\tconst priced = request({ stubSaving: 37_301, suffixEstimate: 6_315 });\n\tconst poisoned: UsageCounts = { input: 4, cacheRead: 35_731, cacheWrite: 139_169 };\n\tconst fixed: UsageCounts = { input: 4, cacheRead: 168_585, cacheWrite: 6_315 };\n\texpect(netDollars(responseRates(poisoned, price(poisoned)), priced)).toBeCloseTo(-0.02285, 5);\n\texpect(netDollars(responseRates(fixed, price(fixed)), priced)).toBeCloseTo(-0.02285, 5);\n});\n```\n\n- **Recall's classifier spend:** publisher tests \"two calls before one valid response add up and are subtracted once\" and \"an absent, non-finite or negative cost counts as no spend\".\n- **A negative total:** \"a block larger than the stub saving publishes a negative pair and a falling total\" and \"a negative saving that rounds to zero is published as minus zero\".\n- **The pair publishes together:** \"a valid response makes its pair live and re-posts every k-scaled figure with the new k\" and \"an invalid response consumes the pending request, so the next valid one prices nothing\", plus G1.\n- **A warm request that read only part of its prefix:** the `savings-dollars.test.ts` row \"a request that read part of its prefix from cache is priced warm\".\n- **The edges the design decides:** the `savings-dollars.test.ts` rows \"a cache read whose token count is zero while its cost is not\", \"mixed short and one-hour cache writes, so the write rate is blended\" and \"a counterfactual that would have crossed a cost tier is priced at the actual read rate\", and the test \"a cost that is non-finite or negative falls back instead of pricing the request\".\n\nRun status: the split test ran at base and with the change's types, and was red under the split mutation.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "**The sites, measured** (`michael/s5-type-ripples.log`):\n- `context.test.ts:112`;\n- `instruments-response.test.ts:80, :191, :215`;\n- `savings-dollars.test.ts:20`;\n- `instruments-publisher.test.ts`'s `contextReading` (:166) plus the inline sites tsc names;\n- `instruments-compact.test.ts:63`, `instruments-tree.test.ts:77`, `instruments-request.test.ts:109, :191`.\n\n**`payloadCache` is the name** in design.md §4's `context.ts` row and in tasks.md 4.1.",
+      "finding_id": "readiness-r1-7",
+      "locations": [
+        "tasks.md File Boundary (test rows and the instruments-request.test.ts row)",
+        "tasks.md 5.1 (the new readings task)",
+        "tasks.md 4.1"
+      ],
+      "rationale": "The finding is correct, and the tsc measurement for readiness-r1-1 lists the exact sites. The File Boundary row for `instruments-request.test.ts` says \"a `payload` state\", while design §4 and task 4.1 say `payloadCache`.",
+      "required_change": "**File Boundary test rows.** Each names the sites it edits and the task that edits them:\n- `tests/infra/pi-event-handlers/context.test.ts:112`: the `payloadCache` deps field (4.1).\n- `tests/infra/pi-event-handlers/instruments-request.test.ts`:\n  - :109, the `payloadCache` deps field (4.1);\n  - :191, `applied: null` (5.1).\n- `tests/infra/pi-event-handlers/instruments-response.test.ts:80, :191, :215`: a state literal as the third argument (5.1).\n- `tests/infra/pi-event-handlers/instruments-compact.test.ts:63` and `instruments-tree.test.ts:77`: `applied: null` (5.1).\n- `tests/use-cases/instruments-publisher.test.ts`: the `contextReading` helper (:166) and every inline reading tsc names carry `applied: null` (5.1); the new tests (5.2, 5.3).\n- `tests/domain/savings-dollars.test.ts`: the `request()` helper (:20) defaults `blockUncached: false`; the new tests (5.3).\n\n**Naming.** Replace \"a `payload` state\" with \"`payloadCache`\". Where tasks.md cites Gap 8, note that Gap 8's `payload` is this field.\n\n**Shape.** State the exact type once, in 5.1: `ResponseReadings extends CompactedReadings { applied: AppliedPlacement | null }`, where `applied` is required and null means not edited.\n\nRun status: the sites were measured by tsc this pass.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "**`baseUrl`.** In the copy this pass, a declaration `coversRoute(model: RouteModel | undefined)` with `RouteModel = { provider: string; api: string; id: string; baseUrl?: string }` accepts a `Model<any> | undefined` and a literal without `baseUrl` with 0 tsc errors. pi's `BaseModel.baseUrl: string` is at `node_modules/@earendil-works/pi-ai/dist/types.d.ts:652`.\n\n**Cell (a).**\n- `appendRecalledContextToMessages` builds its block from `formatRecalledContext(recalledOutputs)` (`src/infra/adapters/pi-context-adapter.ts:42`).\n- The context handler's early returns are at `src/infra/pi-event-handlers/context.ts:55, 58, 62, 68, 85`.\n\n**Baseline.** In the publisher, `baseline` is `RequestCandidate | undefined` (:150) and `newStubStart` takes that type (:137). design.md §5.4 says \"`requestBuilt` does not set it\".",
+      "finding_id": "readiness-r1-8",
+      "locations": [
+        "tasks.md group 1 preamble (signatures)",
+        "tasks.md 1.1",
+        "tasks.md 4.1",
+        "tasks.md 5.3 (the baseline)"
+      ],
+      "rationale": "The finding is correct. Each choice is one that tests or other code depend on, so the plan has to make it.\n- **`coversRoute` takes the model alone.** D1's \"the payload must also carry a `messages` array\" already has its home in `editPayload`'s §5.3 (3). The live script's own precondition calls `covered(model)` on the model alone, and B4 re-reads the route per request.\n- **`baseUrl` is optional.** pi's `Model` assigns to `RouteModel`, and a test can build the missing-`baseUrl` row without a cast.\n- **Cell (a)'s clear runs first.** If it ran after an early return, it would leave the previous request's block for a later payload to match.\n- **The baseline follows the design.** The spike's `RequestCandidate.blockUncached = false` at `requestBuilt` contradicts design §5.4's \"`requestBuilt` does not set it\".",
+      "required_change": "**Group 1 preamble.**\n- `coversRoute(model: RouteModel | undefined): boolean`, the route half of D1 only. `editPayload` owns the object and `messages` checks of §5.3 (3).\n- `RouteModel = { provider: string; api: string; id: string; baseUrl?: string }`.\n- For the untouched cases `editPayload` returns `{ output: undefined, nextCarrier: carrier, applied: null }`, and the handler returns `output`.\n\n**4.1.** \"`deps.payloadCache.recallBlock = null` is the handler's first statement, before every early return. After recall returns a non-empty list it is set to `formatRecalledContext(outputs)`, the same text `appendRecalledContextToMessages` appends (`pi-context-adapter.ts:42`).\"\n\nAdd a D1 boundary: cell (a) is non-null, a `context_with_system` arrives with no user message, and afterwards `recallBlock` is null.\n\n**5.3.**\n- \"The publisher's `baseline` becomes `(RequestCandidate & { blockUncached: boolean }) | undefined`.\"\n- \"`responseReceived` assigns `{ ...request.candidate, blockUncached: readings.applied?.block === \\\"uncached\\\" }`.\"\n- \"`requestBuilt` and `RequestCandidate` do not gain the field (design §5.4). The spike's form is not used.\"\n\nRun status: the `RouteModel` assignability was checked with tsc this pass. The rest is wording.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "**Run this pass in the worktree copy**, which carried 18 uncommitted changes:\n- `git status --porcelain` was identical before and after `npm install`;\n- `git check-ignore -v .envrc` printed `.gitignore:12:.envrc` with no `.envrc` present;\n- `git ls-files --error-unmatch package-lock.json` succeeded;\n- `.gitignore` has no `.pi` entry.",
+      "finding_id": "readiness-r1-9",
+      "locations": [
+        "tasks.md 10.1 (old; the development-checks paragraph)"
+      ],
+      "rationale": "The finding is correct. At that point the tree holds the whole uncommitted change, so a literal \"`git status` reports no changes\" cannot hold. The scenario is about install leaving the tree as it found it. I measured the scoped check on a dirty copy.",
+      "required_change": "Replace the `npm install` clause with:\n\n> \"`git status --porcelain > before`, `npm install`, `git status --porcelain > after`, and `diff before after` is empty; `git ls-files --error-unmatch package-lock.json` succeeds and `.gitignore` has no entry for it; `git check-ignore -v .envrc` prints `.gitignore:12:.envrc`, whether or not the file exists; `.gitignore` has no `.pi` entry.\"\n\nRun status: run this pass in a copy carrying 18 uncommitted changes.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "- design.md §8.2: \"The billing scenarios are inequalities, not recorded numbers\".\n- `redgreen-derek.md` L2: read 11,775 and write 953, one run.",
+      "finding_id": "readiness-r1-10",
+      "locations": [
+        "tasks.md 11.1 (old)"
+      ],
+      "rationale": "The finding is correct. 11,775 and 953 are one run's measurements. The acceptance bounds are §8.3's inequalities.",
+      "required_change": "**11.1 (old).** \"OpenRouter must pass every precondition and all twelve assertions; record `read_H` and `write_H` against their bounds as L2 did (L2: 11,775 against 6,771 + 1,314; 953 against 1,223).\" The `anthropic-key` route gets the same wording.\n\nNot run: wording.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "Measured, `michael/s5-type-ripples.log`: (a) → `taiknr.ts:57`; (b) → `instruments-publisher.ts:276`; (c) → `pi-instrument-readings.ts:158`; (d) → `taiknr.ts:59`. The cumulative regroup measured 0 tsc errors at every step.",
+      "finding_id": "codebase-r1-1",
+      "locations": [
+        "tasks.md preamble",
+        "tasks.md 4.1",
+        "tasks.md 5.1",
+        "tasks.md 6.1",
+        "tasks.md 6.2",
+        "tasks.md 7.1",
+        "tasks.md 8.1",
+        "tasks.md File Boundary"
+      ],
+      "rationale": "Same defect as readiness-r1-1, measured there. I adopt the reviewer's preferred remedy, required fields with their construction sites moved into the same task, over making the fields optional.",
+      "required_change": "Apply readiness-r1-1's regroup. Nothing further.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "- design.md §4's `context.ts` row: \"a `payloadCache: PayloadCacheState` field of its existing deps object\".\n- tasks.md 4.1: `payloadCache`.\n- The tasks.md File Boundary row for `instruments-request.test.ts`: \"a `payload` state\".",
+      "finding_id": "codebase-r1-2",
+      "locations": [
+        "tasks.md File Boundary (row tests/infra/pi-event-handlers/instruments-request.test.ts)"
+      ],
+      "rationale": "The finding is correct. My redgreen ruling for gap 8 chose `payloadCache` over Derek's `payload`, because the handler never sees an `event.payload`. The File Boundary row kept the old name. `redgreen-derek.md` is evidence and is not edited.",
+      "required_change": "Covered by readiness-r1-7: the row reads `payloadCache`, with a note that Gap 8's `payload` is this field.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "`types.d.ts:652` (`baseUrl: string`). The tsc check this pass accepted `Model<any> | undefined` and a literal without `baseUrl` against `RouteModel` with `baseUrl?: string`.",
+      "finding_id": "codebase-r1-3",
+      "locations": [
+        "tasks.md group 1 preamble (RouteModel)"
+      ],
+      "rationale": "The finding is correct, and it is the same choice as readiness-r1-8. An optional `baseUrl` lets the missing-`baseUrl` row be built without a cast, and pi's `Model` still assigns.",
+      "required_change": "Covered by readiness-r1-8: `RouteModel = { provider: string; api: string; id: string; baseUrl?: string }`.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "design.md §4 tests row, read this pass: it lists eleven test paths and omits `tests/support/fake-pi.ts`. Design §8.1 requires `createContextStub`'s `model` option to gain `baseUrl?: string`, and that option is at `tests/support/fake-pi.ts:63` today.",
+      "finding_id": "codebase-r1-4",
+      "locations": [
+        "design.md §4 tests row"
+      ],
+      "rationale": "The finding is correct. It is the same class as the two §4 gaps I ruled on at red/green. readiness-r1-4's new session-start pin adds another test file that §4 must also name.",
+      "required_change": "Add `tests/support/fake-pi.ts` and `tests/infra/pi-event-handlers/session-start.test.ts` to design §4's tests row:\n- `fake-pi.ts`: Modify. `createContextStub`'s `model` option gains `baseUrl?: string`.\n- `session-start.test.ts`: Modify. One pin proving the config is read at session start only (readiness-r1-4).\n\nNot run: a file list.",
+      "target_artifact": "design.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "**Base, measured this pass:** `npx vitest run` in a worktree of HEAD `d21c80b` gives `Test Files 37 passed (37)`, `Tests 543 passed (543)`.\n\n**`redgreen-derek.md`:** red `Tests 42 failed | 554 passed (596)` and green `596 passed (596)`, both in a copy carrying the new test files (40 files).",
+      "finding_id": "codebase-r1-5",
+      "locations": [
+        "tasks.md 10.1 (old)"
+      ],
+      "rationale": "The finding is correct. 596 is the spike's post-change total, and I measured base's own total at 543 in 37 files. The count that detects a silently skipped new file is the file count: base's 37 plus the three new test files.",
+      "required_change": "Replace the count clause in 10.1 (old):\n\n> \"`npm run check` exits 0 and vitest reports `Test Files 40 passed (40)` — base's 37 (measured at `d21c80b`) plus the three new test files — and more than base's 543 tests.\"\n\nDrop \"the suite grown from the base's 596 tests\".\n\nRun status: base's totals were measured this pass.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "Measured as for readiness-r1-1 (`michael/s5-type-ripples.log`).",
+      "finding_id": "structural-r1-1",
+      "locations": [
+        "tasks.md preamble",
+        "tasks.md 5.1",
+        "tasks.md 6.1",
+        "tasks.md 6.2",
+        "tasks.md 7.1"
+      ],
+      "rationale": "Same defect as readiness-r1-1. The merged group 5 lands `ResponseReadings.applied` together with `readResponse` returning `CompactedReadings` and the registrar's third parameter, so the type that requires `applied` never coexists with a function that cannot supply it.",
+      "required_change": "Apply readiness-r1-1's regroup. Nothing further.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "Measured: (a) breaks `taiknr.ts:57` and (d) breaks `taiknr.ts:59` (`michael/s5-type-ripples.log`).",
+      "finding_id": "structural-r1-2",
+      "locations": [
+        "tasks.md 4.1",
+        "tasks.md 7.1",
+        "tasks.md 8.1",
+        "tasks.md File Boundary (row src/app/extension/taiknr.ts)"
+      ],
+      "rationale": "The finding is correct. Under readiness-r1-1's regroup, each `taiknr.ts` edit is authorized in the task whose type change requires it, and the File Boundary row says which task makes which edit:\n- 4.1 creates the state literal and passes it at :57;\n- 5.1 passes it at :59;\n- 6.1 registers the two handlers.",
+      "required_change": "Apply readiness-r1-1's regroup, including its File Boundary row for `taiknr.ts`. Nothing further.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "**design.md §8.3, read this pass:** `read_H` fails on base (6,852 against 6,852 + 1,314) and passes on the change (11,885 against 6,852 + 1,314; 11,775 against 6,771 + 1,314). The R1 assertion reads \"`input_R1(turn 2) < ⌈chars(turn 2's block) / 8⌉` … (3 against 1,040)\".\n\n**design.md §8.2:** \"twelve were made in 5 of 9 runs\".\n\n**My red/green ruling on gap 2** (`michael-redgreen.json`): the `read_R1` term stays, because without it the bound no longer separates base from the change.",
+      "finding_id": "structural-r1-3",
+      "locations": [
+        "tasks.md Residuals and open questions, items 1 and 2"
+      ],
+      "rationale": "The finding is correct, and the residual is also obsolete.\n- **The quoted 3 is the wrong figure.** It is `input_R1`, not `read_R1`. `read_R1` is 6,771–6,852 on the live runs.\n- **The open question is already settled.** Whether the `read_R1` term stays was decided by my red/green gap-2 ruling: it stays, because without it the bound no longer separates base from the change. Design §8.3 now carries the live numbers.\n- **Residual 2 restates a count design §8.2 already states differently.** It says 3 of 6; design §8.2 says 5 of 9.",
+      "required_change": "**Residual 1:** delete it. The bound and its evidence have one home, design §8.3.\n\n**Residual 2** becomes: \"The twelve-request precondition is model-dependent (design §8.2: 5 of 9 runs). §8.2's re-run rule is the answer, in task 9.1 (old 11.1).\"\n\nNot run: wording.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "`michael/s5-type-ripples.log` (c): `instruments-publisher.test.ts` at :302 and 44 further sites, with the `contextReading` helper at :166.",
+      "finding_id": "structural-r1-4",
+      "locations": [
+        "tasks.md 5.1 (new readings task)"
+      ],
+      "rationale": "The finding is correct: the publisher test's own fixtures are part of the same widening. I measured them, and readiness-r1-7 lists them.",
+      "required_change": "Covered by readiness-r1-7 and readiness-r1-1's task 5.1. The publisher test's `contextReading` helper and every inline reading tsc names carry `applied: null`, the unedited case that keeps today's expectations (D7, D8).",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "- design.md §5.3 (3) lists \"a payload that is not an object; a payload carrying no `messages` array\" as untouched cases of the edit.\n- `derek/test-cache-point-live.mjs.txt:34-47` defines `covered(model)` on the model alone and uses it for the precondition \"D1 covers the route ctx.model reports\".",
+      "finding_id": "structural-r1-5",
+      "locations": [
+        "tasks.md group 1 preamble (signatures)",
+        "tasks.md 1.1"
+      ],
+      "rationale": "The finding is correct that the signature is never stated. I settle it as model-only, not the reviewer's `(payload, model)`:\n- the payload-shape checks already have their home in `editPayload`'s §5.3 (3);\n- the live script's precondition and B4 need the route judged from `ctx.model` alone;\n- a second copy of the shape check inside `coversRoute` would be a second home for one rule.",
+      "required_change": "Covered by readiness-r1-8: `coversRoute(model: RouteModel | undefined): boolean`, the route half of D1, with §5.3 (3)'s object and `messages` checks in `editPayload`.",
+      "target_artifact": "tasks.md"
+    }
+  ],
+  "round_status": "needs_fixes",
+  "settled_findings": [
+    "Each required field lands in the same task as every site that constructs it. Under the regrouped order every task leaves tsc clean, measured cumulatively in a copy (michael/s5-type-ripples.log; 543/543 tests green).",
+    "editPayload catches nothing. The handler's catch is the single fail-open path (design §5.1, §6.1; B1; M1).",
+    "coversRoute takes the model alone. RouteModel.baseUrl is optional. editPayload owns §5.3 (3)'s payload-shape checks.",
+    "Cell (a) is cleared as the context handler's first statement and set to formatRecalledContext(outputs).",
+    "The publisher's baseline is RequestCandidate & { blockUncached } assigned at responseReceived. requestBuilt does not set it (design §5.4).",
+    "The live script is copied from derek/test-cache-point-live.mjs.txt with one correction: the block precondition covers turns 2 and 3 (design §8.3). L1 ran unchanged on both versions.",
+    "\"The split alone changes no figure\" is pinned by a new domain test with M2's inputs at Opus 5.5 prices. It is green at base and red under a split-reading mutation.",
+    "\"The route cannot be switched mid-session\" is pinned by a session-start test, and that pin is green at base.",
+    "read_H's read_R1 term stays (red/green gap-2 ruling). It is not an open residual."
+  ]
+}

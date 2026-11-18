@@ -6,7 +6,8 @@ x-marbleization:
     chidi: "89dde937-f53f-4332-8548-dcb34a828960"
     eleanor: "672a2237-e6d9-4d44-8ffa-d4fa21e877ba"
     derek: "6d585a24-a71c-49f7-a3a1-70006c1486a1"
-    michael: "77ec1008-89e9-44eb-a837-a81856664447"
+    michael: "52f6c21f-17d1-42e1-9342-fceaa3c07add"
   gates:
     council_owner: approved
     design: approved
+    tasks: approved

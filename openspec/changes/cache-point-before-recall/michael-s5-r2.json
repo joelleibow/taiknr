@@ -1,0 +1,176 @@
+{
+  "owner_decisions": [],
+  "resolutions": [
+    {
+      "disposition": "propose_fix",
+      "evidence": "I recomputed with the publisher test's own rates: READ 1.5e-6, WRITE 18.75e-6, and the harness's k 0.7.\n- E1 base: −0.7×20×READ − 0.7×100×(WRITE−READ) = −0.000021 − 0.0012075 = −0.0012285.\n- E1 green: −0.7×20×WRITE = −0.0002625, which needs the write-rate block and a zero suffix.\n- E2 green: −0.0002625 − 0.0012075 = −0.00147, which needs the write-rate block and today's suffix.\n- With D7 alone, E1 is −0.000021 and E2 is −0.0012285.\n- `redgreen-derek.md` §4 (E1–E9) and §5 (M2 → E1 only, M5 → E5 only) were all measured against the complete code. The intermediate state D7-without-D8 or D8-without-D7 was never run.\n- `src/use-cases/instruments-publisher.ts:275` (`rewriteOf(request)`), `:276-283` (the `netDollars` literal) and `:288` (`baseline = request.candidate`), all read at `d21c80b`.",
+      "finding_id": "readiness-r2-1",
+      "locations": [
+        "tasks.md 5.2",
+        "tasks.md 5.3",
+        "tasks.md File Boundary rows src/domain/savings-dollars.ts, src/use-cases/instruments-publisher.ts, tests/use-cases/instruments-publisher.test.ts, tests/domain/savings-dollars.test.ts",
+        "tasks.md 8.1 (the re-run list, 'after 5.3')",
+        "tasks.md Scenario Coverage, context-figures rows 'A warm request after taiknr's own change', 'A request the edit did not reach keeps today's rule', 'The block is not inside the charged suffix', 'The split alone changes no figure', 'A cold request', 'The block's charge, by placement and request'"
+      ],
+      "rationale": "The finding is correct, and I recomputed it.\n- **E1 needs D8 as well as D7.** Its green value, −0.0002625, is −0.7×20×WRITE with a zero suffix, so it needs D7's start and D8's write rate for a block changed in place. With D7 alone the block stays at the read rate and E1 gets −0.000021.\n- **E2 needs D8 too.** Its green value, −0.00147, is the write-rate block plus today's 100-token suffix. That is E3's own number, so 5.2 alone leaves it at −0.0012285.\n- **M2 cannot run at 5.2.** It is measured as turning E1 and only E1 red, and at 5.2 E1 is red already.\n\nThe spike ran E1–E9 green only against the complete D7+D8 code, so the remedy with evidence behind it is to merge the two tasks, not to swap them. A swap would rest on an intermediate state, D8 without D7, that nobody ran.",
+      "required_change": "**Merge 5.2 and 5.3 into one task, 5.2, \"D7 and D8 together\".** The merged task carries every test, fixture, mutation and boundary of the two.\n\n**Text of the merged task.**\n- `rewriteOf` reads this request's `readings.applied`. It is a private helper, so passing it as `rewriteOf(request, readings.applied)` is local.\n- When `blockChanged` holds and `applied?.carrierRead === carried.text`, the start is `carried.index + 1`.\n- `blockInNewTail` gains D8's `carried === undefined` and `baseline.blockUncached` clauses.\n- The `netDollars` argument literal and the baseline are edited as readiness-r2-8 states.\n- `PricedRequest.blockUncached` and the block-rate rule; the `request()` helper default.\n\n**Tests.**\n- E1–E9; the coincident-carry case; §8.1's driven case; the split pin; the one mandated change to the shrunk-block expectation.\n- State E1's and E2's expected values against the post-D8 rule:\n  - E1 −0.0002625 = −0.7×20×WRITE, suffix 0;\n  - E2 −0.00147 = −0.7×20×WRITE − 0.7×100×(WRITE−READ).\n\n**Verified by:** `npx vitest run tests/use-cases/instruments-publisher.test.ts tests/domain/savings-dollars.test.ts`, then `npm run check`.\n\n**Catches a mistake** (at the end of the task, each mutation restored afterwards):\n- M2 turns E1 and only E1 red.\n- M5 turns E5 and only E5 red.\n- The split mutation turns the split pin red.\n\n**Renumber.** Old 5.3's references become 5.2:\n- the File Boundary rows for `src/domain/savings-dollars.ts`, `src/use-cases/instruments-publisher.ts`, `tests/use-cases/instruments-publisher.test.ts` and `tests/domain/savings-dollars.test.ts`;\n- 8.1's \"after 5.3\";\n- the Scenario Coverage rows named in `locations`.\n\nRun status: the arithmetic was recomputed. E1–E9 and M2/M5 were measured against the complete code in the spike. The merged code does not exist yet.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "**Derek's `covered(model)`.** I extracted it from `.pi/marbleization/cache-point-before-recall/derek/test-cache-point-live.mjs.txt:36-47`, where it is the predicate the live run used, and evaluated it this pass:\n- `openrouter` / `anthropic-messages` / `anthropic/claude-haiku-4.5` → true;\n- `openrouter` / `anthropic-messages` / `google/gemini-2.5-pro` → false;\n- `openrouter` / `openai-completions` / `anthropic/claude-haiku-4.5` → false.\n\n**The rules:** D1; spec `tail-recall` \"Only routes the predicate covers change\" and \"Gemini through OpenRouter keeps today's payload\"; `owner-rulings.md` Q3(a).",
+      "finding_id": "readiness-r2-2",
+      "locations": [
+        "tasks.md 1.1 'Uncovered rows'",
+        "tasks.md Scenario Coverage, tail-recall rows 'Gemini through OpenRouter keeps today's payload' and 'OpenRouter's OpenAI-shaped path keeps today's payload'"
+      ],
+      "rationale": "The finding is correct. 1.1's uncovered rows have no row with `openrouter`, `anthropic-messages` and a model id that does not start with `anthropic/`. So nothing tests D1's prefix clause on its false side, and a predicate without that clause passes every row. The `openai-completions` row's model id is also unstated, so the row cannot tell whether it fails on the api or on the id.\n\nI evaluated the live run's own predicate on both rows, and the expected values below are what it returned. Q3(a) binds: measured routes only.",
+      "required_change": "**1.1's uncovered rows gain one row:**\n\n> `openrouter` / `anthropic-messages` / model id `google/gemini-2.5-pro` → `false`. This is the false side of D1's `anthropic/` prefix clause: a predicate that drops the clause turns this row red.\n\n**The `openai-completions` row gets an explicit id:** `openrouter` / `openai-completions` / `anthropic/claude-haiku-4.5` → `false`, so it fails on the api alone.\n\n**Scenario Coverage.**\n- \"Gemini through OpenRouter keeps today's payload\" → 1.1, A1's `google/gemini-2.5-pro` row.\n- \"OpenRouter's OpenAI-shaped path keeps today's payload\" → 1.1, A1's `openai-completions` row with the `anthropic/` id.\n\nRun status: the expected values were measured on the live run's own predicate this pass. `coversRoute` does not exist yet.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "Measured this pass in a `git worktree --detach` copy of HEAD `d21c80b`, with `npm ci` and one uncommitted file added:\n- With relative files (`git status --porcelain > before; npm install; git status --porcelain > after; diff before after`), the diff printed `0a1 > ?? after` and exited 1.\n- With `B=$(mktemp); A=$(mktemp)` for the two listings, the diff was empty and exited 0.\n\nThe copy was removed afterwards.",
+      "finding_id": "readiness-r2-3",
+      "locations": [
+        "tasks.md 8.1 'Also prove the development-checks delta'"
+      ],
+      "rationale": "The finding is correct, and the defect is mine: my s5-r1 remedy text wrote the two listings into the repository root. Redirecting to `before` creates that file before `git status` runs, so the listings differ by `?? after` however clean `npm install` is. When I measured the check earlier I had used `/tmp` paths, which is why the earlier run passed.",
+      "required_change": "In 8.1's `development-checks` clause, replace \"`git status --porcelain > before`, `npm install`, `git status --porcelain > after`, and `diff before after` is empty\" with:\n\n> \"`B=$(mktemp); A=$(mktemp); git status --porcelain > \\\"$B\\\"; npm install; git status --porcelain > \\\"$A\\\"; diff \\\"$B\\\" \\\"$A\\\"` prints nothing and exits 0; then `rm -f \\\"$B\\\" \\\"$A\\\"`.\"\n\nThe rest of the clause stays as it is.\n\nRun status: run this pass in a copy; both forms were measured.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "- tasks.md group-1 preamble: \"`editPayload` catches nothing… whatever is thrown from there on propagates to the handler\".\n- tasks.md 2.2: B1's assertions, and M1 → B1 only.\n- `structuredClone({ messages: [], leftover: () => 1 })` throws `DOMException … could not be cloned` (measured in Node 26, design §5.1).\n- design §5.3 (3): the untouched cases are checked before the clone.",
+      "finding_id": "readiness-r2-4",
+      "locations": [
+        "tasks.md 1.2 (Test first)"
+      ],
+      "rationale": "The finding is correct. If `editPayload` swallowed the clone failure and returned the untouched result, B1 would still pass on its own assertions: `undefined` returned, `applied` null, `nextCarrier` equal to `carrier`, `carrier` unchanged. M1 would no longer be caught, and the rule \"the handler's catch is the single fail-open path\" would have no test.\n\nThe test that pins the rule calls the exported pure function with a real input that reaches the branch: a covered model, and an object payload with a `messages` array plus a function value. The test that pins \"checked before the clone\" is the same payload on an uncovered model, which must not throw.",
+      "required_change": "Add to 1.2's test-first list one new test, not a spike label (\"the throw test\"):\n\n> `expect(() => editPayload({ messages: [], leftover: () => 1 }, coveredModel, null, null)).toThrow()`, with `coveredModel` the `anthropic` / `anthropic-messages` / `https://api.anthropic.com` row from 1.1.\n\nIn the same test:\n- `editPayload({ messages: [], leftover: () => 1 }, uncoveredModel, null, null)` does not throw and returns `{ output: undefined, nextCarrier: null, applied: null }`, with `uncoveredModel` the `https://api.anthropic.com.corp-proxy.internal` row;\n- a non-object payload on `coveredModel` returns the same untouched result without throwing.\n\nIn 2.2's Catches line, add: \"the throw test is what makes M1 meaningful: the adapter throws, so B1 exercises the handler's own catch.\"\n\nRun status: the `DOMException` was measured earlier. The test is a design statement, because `editPayload` does not exist yet.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "**design.md §5.3 (5), read this pass:**\n- \"`applied` is derived from the finished clone for every covered payload carrying exactly one message-level marker (§5.3 (4)), including one where nothing was placed… It is null only for the untouched payloads of (3), for zero-or-two-or-more message markers, and after a throw\".\n- `block` is \"null when no carrier is found, which includes a request carrying no block\".\n\n**design.md §5.3 (4), \"Nothing wanted\":** \"`undefined` when it changed nothing\".\n\n**Spec:** `tail-recall` \"Nothing recalled and nothing handed off\".",
+      "finding_id": "readiness-r2-5",
+      "locations": [
+        "tasks.md 1.2 (Test first)",
+        "tasks.md Scenario Coverage, tail-recall row 'Nothing recalled and nothing handed off'"
+      ],
+      "rationale": "The finding is correct. Neither of the two labels the scenario cites is the scenario:\n- A2 is uncovered or shapeless;\n- A6 has a record set.\n\nThe reviewer's expected `applied: null` is wrong against the design, though. §5.3 (5) keeps `applied` non-null for every covered payload carrying exactly one message-level marker, even when nothing was placed, and makes `block` null when no carrier is found. So this case's `applied` is `{ carrierRead: null, block: null }`. It prices the cached rows exactly as null would, because `blockUncached` is `block === \"uncached\"`, which is false.\n\nThe remaining outcomes follow from the design:\n- the output is `undefined`: nothing is wanted and no carve-out applies on a three-point API-key payload;\n- the next record is null: no carrier found.",
+      "required_change": "Add to 1.2's test-first list one new test, not a spike label (\"the quiet test\"):\n\n> An API-key payload carrying pi's three markers (`system[0]`, the last tool, the last message's last block), with `recallBlock` null and `carrier` null on the covered model. Expected: `output` is `undefined`, `nextCarrier` is `null`, and `applied` deep-equals `{ carrierRead: null, block: null }`.\n\nScenario Coverage row \"Nothing recalled and nothing handed off\" → 1.2, the quiet test. Drop A2 and A6 from that row.\n\nRun status: a design statement, because the adapter does not exist yet. The expected values are read from §5.3 (4)–(5).",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "**My scratch check, run this pass** (`.pi/marbleization/cache-point-before-recall/michael/s5r2-widened-precondition.mjs`, output in `s5r2-widened-precondition.log`). It feeds the script's own `evaluate` a three-turn run: turn 1 with two requests and no block, turn 2 with 13 requests at 10,374 block characters, and turn 3 with or without a block.\n- **Source as-is:** \"pass\" whether turn 3 carries its block or recalled nothing.\n- **Widened copy:** \"pass\" when turn 3 carries its block. When turn 3 recalled nothing: \"FAIL every request of turns 2 and 3 carries a recall block: block chars …,0,0\".\n\n**Source lines:** `test-cache-point-live.mjs.txt:180` (\"there is a turn after turn 2\"), `:174-178` (the check being edited), `:349-350` (exit 3 on the first failed precondition).",
+      "finding_id": "readiness-r2-6",
+      "locations": [
+        "tasks.md 7.1 (Test first)"
+      ],
+      "rationale": "The finding is correct that nothing shows the one edited line catching its mistake. I ran that check this pass against both versions:\n- the source as-is passes the block precondition when turn 3 recalled nothing;\n- the widened copy fails it.\n\nThe reviewer's empty-turn-3 case is already guarded. The script's own precondition at `:180`, \"there is a turn after turn 2\", refuses a run with no turn 3, so the widened `every` can only run over a turn 3 that exists.",
+      "required_change": "Add to 7.1's test first, after L1:\n\n> \"Then, from the repository root, `node .pi/marbleization/cache-point-before-recall/michael/s5r2-widened-precondition.mjs .`. It replays a synthetic three-turn run into the copied script's own `evaluate`. The expected output is `turn 3 carries its block  pass` and `turn 3 recalled nothing  FAIL  every request of turns 2 and 3 carries a recall block: …,0,0`. The unedited source prints `pass` for both, measured this pass. A turn 3 that never ran is refused by `:180`'s 'there is a turn after turn 2', which stays as it is. The scratch script is not committed: `.pi/` is outside the repository.\"\n\nRun status: run this pass against both versions.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "contest",
+      "evidence": "`.pi/marbleization/cache-point-before-recall/michael/rg-v1-key-1.out` and `.err`, from my red/green gap-4 run. The base worktree was made by `git worktree add -q --detach \"$W/base\" HEAD` at `d5f8435`, with no install step, and the script was run with cwd in that worktree (`cd \"$W/base\"; direnv exec … node $W/live-v1.mjs anthropic-key`).\n- Every turn ran (turn 2 made 13 requests).\n- The recall block was present on every turn-2 and turn-3 request (10,387 characters).\n- \"pass D1 covers the route\".\n- Seven assertions failed, including \"H reads turn 2's prefix plus its own text: 0 >= 6852 + 1307\".\n- Exit 1.\n\nAlso the s3-r2 load check, measured that pass: `pi --no-session -ne -e <fresh worktree>/src/app/extension/taiknr.ts --help` printed no `Failed to load extension`.",
+      "finding_id": "readiness-r2-7",
+      "locations": [],
+      "rationale": "The premise that the extension's load from a worktree with no `node_modules` is unevidenced is false. I measured it twice.\n- **Round s3-r2.** `pi --no-session -ne -e <fresh worktree>/src/app/extension/taiknr.ts --help` loaded with no `Failed to load extension`, from a `git worktree add --detach` copy with no `node_modules`.\n- **Red/green gap-4 runs.** `rg-v1-key-1` ran the live script against the base `d5f8435` worktree, created exactly as 9.2 does, with no install step.\n  - Recall fired at threshold 0 on every turn-2 and turn-3 request. That needs `session_start` to have loaded and read `pi-taiknr.json` through its runtime imports of `CONFIG_DIR_NAME` and `getAgentDir`.\n  - D1 passed.\n  - The seven base assertions failed with the red shape 9.2 expects.\n\npi supplies the host package to an extension outside the repository. `npm ci` in the worktree is not needed.",
+      "required_change": "",
+      "target_artifact": "tasks.md 9.2"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "`src/use-cases/instruments-publisher.ts`, read at `d21c80b`:\n- :275 `const { suffixEstimate, blockInNewTail } = rewriteOf(request);`\n- :276-283 `const net = netDollars(responseRates(…), { k, stubSaving, recalled, blockInNewTail, suffixEstimate, classifierSpend });`\n- :288 `baseline = request.candidate;`\n\nThe s5-r1 cumulative copy measured tsc 0 errors with `blockUncached: readings.applied?.block === \"uncached\"` in the `netDollars` literal.",
+      "finding_id": "readiness-r2-8",
+      "locations": [
+        "tasks.md 5.2 (the merged D7+D8 task; old 5.3's third bullet)"
+      ],
+      "rationale": "The finding is correct, and so is codebase-r2-1, which is the same defect. :276 is the `netDollars` argument literal and :288 is the baseline assignment. 5.3 cites :276 for the baseline's value and never says what the literal itself receives. Both uses need this request's `applied`.\n\n`rewriteOf` at :275 runs before :288, so the `baseline.blockUncached` clause reads the previous baseline, which is what D8 requires.",
+      "required_change": "In the merged task 5.2 (readiness-r2-1), replace \"At `src/use-cases/instruments-publisher.ts:276`, `responseReceived` assigns `{ ...request.candidate, blockUncached: … }`\" with two sentences:\n\n> \"The `netDollars` argument literal at `src/use-cases/instruments-publisher.ts:276-283` gains `blockUncached: readings.applied?.block === \\\"uncached\\\"` — this request's placement, never `baseline?.blockUncached`.\"\n\n> \"`baseline = request.candidate` at `:288` becomes `baseline = { ...request.candidate, blockUncached: readings.applied?.block === \\\"uncached\\\" }`. It runs after `rewriteOf` at `:275`, so the `baseline.blockUncached` clause of `blockInNewTail` reads the previous baseline.\"\n\nRun status: the literal's value was type-checked in the s5-r1 copy. The rest is wording.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "- implementation-readiness-standard §3: \"A scenario no test proves fails the plan, unless it is marked as Joel's to observe.\"\n- tasks.md Scenario Coverage, row \"A turn longer than the entry's remaining lifetime\", and Residual 5.\n- N2 (`michael/ttl-carry-h55.log`): read 8,138 / write 3,850.\n- tasks.md §10's preamble, and the ruling \"how scenarios are proven\".",
+      "finding_id": "readiness-r2-9",
+      "locations": [
+        "tasks.md §10 (a new task 10.3)",
+        "tasks.md Scenario Coverage, tail-recall row 'A turn longer than the entry's remaining lifetime'",
+        "tasks.md Residuals item 5"
+      ],
+      "rationale": "The finding is correct, and the standard admits only one exception: a scenario no test proves fails the plan unless it is marked as Joel's to observe. \"Accepted residual\" is not that exception.\n\n- **The shape half is proven.** A8 and the in-turn test show the before point on every request that carries the block, which is the mechanism N2 depends on.\n- **The billing half cannot be automated.** It is the provider keeping an entry alive across a turn longer than five minutes. No automated test observes a TTL, the live script does not run 7.5 minutes, and extending the script would change its proven contract and spend model calls.\n- **Joel's own session already produces this case.** His real turns routinely run past five minutes (M7). The observation needs only the session JSONL's per-request `cacheRead`, which the conductor reads with him, and it fits ruling \"how scenarios are proven\" as a Joel-observed check.",
+      "required_change": "**Add to §10:**\n\n> \"- [ ] 10.3 **Joel's — never ticked by the implementer.** In one of his own sessions running this checkout, find a recalling turn whose requests span more than five minutes and the turn after it. From the session JSONL, report the next turn's first request's `cacheRead` against the recalling turn's first request's `cacheRead`. The scenario holds when the first is the larger (N2: 8,138 read on the create request after a 7.5-minute turn). The conductor reads the JSONL and ticks it with Joel's observation in his words.\"\n\n**Scenario Coverage**, row \"A turn longer than the entry's remaining lifetime\":\n- shape: 1.2, A8 and the in-turn test;\n- billing: Joel 10.3.\n\nDrop \"probe-measured and not re-run\".\n\n**Residual 5** becomes: \"The 7.5-minute billing half is Joel's to observe (10.3); 8.2's walk does not re-run N2.\"\n\nNot run: an observation task.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "As readiness-r2-8: `instruments-publisher.ts:275`, `:276-283`, `:288`, read at `d21c80b`.",
+      "finding_id": "codebase-r2-1",
+      "locations": [
+        "tasks.md 5.2 (the merged D7+D8 task; old 5.3's third bullet)"
+      ],
+      "rationale": "This is the same defect as readiness-r2-8: one cite is used for two sites, and the `netDollars` literal's new field is unnamed. The two-sentence fix there closes both findings.",
+      "required_change": "Apply readiness-r2-8's two sentences. Nothing further.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "contest",
+      "evidence": "`awk 'NR>=172 && NR<=181' .pi/marbleization/cache-point-before-recall/derek/test-cache-point-live.mjs.txt`, run this pass:\n- 173 `\t\t),` (the turn-1 check's close)\n- 174 `\t\tcheck(`\n- 175 `\"every request of turn 2 carries a recall block\",`\n- 176 `turn2.every((request) => request.blockChars > 0),`\n- 177 the detail line\n- 178 `\t\t),`\n- 179 `check(\"turn 2 made at least 12 requests\", …)`\n- 180 `check(\"there is a turn after turn 2\", …)`",
+      "finding_id": "codebase-r2-2",
+      "locations": [],
+      "rationale": "The citation is correct, and the finding miscounts by one line.\n- `:174-178` is exactly the turn-2 block check: `check(` at 174, the label at 175, the predicate at 176, the detail at 177, the closing `),` at 178.\n- The \"turn 2 made at least 12 requests\" check is at :179, outside the range.\n- :173 is the closing `),` of the turn-1 check.\n\nAn edit of :174-178 as the task says cannot touch the twelve-request check.",
+      "required_change": "",
+      "target_artifact": "tasks.md 7.1"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "`.pi/marbleization/cache-point-before-recall/derek/test-cache-point-live.mjs.txt`, read this pass:\n- :167, the precondition `check(\"D1 covers the route ctx.model reports\", covered(model), `${model?.provider}/${model?.api}/${model?.baseUrl}`)`;\n- :349, `console.error(`precondition failed: ${failed[0].name} (${failed[0].detail})`)`, then `return 3` at :350;\n- :299, `extension not found: ${extension}`.",
+      "finding_id": "codebase-r2-3",
+      "locations": [
+        "tasks.md 7.1 'Boundary cases'"
+      ],
+      "rationale": "The finding is correct. The script being copied byte for byte has no string \"route not covered by D1\". A precondition that fails prints `precondition failed: <name> (<detail>)` and exits 3. The route check's name is \"D1 covers the route ctx.model reports\" and its detail is `<provider>/<api>/<baseUrl>`. The other quoted strings in 7.1 are exact.",
+      "required_change": "In 7.1's boundary cases, replace \"a route D1 does not cover, which exits 3 with `route not covered by D1: <provider>/<api>/<baseUrl>`\" with:\n\n> \"a route D1 does not cover, which exits 3 with `precondition failed: D1 covers the route ctx.model reports (<provider>/<api>/<baseUrl>)` (`:167`, `:349`)\"\n\nNot run: wording, checked against the source.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "- tasks.md: `Log fields:` lines at 1.1, 2.1, 3.1 and 7.1.\n- No `Log fields:` line at 1.2, 4.1, 5.1, 5.2, 5.3 or 6.1.\n- Design §6.3, and the ruling \"how scenarios are proven\".",
+      "finding_id": "codebase-r2-4",
+      "locations": [
+        "tasks.md preamble",
+        "tasks.md 1.1 'Log fields'",
+        "tasks.md 2.1 'Log fields'",
+        "tasks.md 3.1 'Log fields'"
+      ],
+      "rationale": "The finding is correct. The position is settled (§6.3: no log line, notice or instrument field), but only some tasks state it, so a reader of 5.1 cannot tell that `applied` must not reach a Jefferson field.\n\nOne global sentence in the preamble is the single home for the fact. The per-task copies then go.",
+      "required_change": "**Preamble.** Add after the first paragraph:\n\n> \"No task adds a log line, a notice or an instrument field, and `applied` reaches no Jefferson field: each task's log fields are none (design §6.3; ruling \\\"how scenarios are proven\\\"; ADR 0008).\"\n\n**Per-task copies.** Delete the `Log fields:` sentences in 1.1, 2.1 and 3.1. Keep 7.1's line, \"the script prints its own table\", because it states something different.\n\nNot run: wording.",
+      "target_artifact": "tasks.md"
+    },
+    {
+      "disposition": "propose_fix",
+      "evidence": "- `awk` over `.pi/marbleization/cache-point-before-recall/michael/s5-type-ripples.log` section (c): 42 lines in `tests/use-cases/instruments-publisher.test.ts`.\n- `rg -c \"responseReceived\\(\" tests/use-cases/instruments-publisher.test.ts`: 42.\n- The s5-r1 cumulative copy reached 0 tsc errors after adding `applied: null` to the `contextReading` helper and to the inline readings.",
+      "finding_id": "structural-r2-1",
+      "locations": [
+        "tasks.md 5.1 (the fixtures bullet)",
+        "tasks.md File Boundary row tests/use-cases/instruments-publisher.test.ts"
+      ],
+      "rationale": "The finding is correct, and the miscount is mine: my s5-r1 ruling wrote \"45 sites\" and \":302 and 44 further sites\". The log's section (c) names 42 lines in that file, and the file has exactly 42 `responseReceived` calls.\n\nSome of those calls pass the `contextReading` helper, so fixing the helper at :166 clears them. The inline readings clear the rest, and that state measured tsc 0 errors.",
+      "required_change": "**5.1.** Replace \"every inline reading tsc names there (`s5-type-ripples.log` (c): 45 sites)\" with:\n\n> \"every reading tsc names there: 42 lines (`s5-type-ripples.log` (c)), cleared by `applied: null` on the `contextReading` helper (`:166`) and on each inline reading among them\"\n\nApply the same wording to the File Boundary row.\n\nRun status: the count was measured this pass.",
+      "target_artifact": "tasks.md"
+    }
+  ],
+  "round_status": "needs_fixes",
+  "settled_findings": [
+    "`test-cache-point-live.mjs.txt:174-178` is exactly the turn-2 block precondition. The twelve-request check is :179 and \"there is a turn after turn 2\" is :180 (codebase-r2-2 contested).",
+    "A base worktree created by `git worktree add --detach` with no `npm ci` loads taiknr and runs the live script end to end. Measured: `rg-v1-key-1` at `d5f8435` had recall on every turn-2 and turn-3 request, D1 passing, seven red assertions and exit 1. The s3-r2 load check printed no `Failed to load extension` (readiness-r2-7 contested).",
+    "D7 and D8 land in one task. E1's and E2's greens need D8's write-rate block, and the spike measured E1–E9, M2 and M5 only against the complete code.",
+    "The widened turns-2-and-3 block precondition fails on a turn 3 that recalled nothing, and the unedited source passes it (`s5r2-widened-precondition.log`).",
+    "A covered API-key payload with no block and no record returns `output: undefined`, `nextCarrier: null` and `applied: { carrierRead: null, block: null }` (design §5.3 (4)–(5)). It is not `applied: null`.",
+    "The 7.5-minute billing half of \"A turn longer than the entry's remaining lifetime\" is Joel's to observe (10.3). The shape half is proven by A8 and the in-turn test."
+  ]
+}
