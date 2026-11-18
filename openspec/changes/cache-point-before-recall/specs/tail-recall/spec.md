@@ -11,10 +11,20 @@ On the routes the predicate covers, a request carrying recall's block SHALL carr
 - **WHEN** a covered route's request carrying recall's block goes out with the edit applied
 - **THEN** the block just before recall's block carries a point, and a provider read or write is a consequence of an entry an earlier request wrote, a prefix above the model's minimum, an entry inside its TTL and an applied edit, so no read is claimed when one of those fails (Chidi #2; ruling "read guarantees")
 
-#### Scenario: The recalling request reads the previous request's entry
+#### Scenario: A handoff that also recalls
 
-- **WHEN** a request carrying recall's block goes out on a covered route
-- **THEN** its cache read covers the entry the previous request wrote, and what it writes is the previous turn's final reply, the new prompt and the block, which the provider bills as plain input because pi's marker is no longer on it — not "the block onward alone" (M1; N3; ruling "read guarantees")
+- **WHEN** the first request of a recalling turn follows a turn that also recalled, so it wants the carry and the before point, and pi's marker yields
+- **THEN** its cache read covers the entry the previous request wrote, and what it writes is the previous turn's final reply, the new prompt and the block, which the provider bills as plain input because pi's marker is no longer on it — not "the block onward alone" (M1; N3, at 6,896 read / 1,236 written / 2,597 input; N9, at 8,130 read / 1,144 written / 2,597 input; ruling "read guarantees")
+
+#### Scenario: A recalling request after a turn that recalled nothing
+
+- **WHEN** the first request of a recalling turn follows a turn whose requests carried no block, so only the before point is wanted
+- **THEN** pi's marker stays on recall's block, the request reads the previous request's entry and writes the previous turn's final reply, the new prompt and the block, measured at 8,030 read, 2,694 written and 3 input over an API key, and the next request reads 10,724 and writes 83 (N9; ruling "block pricing")
+
+#### Scenario: In-turn requests
+
+- **WHEN** a later request of a recalling turn follows the turn's first request, and the wanted points plus one fit the budget
+- **THEN** pi's marker stays on the last `tool_result`, so the request writes the new step, plus recall's block when the turn's first request billed it as input. Measured: 83 written after a first request that kept the block cached (N9, turn 2, request 2), and 2,682 and 2,675 written after a handoff that also recalled (N3, turn 2, request 2; N9, turn 3, request 2). The block is priced by context-figures' "The block's charge, by placement and request".
 
 #### Scenario: The next turn's first request reaches the recalling turn's entry
 
@@ -53,7 +63,7 @@ On the routes the predicate covers, a request carrying recall's block SHALL carr
 
 ### Requirement: Only routes the predicate covers change
 
-taiknr SHALL change the payload only where one predicate holds, read from `ctx.model`: provider `anthropic` with api `anthropic-messages` and a baseUrl on api.anthropic.com, or provider `openrouter` on that api with an `anthropic/` model id, on a payload carrying a `messages` array. Every other request SHALL go out byte-identical to today's (owner-rulings.md Q3(a); Chidi 5(b)–(c); ruling "route predicate").
+taiknr SHALL change the payload only where one predicate holds, read from `ctx.model`: provider `anthropic` with api `anthropic-messages` and a baseUrl whose host is exactly api.anthropic.com, or provider `openrouter` on that api with an `anthropic/` model id, on a payload carrying a `messages` array. Every other request SHALL go out byte-identical to today's (owner-rulings.md Q3(a); Chidi 5(b)–(c); ruling "route predicate").
 
 #### Scenario: The measured routes carry the edit
 
@@ -67,8 +77,8 @@ taiknr SHALL change the payload only where one predicate holds, read from `ctx.m
 
 #### Scenario: A provider pointing at a proxy keeps today's payload
 
-- **WHEN** the session's provider is `anthropic` with a baseUrl that is not api.anthropic.com
-- **THEN** the payload is byte-identical to today's, because that route was never measured (Chidi 5(b); ruling "route predicate")
+- **WHEN** the session's provider is `anthropic` with a baseUrl whose host is not exactly api.anthropic.com, including a host that merely starts with or contains `api.anthropic.com` (`https://api.anthropic.com.corp-proxy.internal`, `https://gw.corp/api.anthropic.com/`) and including a missing baseUrl
+- **THEN** the payload is byte-identical to today's, because that route was never measured and each of those shapes goes out unchanged (Chidi 5(b); ruling "route predicate")
 
 #### Scenario: Bedrock keeps today's payload
 
@@ -97,12 +107,12 @@ taiknr SHALL change the payload only where one predicate holds, read from `ctx.m
 
 #### Scenario: A payload pi marked nowhere
 
-- **WHEN** pi places no message-level cache marker on a payload, as with `cacheRetention` none
-- **THEN** no message-level marker is placed or removed, and the payload goes out unchanged except where the carve-out removes a system marker, because the edit has no marker to copy and no boundary to work from (ruling "marker allowance"; ruling "carve-out")
+- **WHEN** pi places no message-level cache marker and no other extension placed one either, as with `cacheRetention` none
+- **THEN** no message-level marker is placed or removed, and the payload goes out unchanged except where the carve-out removes a system marker, because the edit has no marker to copy and no boundary to work from (ruling "marker allowance"; ruling "carve-out"). A lone marker another extension placed where pi marked nothing cannot be told from pi's and is treated as pi's (design §11).
 
 ### Requirement: The payload edit keeps other extensions' changes and the provider's limits
 
-taiknr SHALL build the request from a copy of the payload, keep every marker another extension placed, place no more than four points in a request, and work on message-level markers only. It SHALL place at most two points, each a deep copy of pi's own message marker object with its `ttl`, and SHALL NOT throw (Chidi #2, #4; `research-attribution-guard.md`; ruling "marker allowance").
+taiknr SHALL build the request from a copy of the payload, keep every marker another extension placed except one it cannot tell from pi's (design §11), place no more than four points in a request, and work on message-level markers only. It SHALL place at most two points, each a deep copy of pi's own message marker object with its `ttl`, and SHALL NOT throw (Chidi #2, #4; `research-attribution-guard.md`; ruling "marker allowance").
 
 #### Scenario: The two points it wants
 
@@ -116,8 +126,8 @@ taiknr SHALL build the request from a copy of the payload, keep every marker ano
 
 #### Scenario: Another extension's marker survives
 
-- **WHEN** another extension placed a marker anywhere under `messages`
-- **THEN** its marker goes out byte-identical and taiknr makes no message-level edit to that request, because with two message markers pi's cannot be told apart; a foreign top-level, system or tools marker is counted in the budget and goes out byte-identical (`michael-orientation.md` §2; N3)
+- **WHEN** another extension placed a message-level marker beside pi's
+- **THEN** its marker goes out byte-identical and taiknr makes no message-level edit to that request, because with two message markers pi's cannot be told apart; a foreign top-level, system or tools marker is counted in the budget and goes out byte-identical, except the first of two marked system blocks, which the carve-out unmarks whoever placed it (`michael-orientation.md` §2; N3)
 
 #### Scenario: The budget is spent, so nothing moves
 
@@ -167,7 +177,7 @@ taiknr SHALL build the request from a copy of the payload, keep every marker ano
 #### Scenario: A request taiknr built nothing for
 
 - **WHEN** the hook fires for a cache-warmer replay, a strict-tools rebuild, an auto-retry, or a request that is never answered validly
-- **THEN** nothing throws, record (b) changes only at a valid assistant `message_end`, and a re-fired request computes the same edit as its first firing (ruling "handler inputs")
+- **THEN** nothing throws, record (b) changes only at a valid assistant `message_end`, and every re-fire before that commit computes the same edit and next record as its first firing; a replay sent after the commit may place no carry (ruling "handler inputs")
 
 ### Requirement: The one carve-out on a four-point payload
 
@@ -200,7 +210,7 @@ On a covered payload whose system carries two marked blocks — pi's OAuth shape
 
 ### Requirement: The payload edit is inert while taiknr is off
 
-While the session's config is rejected or `enabled` is false, the payload this change edits SHALL go out exactly as it arrived, because the new handler registers through the gate `tail-recall`'s inertness requirement already fixes, and tests nothing itself (D3; `configuration` spec; `michael-orientation.md` §2).
+While the session's config is rejected or `enabled` is false, the payload this change edits SHALL go out exactly as it arrived, because the new handler registers through the gate `tail-recall`'s inertness requirement already fixes, and tests nothing itself (design §5.1; `openspec/changes/archive/2026-11-14-configuration-loader/design.md` D3; `configuration` spec; `michael-orientation.md` §2).
 
 #### Scenario: A project file turns taiknr off
 

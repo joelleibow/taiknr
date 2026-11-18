@@ -24,7 +24,7 @@ The README SHALL explain why a net saving can honestly read negative and SHALL n
 #### Scenario: The under-reporting is recorded where the figure is read
 
 - **WHEN** the README's instruments section is read
-- **THEN** it states that the rewrite charge runs low on the routes the edit does not reach — Bedrock, the other Anthropic-format gateways, OpenRouter's `openai-completions` path and any provider outside the predicate — on fail-open requests, on requests taiknr itself makes read zero, and on partial-prefix reads (owner-rulings.md Q3(a); ruling "under-reporting home")
+- **THEN** it states that the rewrite charge runs low on the routes the edit does not reach — Bedrock, the other Anthropic-format gateways, OpenRouter's `openai-completions` path and any provider outside the predicate — on fail-open requests, on requests taiknr itself makes read zero, on in-turn requests where another extension's block-level marker leaves budget 1, and on partial-prefix reads (owner-rulings.md Q3(a); ruling "under-reporting home")
 
 ## MODIFIED Requirements
 
@@ -39,12 +39,12 @@ Savings in dollars SHALL be net. The rewrite charged SHALL be an estimate that s
 
 #### Scenario: A request the edit did not reach keeps today's rule
 
-- **WHEN** the request is on an uncovered route, the handler failed open, or the payload went out unchanged for want of budget
+- **WHEN** the request is on an uncovered route, the handler failed open, or no message-level point was placed for want of budget
 - **THEN** the charge is today's — the suffix from the changed message to the end of what the last priced request carried — and its known under-reporting is recorded in the README rather than corrected here (owner-rulings.md Q3(a); ruling "rewrite sizing")
 
 #### Scenario: The block is not inside the charged suffix
 
-- **WHEN** the handler placed a point before recall's block, so the provider bills the block as plain input
+- **WHEN** the finished payload carries no marker on recall's block or on any block after it, and the payload carries no top-level marker, so the provider bills the block as plain input
 - **THEN** the charge starts after the carrier's own content and the block is not part of it, measured at 1,236 written on the handoff request while the block itself went out as 2,597 input tokens (N3; N5; N7; N8; ruling "rewrite sizing")
 
 #### Scenario: The split alone changes no figure
@@ -74,7 +74,7 @@ Savings in dollars SHALL be net. The rewrite charged SHALL be an estimate that s
 
 ### Requirement: A saving is priced at the rates the request's own response reported
 
-A stub's saving SHALL be priced at the read rate on a warm request and the write rate on a cold one, including a warm request that read only part of its prefix, whose saving is then an estimate low by the difference between the two rates (design D8, row 11; M2). Recall's block SHALL be priced by one rule, from where the handler left pi's marker: when pi's marker stayed on the block, or the handler made no edit, the block is priced at the read rate when its message lies inside what the last priced request carried and at the write rate otherwise; when the handler removed pi's marker from the block, the block is charged at the input rate on that request, at the write rate on the next request that carries it, and at the read rate after that (M2; M4; T18; N3; ruling "block pricing").
+A stub's saving SHALL be priced at the read rate on a warm request and the write rate on a cold one, including a warm request that read only part of its prefix, whose saving is then an estimate low by the difference between the two rates (instruments design D8, row 11 (`openspec/changes/archive/2026-11-17-taiknr-instruments/design.md`:356); M2). Recall's block SHALL be priced by one rule, taken from the finished payload and the last priced request. When no cache marker sits on recall's block or on any block after it and the request carries no top-level `cache_control`, the block went out uncached and is priced at the input rate; a top-level marker is automatic caching, whose breakpoint lands on the last eligible block, so it is at or after recall's block (`pc.md`:48, :538; N10). Otherwise, when the block is new to what the last priced request carried, changed on its message, or was left uncached by the last priced request, it is priced at the write rate. Otherwise it is priced at the read rate on a warm request and the write rate on a cold one. A request whose payload the handler did not edit counts as cached (ruling "block pricing", narrowed by michael-dr-s2 cc2-3; N3; 132 of 132 measured requests).
 
 #### Scenario: A cold request
 
@@ -84,22 +84,22 @@ A stub's saving SHALL be priced at the read rate on a warm request and the write
 #### Scenario: A warm request that read only part of its prefix
 
 - **WHEN** the first priced request after a compaction or a tree jump is warm and read only part of its prefix from cache
-- **THEN** its saving is priced at the read rate and is therefore low by (write − read) on each saved token in the rewritten portion, which is an accepted estimate and not a corrected figure (design D8, row 11; ruling 15)
+- **THEN** its saving is priced at the read rate and is therefore low by (write − read) on each saved token in the rewritten portion, which is an accepted estimate and not a corrected figure (instruments design D8, row 11 (`openspec/changes/archive/2026-11-17-taiknr-instruments/design.md`:356); ruling 15)
 
 #### Scenario: The block's charge, by placement and request
 
 - **WHEN** a recalling turn's requests are priced
 - **THEN** each case has one answer, and this table is the rule:
-  - the handler made no edit, or pi's marker stayed on the block, first request, warm: the block is inside what the last priced request carried, so it is priced at the read rate;
-  - the handler made no edit, or pi's marker stayed on the block, cold: the write rate;
-  - the handler removed pi's marker, the request that carries the block first: the input rate, measured at 2,597 input on N3's handoff request;
-  - the request after that: the write rate, measured at 2,682 written;
-  - later requests in the turn: the read rate, writing 91 per step (N3; ruling "block pricing")
+  - uncached, on whichever request carries it: the input rate. Measured at 2,597 on N3's handoff request and 3,204 on Haiku 5.5. The budget-1 in-turn request is this row unless the payload carries a top-level marker (N10; N11);
+  - cached, and new to the last priced request or left uncached by it: the write rate (2,682 on N3's next request);
+  - cached, and changed in place on a message the last priced request carried (recall's cache-hit branch dropped an id, `recall-relevant-context.ts:64-72`): the write rate, not the read rate;
+  - cached, the same block the last priced request carried cached, warm: the read rate (91 written per step);
+  - cached, cold: the write rate (N3; ruling "block pricing")
 
 #### Scenario: An applied edit is the source, not the intent
 
 - **WHEN** the publisher prices the block and the rewrite
-- **THEN** it uses one deferred reading derived from the finished payload — whether a carry was placed and whether pi's marker on the block was kept or removed — so a handler that failed open prices today's way, no new Jefferson field is declared, and no getter is added to the publisher's interface (ADR 0008; `AGENTS.md` Conventions; ruling "block pricing")
+- **THEN** it uses one deferred reading derived from the finished payload — `applied.block` (cached, uncached or null) and `applied.carrierRead` — so a handler that failed open prices today's way, no new Jefferson field is declared, and no getter is added to the publisher's interface (ADR 0008; `AGENTS.md` Conventions; ruling "block pricing")
 
 #### Scenario: The edges the design decides
 
