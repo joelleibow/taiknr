@@ -1,12 +1,19 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { InstrumentsHolder } from "../../use-cases/instruments-publisher.js";
+import type { PayloadCacheState } from "../../use-cases/payload-cache.js";
 import { readResponse } from "../adapters/pi-instrument-readings.js";
 
 /**
  * The savings pair, the since-start totals and every re-posted figure, at `message_end`. Assistant
- * messages only, and it returns nothing: a returned message would replace pi's own.
+ * messages only, and it returns nothing: a returned message would replace pi's own. The payload
+ * state is the third parameter because the placement this response prices is the registrar's to add
+ * to the reading (design §5.4).
  */
-export function registerInstrumentsResponseHandler(pi: ExtensionAPI, holder: InstrumentsHolder): void {
+export function registerInstrumentsResponseHandler(
+	pi: ExtensionAPI,
+	holder: InstrumentsHolder,
+	state: PayloadCacheState,
+): void {
 	pi.on("message_end", (event, ctx) => {
 		const { message } = event;
 		if (message.role !== "assistant") return;
@@ -25,7 +32,7 @@ export function registerInstrumentsResponseHandler(pi: ExtensionAPI, holder: Ins
 					cacheWrite: message.usage.cost.cacheWrite,
 				},
 			},
-			() => readResponse(event, ctx),
+			() => ({ ...readResponse(event, ctx), applied: state.applied }),
 		);
 	});
 }

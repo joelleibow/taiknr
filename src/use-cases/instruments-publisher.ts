@@ -4,6 +4,7 @@ import type { RequestEstimates, StubMatch, ToolResultText } from "../domain/cont
 import { archiveEstimates, matchStubs, posted, requestEstimates } from "../domain/context-figures.js";
 import type { CostCounts } from "../domain/savings-dollars.js";
 import { netDollars, responseRates } from "../domain/savings-dollars.js";
+import type { AppliedPlacement } from "./payload-cache.js";
 import type { ArchiveStore } from "./ports.js";
 
 /**
@@ -55,8 +56,13 @@ export interface CompactedReadings {
 }
 
 export type SettledReadings = CompactedReadings;
-/** At a response the projection already counts the reply that has not landed on the branch yet (D7). */
-export type ResponseReadings = CompactedReadings;
+/**
+ * At a response the projection already counts the reply that has not landed on the branch yet (D7),
+ * and the reading carries what the finished payload did with recall's block (design §5.4).
+ */
+export interface ResponseReadings extends CompactedReadings {
+	applied: AppliedPlacement | null;
+}
 
 /** A branch event, which reseeds every ratio the run has not measured live (D7). */
 export interface TreeJumpedReadings extends CompactedReadings {

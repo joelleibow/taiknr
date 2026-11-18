@@ -162,8 +162,13 @@ function response(
 	};
 }
 
-/** The reading a settlement, a compaction or a tree jump takes: 500 tokens persisted, a 200k window. */
-const contextReading = (pair: Pair | undefined = A) => ({ pair, projectionEstimate: 500, contextWindow: 200_000 });
+/** The reading at a response: 500 tokens persisted, a 200k window, and no message-level edit priced. */
+const contextReading = (pair: Pair | undefined = A) => ({
+	pair,
+	projectionEstimate: 500,
+	contextWindow: 200_000,
+	applied: null,
+});
 
 test("session start registers, then posts every one of the seventeen declared fields", () => {
 	const { recorded, start } = harness();
@@ -303,6 +308,7 @@ test("a valid response makes its pair live and re-posts every k-scaled figure wi
 		pair: A,
 		projectionEstimate: 500,
 		contextWindow: 200_000,
+		applied: null,
 	}));
 
 	const update = last();
@@ -822,6 +828,7 @@ test("a switch to a model with no ratio borrows the last measured model's k unti
 		pair: A,
 		projectionEstimate: 0,
 		contextWindow: 200_000,
+		applied: null,
 	}));
 	expect(last().uncalibrated).toBe(false);
 
@@ -832,6 +839,7 @@ test("a switch to a model with no ratio borrows the last measured model's k unti
 		pair: FABLE,
 		projectionEstimate: 0,
 		contextWindow: 200_000,
+		applied: null,
 	}));
 
 	expect(last()).toMatchObject({ contextInTurn: 875_338, uncalibrated: false });
@@ -887,6 +895,7 @@ test("an errored response re-posts total context at its reading pair's k", () =>
 		pair: A,
 		projectionEstimate: 1000,
 		contextWindow: 2000,
+		applied: null,
 	}));
 
 	expect(last()).toMatchObject({ totalContext: 620, uncalibrated: false });

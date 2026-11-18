@@ -60,7 +60,7 @@ function harness() {
 				usage: { input: 62, cacheRead: 0, cacheWrite: 0 },
 				cost: { input: 0, cacheRead: 0, cacheWrite: 0 },
 			},
-			() => ({ pair: A, projectionEstimate: 0, contextWindow: 0 }),
+			() => ({ pair: A, projectionEstimate: 0, contextWindow: 0, applied: null }),
 		);
 	};
 	const fire = (options: { model?: Model; projectionMessages?: Message[]; contextWindow?: number }) =>

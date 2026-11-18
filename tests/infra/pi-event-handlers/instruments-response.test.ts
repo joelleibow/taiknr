@@ -7,6 +7,7 @@ import { DEFAULT_TAIKNR_CONFIG } from "../../../src/config/taiknr-config.js";
 import { InMemoryArchiveStore } from "../../../src/infra/adapters/pi-archive-adapter.js";
 import { registerInstrumentsResponseHandler } from "../../../src/infra/pi-event-handlers/instruments-response.js";
 import { createInstrumentsPublisher, type Publication } from "../../../src/use-cases/instruments-publisher.js";
+import type { PayloadCacheState } from "../../../src/use-cases/payload-cache.js";
 import { createContextStub, createFakePi } from "../../support/fake-pi.js";
 
 type Message = ContextWithSystemEvent["messages"][number];
@@ -59,6 +60,11 @@ function assistant(overrides: Record<string, unknown> = {}): Message {
 
 const user = (text: string): Message => ({ role: "user", content: text, timestamp: 1 }) as unknown as Message;
 
+/** The payload state the registrar reads its one fact from. */
+function payloadState(applied: PayloadCacheState["applied"] = null): PayloadCacheState {
+	return { recallBlock: null, carrier: null, nextCarrier: null, applied };
+}
+
 function harness() {
 	const fake = createFakePi();
 	const session = createSessionConfig();
@@ -77,7 +83,7 @@ function harness() {
 			store,
 		}),
 	);
-	registerInstrumentsResponseHandler(createGatedPi(fake.pi, session), holder);
+	registerInstrumentsResponseHandler(createGatedPi(fake.pi, session), holder, payloadState());
 
 	const context = () =>
 		createContextStub({
@@ -188,7 +194,7 @@ test("with the switch off nothing is posted and no host read happens", () => {
 	const session = createSessionConfig();
 	session.assign({ status: "ready", config: { ...DEFAULT_TAIKNR_CONFIG, jeffersonInstruments: false } });
 	const holder = createInstrumentsHolder();
-	registerInstrumentsResponseHandler(createGatedPi(fake.pi, session), holder);
+	registerInstrumentsResponseHandler(createGatedPi(fake.pi, session), holder, payloadState());
 	const noHostReads = createContextStub({ cwd: "/work", trusted: false, hostReadsThrow: true });
 
 	expect(() => fake.registered[0].handler({ type: "message_end", message: assistant() }, noHostReads)).not.toThrow();
@@ -212,7 +218,7 @@ test("the same response with a real publisher on that context throws, so the sil
 			store: new InMemoryArchiveStore(),
 		}),
 	);
-	registerInstrumentsResponseHandler(createGatedPi(fake.pi, session), holder);
+	registerInstrumentsResponseHandler(createGatedPi(fake.pi, session), holder, payloadState());
 
 	expect(() =>
 		fake.registered[0].handler(
@@ -221,4 +227,34 @@ test("the same response with a real publisher on that context throws, so the sil
 		),
 	).toThrow();
 	expect(posts).toEqual([]);
+});
+
+test("the registrar hands the payload state's placement to the publisher, unevaluated", () => {
+	const fake = createFakePi();
+	const session = createSessionConfig();
+	session.assign({ status: "ready", config: DEFAULT_TAIKNR_CONFIG });
+	const state = payloadState(null);
+	const reads: Array<() => unknown> = [];
+	registerInstrumentsResponseHandler(
+		createGatedPi(fake.pi, session),
+		{
+			current: () => ({
+				...createInstrumentsPublisher({ sink: { register() {}, post() {} }, store: new InMemoryArchiveStore() }),
+				responseReceived(_response, read) {
+					reads.push(read);
+				},
+			}),
+			install() {},
+		},
+		state,
+	);
+	const context = () => createContextStub({ cwd: "/work", trusted: false, projectionMessages: [] });
+
+	fake.registered[0].handler({ type: "message_end", message: assistant() }, context());
+	expect(reads).toHaveLength(1);
+	expect(reads[0]?.()).toMatchObject({ applied: null });
+
+	// Read at evaluation time, which is what keeps a fault in the placement out of the payload handler.
+	state.applied = { carrierRead: "block", block: "uncached" };
+	expect(reads[0]?.()).toMatchObject({ applied: { carrierRead: "block", block: "uncached" } });
 });

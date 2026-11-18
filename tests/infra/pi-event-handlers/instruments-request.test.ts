@@ -190,7 +190,7 @@ test("the pending request is written even when recall returned nothing, so the n
 			usage: { input: 70, cacheRead: 0, cacheWrite: 0 },
 			cost: { input: 0, cacheRead: 0, cacheWrite: 0 },
 		},
-		() => ({ pair: PAIR, projectionEstimate: 0, contextWindow: 0 }),
+		() => ({ pair: PAIR, projectionEstimate: 0, contextWindow: 0, applied: null }),
 	);
 
 	const update = posts[posts.length - 1];

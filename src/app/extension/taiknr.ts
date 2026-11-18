@@ -58,6 +58,6 @@ export default function taiknr(pi: ExtensionAPI): void {
 	});
 	registerContextHandler(gatedPi, { config: session, store, recallCache, holder, payloadCache });
 	registerInstrumentsRequestHandler(gatedPi, holder);
-	registerInstrumentsResponseHandler(gatedPi, holder);
+	registerInstrumentsResponseHandler(gatedPi, holder, payloadCache);
 	registerInstrumentsSettledHandler(gatedPi, holder);
 }
