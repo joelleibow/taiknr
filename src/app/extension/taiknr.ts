@@ -3,6 +3,7 @@ import { createSessionConfig } from "../../config/session-config.js";
 import type { ArchivedToolOutput } from "../../domain/archived-output.js";
 import { InMemoryArchiveStore } from "../../infra/adapters/pi-archive-adapter.js";
 import { registerAgentBeforeSettleHandler } from "../../infra/pi-event-handlers/agent-before-settle.js";
+import { registerBeforeProviderRequestHandler } from "../../infra/pi-event-handlers/before-provider-request.js";
 import { registerContextHandler } from "../../infra/pi-event-handlers/context.js";
 import { registerInstrumentsCompactHandler } from "../../infra/pi-event-handlers/instruments-compact.js";
 import { registerInstrumentsRequestHandler } from "../../infra/pi-event-handlers/instruments-request.js";
@@ -10,6 +11,7 @@ import { registerInstrumentsResponseHandler } from "../../infra/pi-event-handler
 import { registerInstrumentsSessionStartHandler } from "../../infra/pi-event-handlers/instruments-session-start.js";
 import { registerInstrumentsSettledHandler } from "../../infra/pi-event-handlers/instruments-settled.js";
 import { registerInstrumentsTreeHandler } from "../../infra/pi-event-handlers/instruments-tree.js";
+import { registerPayloadCacheCommitHandler } from "../../infra/pi-event-handlers/payload-cache-commit.js";
 import { registerSessionCompactHandler } from "../../infra/pi-event-handlers/session-compact.js";
 import { registerSessionStartHandler } from "../../infra/pi-event-handlers/session-start.js";
 import { registerSessionTreeHandler } from "../../infra/pi-event-handlers/session-tree.js";
@@ -57,6 +59,8 @@ export default function taiknr(pi: ExtensionAPI): void {
 		originalContentByEntryId,
 	});
 	registerContextHandler(gatedPi, { config: session, store, recallCache, holder, payloadCache });
+	registerBeforeProviderRequestHandler(gatedPi, payloadCache);
+	registerPayloadCacheCommitHandler(gatedPi, payloadCache);
 	registerInstrumentsRequestHandler(gatedPi, holder);
 	registerInstrumentsResponseHandler(gatedPi, holder, payloadCache);
 	registerInstrumentsSettledHandler(gatedPi, holder);

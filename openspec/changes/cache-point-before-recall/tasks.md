@@ -207,7 +207,7 @@ For the untouched cases `editPayload` returns `{ output: undefined, nextCarrier:
 
 ## 6. The composition
 
-- [ ] 6.1 Modify `src/app/extension/taiknr.ts` to compose and register both handlers (`redgreen-derek.md`, "My calls"; §5.2) in any position: registration order is not pinned and does not matter, because the two `message_end` handlers are order-independent (design §5.1), `before_provider_request` is its own event, and F1 sorts the events it records (`tests/app/extension/taiknr.test.ts:14`). The state literal and both of its uses already exist, from 4.1 and 5.1; this task adds the registrations and nothing else.
+- [x] 6.1 Modify `src/app/extension/taiknr.ts` to compose and register both handlers (`redgreen-derek.md`, "My calls"; §5.2) in any position: registration order is not pinned and does not matter, because the two `message_end` handlers are order-independent (design §5.1), `before_provider_request` is its own event, and F1 sorts the events it records (`tests/app/extension/taiknr.test.ts:14`). The state literal and both of its uses already exist, from 4.1 and 5.1; this task adds the registrations and nothing else.
   - **Test first:** F1, the registration list — fifteen registrations over ten events, duplicates kept, where base has thirteen. This file pins the list, so it changes with the registrations.
   - **Boundary cases:** none; the factory re-runs per session, which is the boundary that gives the holder one cell per session (pi `docs/extensions.md`:512, :529, :1520-1530).
   - **Verified by:** `npx vitest run tests/app/extension/taiknr.test.ts`, then `npm run check`.
