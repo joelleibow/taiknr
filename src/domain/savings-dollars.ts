@@ -21,6 +21,8 @@ export interface PricedRequest {
 	stubSaving: number;
 	recalled: number;
 	blockInNewTail: boolean;
+	/** Whether the finished payload left recall's block with no marker at or after it (D8). */
+	blockUncached: boolean;
 	suffixEstimate: number;
 	classifierSpend: number;
 }
@@ -52,9 +54,14 @@ export function responseRates(usage: UsageCounts, cost: CostCounts): Rates {
  */
 export function netDollars(rates: Rates, request: PricedRequest): number {
 	const stubRate = rates.warm ? rates.readRate : rates.writeRate;
-	// The block is the last content of the latest user message, where pi's cache breakpoint falls:
-	// a block on a message the last priced request carried is a read, one in the new tail a write.
-	const blockRate = rates.warm && !request.blockInNewTail ? rates.readRate : rates.writeRate;
+	// The block is the last content of the latest user message, where pi's cache breakpoint falls: a
+	// block left with no marker at or after it went out uncached and costs the input rate, a block on a
+	// message the last priced request carried a read, one in the new tail a write (D8).
+	const blockRate = request.blockUncached
+		? rates.inputRate
+		: rates.warm && !request.blockInNewTail
+			? rates.readRate
+			: rates.writeRate;
 	const gross = request.k * request.stubSaving * stubRate - request.k * request.recalled * blockRate;
 	const rewrite = rates.warm ? request.k * request.suffixEstimate * Math.max(0, rates.writeRate - rates.readRate) : 0;
 	return gross - rewrite - request.classifierSpend;

@@ -9,6 +9,7 @@ import type { SessionConfig } from "../../config/session-config.js";
 import { formatRecalledContext } from "../../domain/recall.js";
 import { tokenEstimate } from "../../domain/token-estimate.js";
 import type { InstrumentsHolder } from "../../use-cases/instruments-publisher.js";
+import type { PayloadCacheState } from "../../use-cases/payload-cache.js";
 import type { ArchiveStore } from "../../use-cases/ports.js";
 import type { RecallCache } from "../../use-cases/recall-relevant-context.js";
 import { recallRelevantContext } from "../../use-cases/recall-relevant-context.js";
@@ -40,6 +41,7 @@ export function registerContextHandler(
 		store: ArchiveStore;
 		recallCache: RecallCache;
 		holder: InstrumentsHolder;
+		payloadCache: PayloadCacheState;
 	},
 ): void {
 	// One cell and one notifier per registration, which is one per factory call, so one per session.
@@ -47,6 +49,9 @@ export function registerContextHandler(
 	const notifier = createOncePerSessionNotifier(() => current);
 
 	pi.on("context_with_system", async (event, ctx) => {
+		// Cell (a) is this request's block and never an earlier request's, so it clears before every
+		// return below rather than after the work (D4).
+		deps.payloadCache.recallBlock = null;
 		// The cell carries this event's ctx, so a notice reaches the request that failed.
 		current = ctx;
 
@@ -84,8 +89,11 @@ export function registerContextHandler(
 		);
 		if (outputs.length === 0) return;
 
+		// The exact text recall appends, written where the payload handler reads it: one request's block.
+		const block = formatRecalledContext(outputs);
+		deps.payloadCache.recallBlock = block;
 		// Measured here, after recall's messages exist, and evaluated by the publisher at the request that follows.
-		deps.holder.current().reportRecalled(() => ({ estimate: tokenEstimate(formatRecalledContext(outputs)) }));
+		deps.holder.current().reportRecalled(() => ({ estimate: tokenEstimate(block) }));
 		return { messages: appendRecalledContextToMessages(event.messages, prompt.messageIndex, outputs) };
 	});
 }

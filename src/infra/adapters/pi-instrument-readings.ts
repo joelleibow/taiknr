@@ -11,7 +11,6 @@ import { sampleRatio, validUsage } from "../../domain/calibration.js";
 import type {
 	CompactedReadings,
 	RequestReading,
-	ResponseReadings,
 	SessionStartedReadings,
 	SettledReadings,
 	TreeJumpedReadings,
@@ -152,7 +151,7 @@ export function readRequest(event: ContextWithSystemEvent, ctx: ExtensionContext
 }
 
 /** At a response the reply is not on the branch yet, so it is added to what pi has persisted (D7). */
-export function readResponse(event: MessageEndEvent, ctx: ExtensionContext): ResponseReadings {
+export function readResponse(event: MessageEndEvent, ctx: ExtensionContext): CompactedReadings {
 	const readings = readContext(ctx);
 	// One projection per reading: the count the design's cost accounting assumes.
 	return { ...readings, projectionEstimate: readings.projectionEstimate + estimateTokens(event.message) };

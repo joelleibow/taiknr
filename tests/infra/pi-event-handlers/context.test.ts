@@ -18,6 +18,7 @@ import { createJeffersonBusAdapter } from "../../../src/infra/adapters/jefferson
 import { InMemoryArchiveStore, TAIKNR_SIDE_STORE_TYPE } from "../../../src/infra/adapters/pi-archive-adapter.js";
 import { registerContextHandler } from "../../../src/infra/pi-event-handlers/context.js";
 import { createInstrumentsPublisher, type Publication } from "../../../src/use-cases/instruments-publisher.js";
+import type { PayloadCacheState } from "../../../src/use-cases/payload-cache.js";
 import type { RecallCache } from "../../../src/use-cases/recall-relevant-context.js";
 import { createContextStub, createFakePi } from "../../support/fake-pi.js";
 
@@ -109,7 +110,14 @@ function harness(options: HarnessOptions = {}) {
 		classify,
 	};
 	const holder = createInstrumentsHolder();
-	registerContextHandler(createGatedPi(fake.pi, session), { config: session, store, recallCache, holder });
+	const payloadCache: PayloadCacheState = { recallBlock: null, carrier: null, nextCarrier: null, applied: null };
+	registerContextHandler(createGatedPi(fake.pi, session), {
+		config: session,
+		store,
+		recallCache,
+		holder,
+		payloadCache,
+	});
 
 	if (options.ready ?? true) session.assign({ status: "ready", config: { ...CONFIG, ...options.config } });
 
@@ -133,7 +141,7 @@ function harness(options: HarnessOptions = {}) {
 	const fire = async (ctx: ExtensionContext, messages: Messages) =>
 		fake.registered[0].handler({ type: "context_with_system", messages }, ctx);
 
-	return { fake, session, store, recallCache, item, classify, context, fire, manager, holder };
+	return { fake, session, store, recallCache, payloadCache, item, classify, context, fire, manager, holder };
 }
 
 /** The text of the block a result appends to the message at `index`, or `undefined` when none. */
@@ -366,4 +374,27 @@ test("the classifier's posts reach the bus even when the emit throws", async () 
 		{ extension: "taiknr", field: "decidingItems", value: 1 },
 		{ extension: "taiknr", field: "deciding", value: false },
 	]);
+});
+
+test("cell (a) carries the block this request built, and is cleared at every context_with_system", async () => {
+	const { fire, context, payloadCache, item } = harness();
+	const block = formatRecalledContext([item]);
+
+	await fire(context(), [prompt("why?")]);
+	expect(payloadCache.recallBlock).toBe(block);
+
+	// No user message, so the handler returns early: the clear must have happened before it.
+	await fire(context(), [CUSTOM]);
+	expect(payloadCache.recallBlock).toBeNull();
+
+	await fire(context(), [prompt("again", 2)]);
+	expect(payloadCache.recallBlock).toBe(block);
+});
+
+test("a request recall answers nothing for leaves cell (a) empty", async () => {
+	const { fire, context, payloadCache } = harness({ config: { decisionThreshold: 0.95 } });
+
+	await fire(context(), [prompt("why?")]);
+
+	expect(payloadCache.recallBlock).toBeNull();
 });
