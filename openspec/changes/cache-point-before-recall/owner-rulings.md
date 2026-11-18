@@ -43,3 +43,9 @@ The questions from `michael-orientation.md` §5 went to Joel as multiple-choice.
 > "Keep  going but drop that2 clean  rounds requirement.  we just need to major or  serious findings"
 
 - **Stage 3 continues past the 5-round cap.** It ends at the first round in which no blocking or major finding needs a fix. The requirement of two consecutive clean rounds is dropped.
+
+## 2026-11-17 — Joel's live check, group 10
+
+> "All good!  you can merge"
+
+- **Group 10 accepted** on Joel's word: 10.1 (OAuth), 10.2 (his attribution route) and 10.3 (a recalling turn in his own session). He also authorized the conductor to merge PR #7.
