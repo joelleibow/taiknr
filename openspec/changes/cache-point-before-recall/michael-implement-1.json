@@ -1,0 +1,111 @@
+{
+  "verdict": "changes_requested",
+  "requirements": [
+    {
+      "requirement": "Mechanical gate: npm run check, suppression search, no Markdown but tasks.md, no secrets",
+      "evidence": "I ran `npm ci` and `npm run check` in a `mktemp -d` worktree of HEAD `11a1009`: exit 0, lint and tsc clean, `Test Files 40 passed (40)`, `Tests 641 passed (641)`. The worktree is removed. Searching `git diff b2f6c53...HEAD` for `@ts-ignore`, `@ts-expect-error`, `eslint-disable`, `biome-ignore`, `noqa`, `type: ignore` and `TODO` found no hits. The only Markdown in the diff is `tasks.md`. `.envrc` is untracked.",
+      "status": "met"
+    },
+    {
+      "requirement": "1.1 coversRoute and the payload-cache types (D1; owner-rulings Q3(a))",
+      "evidence": "Read `src/infra/adapters/anthropic-cache-payload.ts:190-196` and `src/use-cases/payload-cache.ts`, which has no pi import. The route table at `tests/infra/adapters/anthropic-cache-payload.test.ts:19-62` covers both proxy hosts, a missing or unparsable baseUrl, `openai-completions` with an `anthropic/` id, `google/gemini-2.5-pro` and the seven gateways. Mutation: dropping the `anthropic/` prefix turns the Gemini rows red.",
+      "status": "met"
+    },
+    {
+      "requirement": "1.2 editPayload, the whole of §5.3 (carve-out, marker walk, recognition by count, carrier, before point, budget, carry, next record, applied)",
+      "evidence": "I read the code against design §5.3 (3)–(5), D2, D3, D5 and D8. The lone-surrogate regex matches pi's `sanitize-unicode.js:24` exactly. I ran the mutations myself (`michael/impl-mutations.log`); each turned the tests listed here red, so none is a vacuous pass:\n- M3 (carve-out): 6 red.\n- M4 (budget): 12.\n- blockState ignoring a top-level marker: A9.\n- first match instead of highest: A22 and the earlier-copy test.\n- no surrogate rule: A26.\n- fingerprint keeping cache_control: A5.\n- walk skipping tool_result content: A17 and the in-turn test.\n- nextCarrier ignoring the marked check: A14 and A24.\n- pi's marker never or always removed: 4 and 10.\n- carrierRead always null: 6.",
+      "status": "met"
+    },
+    {
+      "requirement": "2.1 / 2.2 before_provider_request handler, commit-after order, fail-open catch, session-start pin",
+      "evidence": "`before-provider-request.ts:9-23` matches design §5.1 steps 1–3 and registers through the gate (`taiknr.ts`). Mutation M1, removing the catch's reset, turns B1 red, and so does a narrower variant that keeps `nextCarrier`. B5 and the session-start pin are green.",
+      "status": "met"
+    },
+    {
+      "requirement": "3.1 the message_end commit handler (§5.1, §5.3 (5)): a valid assistant response promotes nextCarrier to carrier",
+      "evidence": "The code at `payload-cache-commit.ts:10-17` is right, and removing `validUsage` turns C2 and C3 red. But mutating `state.carrier = state.nextCarrier` to `state.carrier = null` turned 0 of 641 tests red. Every commit test's payload call is a handoff, whose `nextCarrier` is null, so the promotion is never observed (see finding 1).",
+      "status": "must_change"
+    },
+    {
+      "requirement": "4.1 cell (a) written with formatRecalledContext(outputs) and cleared as the handler's first statement",
+      "evidence": "`context.ts:52-54` clears it and `:92-96` writes it. Mutation: removing the top-of-handler clear turns test D1 red, through its no-user-message early-return step.",
+      "status": "met"
+    },
+    {
+      "requirement": "5.1 ResponseReadings.applied required; readResponse returns CompactedReadings; registrar third parameter",
+      "evidence": "Diffs read: `instruments-publisher.ts` ResponseReadings, `pi-instrument-readings.ts:154`, `instruments-response.ts:12-37`, and every fixture carries `applied: null`. Mutation: a closure that drops `applied` turns G1 red. The third parameter is the design §4 exception that the docs pass records.",
+      "status": "met"
+    },
+    {
+      "requirement": "5.2 D7 start and D8 one block-pricing rule (domain and publisher)",
+      "evidence": "Read `rewriteOf` (D7 `carried.index + 1` when `carrierRead === carried.text`; D8 `blockInNewTail` with the `carried === undefined` and `baseline.blockUncached` clauses), the `netDollars` block rate, and `baseline = { ...request.candidate, blockUncached }` after `rewriteOf`. Mutations:\n- M2: E1 red.\n- M5: E5 red.\n- netDollars ignoring blockUncached: E4, E7, E8.\n- baseline dropping blockUncached: E6.\n\nThe one changed expectation (shrunk block to WRITE) is D8's mandated fix.",
+      "status": "met"
+    },
+    {
+      "requirement": "6.1 composition: both handlers registered through the gate; F1 fifteen registrations",
+      "evidence": "`taiknr.ts` diff read, and F1 updated and green.",
+      "status": "met"
+    },
+    {
+      "requirement": "7.1 live script copied byte for byte with only the widened turns-2-and-3 precondition",
+      "evidence": "`diff derek/test-cache-point-live.mjs.txt test-cache-point-live.mjs` shows only :175-177, so the twelve-request check at :179 is intact. I re-ran L1 from the checkout: carry unmarked on long-added and marked on long-carry. The widened-precondition check passes when turn 3 carries its block and FAILs when turn 3 recalled nothing. The script is outside biome's `files.includes`, tsc and vitest.",
+      "status": "met"
+    },
+    {
+      "requirement": "8.1 / 8.2 finished-tree check and scenario walk; development-checks delta",
+      "evidence": "Reproduced the check (40 files, 641 tests). The `development-checks` evidence is recorded in tasks.md; I measured the same commands in s5-r2.",
+      "status": "met"
+    },
+    {
+      "requirement": "9.1 / 9.2 live runs; owner ruling that the API-key route is verified",
+      "evidence": "9.2 is ticked with seven failures on both routes (`derek/live-run-base-*.log`). 9.1 is correctly left unticked:\n- anthropic-key passes every precondition and all eleven assertions (`live-run-anthropic-key-1.log`);\n- openrouter exits 3 three times on the twelve-request precondition (`live-run-openrouter-{1,2,3}.log`), which the plan's rule makes a Validate finding.",
+      "status": "met"
+    },
+    {
+      "requirement": "Group 10 is Joel's and unticked",
+      "evidence": "10.1–10.3 are unticked in tasks.md.",
+      "status": "met"
+    },
+    {
+      "requirement": "Shape and layer flow (ADR 0001; one handler per event; no unconsumed exports; no extension edit)",
+      "evidence": "The domain and `payload-cache.ts` are pi-free, and infra imports its types from use-cases. Each new handler registers one event under `pi-event-handlers/`. Joel's extension is not touched (owner-rulings Q1(a)). `coversRoute`, `RouteModel` and `PayloadEdit` are the exports tasks 1.1 and 1.2 name.",
+      "status": "met"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "major",
+      "location": "tests/infra/pi-event-handlers/payload-cache-commit.test.ts:111-119 and :168-177 (C4 and \"two valid commits in a row\")",
+      "finding": "No test observes the commit handler promoting a computed record.\n- Both C4 and the two-commits test fire the HANDOFF payload, which carries no recall block. Its `nextCarrier` is therefore null, and the tests assert `carrier` null.\n- So `state.carrier = null` is indistinguishable from `state.carrier = state.nextCarrier`.\n- I ran that mutation: 0 of 641 tests go red.\n\nIn production that mutation would never carry a record across a response. The handoff carry would never fire, which is the M4/M5 loss this change exists to remove, and the suite would stay green.",
+      "required_change": "Change C4 (and the two-commits test) to start from `{ recallBlock: \"block\", carrier: null, nextCarrier: null, applied: null }`.\n- Fire `before_provider_request` with a recalling payload, `messages: [{ role: \"user\", content: [text(\"own\"), text(\"block\", PI)] }]`, and assert `nextCarrier` equals `{ index: 0, fingerprint: \"own\", block: \"block\" }` and `carrier` is null.\n- Fire a valid assistant `message_end` and assert `carrier` deep-equals that record.\n- Then clear `recallBlock`, fire HANDOFF and a second valid `message_end`, and assert `carrier` is null.\n\nShow it red under `state.carrier = null` and green on the real handler. The test is at `.pi/marbleization/cache-point-before-recall/michael/impl-remedy-commit.test.ts`.",
+      "required_change_ran": true
+    },
+    {
+      "severity": "minor",
+      "location": "tests/infra/adapters/anthropic-cache-payload.test.ts, test \"an in-turn request marks the block before the one recall appended to the same message\"",
+      "finding": "The fixture puts pi's marker on the text inside the tool_result's `content` (`toolResult(text(\"out\", PI))`), and the test asserts `m[4].content[0].content[0]`.\n- pi marks the tool_result block itself (`anthropic-messages.js:1408-1421`), and Derek's live L2 rows show `m[22][0]:tool_result`.\n- The test passes, but on a nested-marker shape pi never produces, which is the shape of the A17 foreign-marker case. So the in-turn scenario's pinned evidence does not match the real wire.",
+      "required_change": "Build the last message as `{ role: \"user\", content: [{ type: \"tool_result\", tool_use_id: \"t1\", content: [text(\"out\")], cache_control: { ...PI } }] }`. Assert `markerPaths(output)` equals `[\"system[0]\", \"tools[1]\", \"m[2].content[0]\", \"m[4].content[0]\"]`, and assert `withoutMarkers(output)` equals `withoutMarkers(input)`. It ran green on HEAD (`michael/impl-remedy-adapter.test.ts`).",
+      "required_change_ran": true
+    },
+    {
+      "severity": "minor",
+      "location": "tests/infra/pi-event-handlers/before-provider-request.test.ts:117-123 (B6, \"publishing off still edits the payload\")",
+      "finding": "The test never turns publishing off.\n- The harness assigns `{ ...DEFAULT_TAIKNR_CONFIG, enabled }`, and `DEFAULT_TAIKNR_CONFIG.jeffersonInstruments` is `true` (`src/config/taiknr-config.ts:23`).\n- So B6 duplicates B2 under a name claiming a condition it does not set, yet Scenario Coverage maps \"Publishing off, recall on\" to it.",
+      "required_change": "Give the harness a `publishing` option that sets `jeffersonInstruments: options.publishing ?? true`, and call `harness({ publishing: false })` in B6. The edited file ran green on HEAD (`michael/impl-remedy-bpr.test.ts`).",
+      "required_change_ran": true
+    }
+  ],
+  "later_gates": [
+    "Validate: 9.1's openrouter route exited 3 three times in a row on \"turn 2 made at least 12 requests\" with every assertion passing. tasks.md's own rule makes that a Validate finding, not a pass, and Validate rules on it.",
+    "Validate: the anthropic-key green run (`derek/live-run-anthropic-key-1.log`) is the owner-required API-key evidence. Re-run or re-read it rather than taking the tasks.md summary on trust.",
+    "Joel at Validate: 10.1 (anthropic-oauth, the only live proof of D3's carve-out), 10.2 (attribution route against his relaxed guard) and 10.3 (7.5-minute lifetime billing).",
+    "Bambadjan's docs pass covers the documents this change made false: `README.md`:40 and :112 and the instruments under-reporting record, `docs/adr/0009`, `ARCHITECTURE.md`:5 and :46-47, and `AGENTS.md`:23 (the third-parameter exception), :39 (the stale live-script trap, naming `test-cache-point-live.mjs`) and :42 (twelve becomes fourteen gated registrations).",
+    "Re-run npm run check and the commit-handler mutation after the major fix lands."
+  ],
+  "not_covered": [
+    "No live model call was made. The live billing results rest on Derek's logs, which I read and did not reproduce.",
+    "Joel's attribution and OAuth routes are his.",
+    "I did not re-run the full red side of `redgreen-derek.md` against base `d5f8435`. I re-verified mutation sensitivity at HEAD instead (`michael/impl-mutations.log`, 21 mutations).",
+    "I did not read Derek's implementation report (none is in the change directory), so this pass did not check his list of documents his change made false. The later_gates entry gives the list I derived from the design."
+  ]
+}
