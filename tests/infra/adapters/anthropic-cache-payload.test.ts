@@ -203,6 +203,7 @@ test("a payload pi marked nowhere loses only system[0]'s marker", () => {
 	const { output, applied, nextCarrier } = changed(input, null, null);
 
 	expect(markerPaths(output)).toEqual(["system[1]", "tools[1]"]);
+	expect(withoutMarkers(output)).toEqual(withoutMarkers(input));
 	expect(applied).toBeNull();
 	expect(nextCarrier).toBeNull();
 });
