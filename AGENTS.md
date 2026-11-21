@@ -32,6 +32,7 @@ The current shape is in `ARCHITECTURE.md`. Decisions are in `docs/adr/`. Usage a
 ## Traps
 
 - **The lint allowlist fails open.** `biome.json`'s `files.includes` names `src/`, `tests/` and the four root configuration files Biome reads. A new top-level directory is silently unlinted until it is added there, and Markdown, `openspec/` and `.pi/` are outside the scope by design.
+- **OpenSpec is not in this repository.** Specs and changes live in the `taiknr` OpenSpec store, a separate repository at `~/Projects/taiknr-sdd`. Here, `openspec/` is gitignored and holds only a local `config.yaml` reading `store: taiknr`, which a fresh checkout has to recreate before `openspec` commands resolve.
 - **Formatting is part of the gate.** `npm run check` fails on style alone, so a hand-wrapped line over 120 columns turns it red. Fix it with `npx biome check --write .`, which the same allowlist scopes.
 - **A failed extension load does not fail the command.** `pi --no-session --help` exits 0 whether or not the extension loaded. The failure is the text `Failed to load extension` on stderr, so assert on that text and never on the exit code.
 - **The host package belongs in `peerDependencies` only.** Adding `@earendil-works/pi-coding-agent` to `dependencies` makes Pi print a host-provided-package warning at load, and the host already supplies it at runtime. The `devDependencies` copy exists for `tsc` alone.
