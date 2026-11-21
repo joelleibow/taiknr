@@ -1,9 +1,10 @@
-import type { ContextEvent } from "@earendil-works/pi-coding-agent";
+import type { ContextEvent, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { expect, test } from "vitest";
 import { formatRecalledContext, type RecalledOutput } from "../../../src/domain/recall.js";
 import {
 	appendRecalledContextToMessages,
 	extractLatestUserPrompt,
+	newestAssistantEntryId,
 } from "../../../src/infra/adapters/pi-context-adapter.js";
 
 type Messages = ContextEvent["messages"];
@@ -153,4 +154,40 @@ test("nothing recalled returns the input unchanged", () => {
 	const messages: Messages = [user([TEXT("what failed?")], 1)];
 
 	expect(appendRecalledContextToMessages(messages, 0, [])).toBe(messages);
+});
+
+/** One branch entry, carrying just the type, id and message role the derivation reads. */
+function branchEntry(id: string, type: string, role?: string): SessionEntry {
+	return {
+		type,
+		id,
+		parentId: null,
+		timestamp: "2026-11-20T00:00:00.000Z",
+		message: { role },
+	} as unknown as SessionEntry;
+}
+
+test("P1: the key is the last assistant message entry, even with a later user message", () => {
+	const entries = [
+		branchEntry("e1", "message", "assistant"),
+		branchEntry("e2", "message", "assistant"),
+		branchEntry("e3", "message", "user"),
+	];
+
+	expect(newestAssistantEntryId(entries)).toBe("e2");
+});
+
+test("P2: no assistant message means no key", () => {
+	expect(newestAssistantEntryId([branchEntry("e1", "message", "user")])).toBeUndefined();
+	expect(newestAssistantEntryId([])).toBeUndefined();
+});
+
+test("P3: a later non-message entry does not move the key", () => {
+	const entries = [
+		branchEntry("e1", "message", "assistant"),
+		branchEntry("e2", "compaction"),
+		branchEntry("e3", "label"),
+	];
+
+	expect(newestAssistantEntryId(entries)).toBe("e1");
 });

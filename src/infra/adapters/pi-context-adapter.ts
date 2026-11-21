@@ -1,4 +1,4 @@
-import type { ContextEvent } from "@earendil-works/pi-coding-agent";
+import type { ContextEvent, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { formatRecalledContext, type RecalledOutput } from "../../domain/recall.js";
 
 export interface ExtractedUserPrompt {
@@ -22,6 +22,18 @@ export function extractLatestUserPrompt(messages: ContextEvent["messages"]): Ext
 	const message = messages[messageIndex];
 	const promptText = promptTextOf(message);
 	return { messageIndex, promptKey: `${message.timestamp}|${promptText}`, promptText };
+}
+
+/**
+ * The id of the last branch entry whose type is `message` and whose message's role is `assistant`:
+ * the key the summary is stored under and matched against (design decision 10).
+ */
+export function newestAssistantEntryId(entries: readonly SessionEntry[]): string | undefined {
+	for (let index = entries.length - 1; index >= 0; index -= 1) {
+		const entry = entries[index];
+		if (entry.type === "message" && entry.message.role === "assistant") return entry.id;
+	}
+	return undefined;
 }
 
 /**

@@ -10,11 +10,15 @@ import { formatRecalledContext } from "../../domain/recall.js";
 import { tokenEstimate } from "../../domain/token-estimate.js";
 import type { InstrumentsHolder } from "../../use-cases/instruments-publisher.js";
 import type { PayloadCacheState } from "../../use-cases/payload-cache.js";
-import type { ArchiveStore } from "../../use-cases/ports.js";
+import type { ArchiveStore, ConversationSummaryState } from "../../use-cases/ports.js";
 import type { RecallCache } from "../../use-cases/recall-relevant-context.js";
 import { recallRelevantContext } from "../../use-cases/recall-relevant-context.js";
 import { readEligibleArchivedIds } from "../adapters/pi-archive-adapter.js";
-import { appendRecalledContextToMessages, extractLatestUserPrompt } from "../adapters/pi-context-adapter.js";
+import {
+	appendRecalledContextToMessages,
+	extractLatestUserPrompt,
+	newestAssistantEntryId,
+} from "../adapters/pi-context-adapter.js";
 import { createPiJevScorerAdapter } from "../adapters/pi-jev-scorer-adapter.js";
 import { createOncePerSessionNotifier } from "../adapters/pi-notifier-adapter.js";
 
@@ -42,6 +46,7 @@ export function registerContextHandler(
 		recallCache: RecallCache;
 		holder: InstrumentsHolder;
 		payloadCache: PayloadCacheState;
+		summary: ConversationSummaryState;
 	},
 ): void {
 	// One cell and one notifier per registration, which is one per factory call, so one per session.
@@ -73,7 +78,14 @@ export function registerContextHandler(
 		if (budgetCharacters <= 0) return;
 
 		// Every value this request needs is built before the request changes.
-		const eligibleIds = readEligibleArchivedIds(ctx.sessionManager.getBranch());
+		const branch = ctx.sessionManager.getBranch();
+		const eligibleIds = readEligibleArchivedIds(branch);
+		// The summary covers the conversation before this request's message, so its key is the newest
+		// assistant entry before the last user message. An undefined key on either side never matches.
+		const lastUser = branch.findLastIndex((entry) => entry.type === "message" && entry.message.role === "user");
+		const key = lastUser === -1 ? undefined : newestAssistantEntryId(branch.slice(0, lastUser));
+		const stored = deps.summary.current();
+		const summary = key !== undefined && stored?.key === key ? stored.text : undefined;
 		// The publisher installed for this session observes the call, and is a no-op while the instruments are off.
 		const scorer = createPiJevScorerAdapter(ctx, state.config, deps.holder.current());
 		const outputs = await recallRelevantContext(
@@ -84,6 +96,7 @@ export function registerContextHandler(
 				signal: ctx.signal,
 				budgetCharacters,
 				eligibleIds,
+				summary,
 			},
 			{ store: deps.store, scorer, notifier, cache: deps.recallCache },
 		);

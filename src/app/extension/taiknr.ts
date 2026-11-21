@@ -5,6 +5,8 @@ import { InMemoryArchiveStore } from "../../infra/adapters/pi-archive-adapter.js
 import { registerAgentBeforeSettleHandler } from "../../infra/pi-event-handlers/agent-before-settle.js";
 import { registerBeforeProviderRequestHandler } from "../../infra/pi-event-handlers/before-provider-request.js";
 import { registerContextHandler } from "../../infra/pi-event-handlers/context.js";
+import { registerConversationSummarySettledHandler } from "../../infra/pi-event-handlers/conversation-summary-settled.js";
+import { registerConversationSummaryShutdownHandler } from "../../infra/pi-event-handlers/conversation-summary-shutdown.js";
 import { registerInstrumentsCompactHandler } from "../../infra/pi-event-handlers/instruments-compact.js";
 import { registerInstrumentsRequestHandler } from "../../infra/pi-event-handlers/instruments-request.js";
 import { registerInstrumentsResponseHandler } from "../../infra/pi-event-handlers/instruments-response.js";
@@ -19,6 +21,7 @@ import { registerToolCallHandler } from "../../infra/pi-event-handlers/tool-call
 import { registerTurnEndHandler } from "../../infra/pi-event-handlers/turn-end.js";
 import type { PayloadCacheState } from "../../use-cases/payload-cache.js";
 import type { RecallCache } from "../../use-cases/recall-relevant-context.js";
+import { createConversationSummaryState } from "./conversation-summary-state.js";
 import { createGatedPi } from "./handler-gate.js";
 import { createInstrumentsHolder } from "./instruments-holder.js";
 
@@ -34,6 +37,7 @@ export default function taiknr(pi: ExtensionAPI): void {
 	const pendingOutputs: ArchivedToolOutput[] = [];
 	const originalContentByEntryId = new Map<string, unknown[]>();
 	const recallCache: RecallCache = { lastPromptKey: "", lastRecalledIds: [] };
+	const summary = createConversationSummaryState();
 	const payloadCache: PayloadCacheState = { recallBlock: null, carrier: null, nextCarrier: null, applied: null };
 	const holder = createInstrumentsHolder();
 
@@ -58,10 +62,12 @@ export default function taiknr(pi: ExtensionAPI): void {
 		pendingOutputs,
 		originalContentByEntryId,
 	});
-	registerContextHandler(gatedPi, { config: session, store, recallCache, holder, payloadCache });
+	registerContextHandler(gatedPi, { config: session, store, recallCache, holder, payloadCache, summary });
 	registerBeforeProviderRequestHandler(gatedPi, payloadCache);
 	registerPayloadCacheCommitHandler(gatedPi, payloadCache);
 	registerInstrumentsRequestHandler(gatedPi, holder);
 	registerInstrumentsResponseHandler(gatedPi, holder, payloadCache);
 	registerInstrumentsSettledHandler(gatedPi, holder);
+	registerConversationSummarySettledHandler(gatedPi, { config: session, summary, holder });
+	registerConversationSummaryShutdownHandler(gatedPi, summary);
 }
