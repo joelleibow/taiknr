@@ -63,9 +63,9 @@ const noAnswer = (id: string) => `the classifier returned no answer for ${id}`;
 const notBool = (id: string) => `the classifier's answer for ${id} is not a bool`;
 const notProbability = (id: string) => `the classifier's probability for ${id} is not a number from 0 to 1`;
 
-/** The notice the adapter builds, exactly as decision 7 templates it. */
+/** The finished notice the caller shows the user: the reason, what was asked for, and the field to fix. */
 function notice(reason: string, field: string, config: TaiknrConfig = CONFIG): string {
-	return `taiknr: recall did not score this prompt — ${reason}. provider=${config.defaultDecisionModelProvider} model=${config.defaultDecisionModel} field=${field}. Fix that field in pi-taiknr.json, then run /reload.`;
+	return `taiknr: recall did not score this prompt — ${reason}. provider=${config.defaultDecisionModelProvider} model=${config.defaultDecisionModel} field=${field}. Fix that field in pi-taiknr.json, then run /reload or start a new session.`;
 }
 
 /** A context whose model registry records its one lookup and its calls, answering as the case says. */

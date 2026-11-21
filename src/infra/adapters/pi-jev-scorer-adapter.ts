@@ -12,9 +12,9 @@ const DEADLINE = "the scoring's deadline passed before every chunk was sent";
 /** At most this many chunk calls in flight at once (decision 6). */
 const CAP = 8;
 
-/** The finished notice the adapter builds, exactly as decision 7 templates it. */
+/** The finished notice the caller shows the user: the reason, what was asked for, and the field to fix. */
 function notice(config: TaiknrConfig, reason: string, field: string): string {
-	return `taiknr: recall did not score this prompt — ${reason}. provider=${config.defaultDecisionModelProvider} model=${config.defaultDecisionModel} field=${field}. Fix that field in pi-taiknr.json, then run /reload.`;
+	return `taiknr: recall did not score this prompt — ${reason}. provider=${config.defaultDecisionModelProvider} model=${config.defaultDecisionModel} field=${field}. Fix that field in pi-taiknr.json, then run /reload or start a new session.`;
 }
 
 /** The reason a chunk's answer cannot be used, or `undefined` when it can. */
