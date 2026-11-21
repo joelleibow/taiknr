@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { summarizeSingleLine } from "../../domain/archived-output.js";
+import { summarizeArguments } from "../../domain/archived-output.js";
 
 export function registerToolCallHandler(pi: ExtensionAPI, argsByCallId: Map<string, string>): void {
 	pi.on("tool_call", (event) => {
@@ -14,6 +14,6 @@ export function registerToolCallHandler(pi: ExtensionAPI, argsByCallId: Map<stri
 		}
 		// shortcut: one ≤120-character summary per top-level call lives for the session's lifetime
 		// because no locked signature offers a release point; upgrade when one does (M6).
-		argsByCallId.set(event.toolCallId, summarizeSingleLine(serialized, 120));
+		argsByCallId.set(event.toolCallId, summarizeArguments(serialized));
 	});
 }

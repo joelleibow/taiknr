@@ -1,10 +1,15 @@
 import { expect, test } from "vitest";
 import {
 	buildStub,
+	cutToUnits,
+	excerptOf,
 	shouldArchive,
+	summarizeArguments,
 	summarizeSingleLine,
 	type ToolOutputCandidate,
+	tailStartOf,
 } from "../../src/domain/archived-output.js";
+import { formatRecalledContext } from "../../src/domain/recall.js";
 
 test("one below the threshold is not archived", () => {
 	expect(shouldArchive(9, 10)).toBe(false);
@@ -86,10 +91,16 @@ test("a preview cut never splits a surrogate pair", () => {
 	expect(stub.isWellFormed()).toBe(true);
 });
 
-test("an argument summary longer than 120 characters is cut to 120", () => {
+test("buildStub carries the same 40/…/79 argument summary the boundary and the recall header render", () => {
 	const stub = buildStub(candidate({ rawText: "text", argsSummary: "x".repeat(121) }));
+	expect(stub).toContain(`(${"x".repeat(40)}…${"x".repeat(79)})`);
 
-	expect(stub).toContain(`(${"x".repeat(120)})`);
+	const argument = Array.from({ length: 200 }, (_, index) => String.fromCharCode(97 + (index % 26))).join("");
+	const summary = summarizeArguments(argument);
+	expect(buildStub(candidate({ rawText: "text", argsSummary: summary }))).toContain(`(${summary})`);
+	expect(
+		formatRecalledContext([{ id: "a1b2c3d4", toolName: "bash", argsSummary: summary, rawText: "text" }]),
+	).toContain(`args ${summary}]`);
 });
 
 test("an argument summary of exactly 120 characters is not cut", () => {
@@ -150,4 +161,104 @@ test("a limit of zero returns an empty string", () => {
 
 test("a lone surrogate in the input is made well-formed", () => {
 	expect(summarizeSingleLine("a\uD800b", 10)).toBe("a\uFFFDb");
+});
+
+test("a cut whose boundary falls inside a surrogate pair ends before the pair", () => {
+	expect(cutToUnits(`${"a".repeat(179)}🚀c`, 180)).toBe("a".repeat(179));
+});
+
+test("a cut at or past the end leaves the text whole", () => {
+	expect(cutToUnits("abc", 3)).toBe("abc");
+	expect(cutToUnits("abc", 10)).toBe("abc");
+});
+
+test("a tail start on a pair's low half moves one unit earlier", () => {
+	expect(tailStartOf("a😀b", 2)).toBe(1);
+});
+
+test("a tail start at zero or at the end is unchanged", () => {
+	expect(tailStartOf("a😀b", 0)).toBe(0);
+	expect(tailStartOf("a😀b", "a😀b".length)).toBe("a😀b".length);
+});
+
+test("an argument summary of 120 units or fewer stays whole with no ellipsis", () => {
+	expect(summarizeArguments("a".repeat(120))).toBe("a".repeat(120));
+	expect(summarizeArguments("short")).toBe("short");
+});
+
+test("a longer argument is its first 40 units, an ellipsis and its last 79", () => {
+	const argument = `${"h".repeat(40)}${"m".repeat(60)}${"t".repeat(79)}`;
+
+	const summary = summarizeArguments(argument);
+
+	expect(summary).toBe(`${"h".repeat(40)}…${"t".repeat(79)}`);
+	expect(summary.length).toBe(120);
+});
+
+test("line separators become spaces before the argument is cut", () => {
+	expect(summarizeArguments("a\r\nb\rc\nd\u2028e\u2029f\u0085g")).toBe("a b c d e f g");
+});
+
+test("a 40-unit head never ends inside a surrogate pair", () => {
+	const summary = summarizeArguments(`${"a".repeat(39)}🚀${"b".repeat(200)}`);
+
+	expect(summary.startsWith(`${"a".repeat(39)}…`)).toBe(true);
+	expect(summary.isWellFormed()).toBe(true);
+});
+
+test("a 79-unit tail never starts inside a surrogate pair, and the summary never exceeds 120 units", () => {
+	const summary = summarizeArguments(`${"a".repeat(200)}🚀${"b".repeat(78)}`);
+
+	expect(summary.endsWith(`…🚀${"b".repeat(78)}`)).toBe(true);
+	expect(summary.length).toBeLessThanOrEqual(120);
+	expect(summary.isWellFormed()).toBe(true);
+});
+
+test("a 40,000-unit output's excerpt is its first 600 units", () => {
+	expect(excerptOf("z".repeat(40_000))).toBe("z".repeat(600));
+});
+
+test("the multi-line wrapper is stripped before the excerpt's 600 units", () => {
+	const raw = `Script completed\nWall time 1.2s\nOutput:\n${"z".repeat(1000)}`;
+
+	expect(excerptOf(raw)).toBe("z".repeat(600));
+});
+
+test("the wrapper's whitespace run goes with it", () => {
+	const raw = "Script completed\nWall time 1.2s\nOutput:\n\n\n  keep me";
+
+	expect(excerptOf(raw)).toBe("keep me");
+});
+
+test("a pair at unit 600 ends the excerpt before it", () => {
+	const raw = `${"a".repeat(599)}🚀tail`;
+
+	const excerpt = excerptOf(raw);
+
+	expect(excerpt).toBe("a".repeat(599));
+	expect(excerpt.isWellFormed()).toBe(true);
+});
+
+test("no raw text makes an empty excerpt", () => {
+	expect(excerptOf("")).toBe("");
+});
+
+test("a 40-unit output is its own excerpt", () => {
+	expect(excerptOf("a".repeat(40))).toBe("a".repeat(40));
+});
+
+test("a raw text that is only the wrapper makes an empty excerpt", () => {
+	expect(excerptOf("Script completed\nWall time 1.2s\nOutput:\n")).toBe("");
+});
+
+test("an incomplete wrapper is left alone", () => {
+	const raw = "Script completed\nWall time 1.2s\nno output line";
+
+	expect(excerptOf(raw)).toBe(raw);
+});
+
+test("the pipe form of the wrapper is never stripped", () => {
+	const raw = "Script completed | Wall time 1.2s | Output: keep me";
+
+	expect(excerptOf(raw)).toBe(raw);
 });
