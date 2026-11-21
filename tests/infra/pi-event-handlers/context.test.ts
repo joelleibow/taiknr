@@ -7,6 +7,7 @@ import {
 	type TurnEndEvent,
 } from "@earendil-works/pi-coding-agent";
 import { expect, test, vi } from "vitest";
+import { createConversationSummaryState } from "../../../src/app/extension/conversation-summary-state.js";
 import { createGatedPi } from "../../../src/app/extension/handler-gate.js";
 import { createInstrumentsHolder } from "../../../src/app/extension/instruments-holder.js";
 import { createSessionConfig } from "../../../src/config/session-config.js";
@@ -15,12 +16,20 @@ import type { ArchivedToolOutput } from "../../../src/domain/archived-output.js"
 import { formatRecalledContext } from "../../../src/domain/recall.js";
 import { tokenEstimate } from "../../../src/domain/token-estimate.js";
 import { createJeffersonBusAdapter } from "../../../src/infra/adapters/jefferson-bus-adapter.js";
+import { taskText } from "../../../src/infra/adapters/jev-scoring-request.js";
 import { InMemoryArchiveStore, TAIKNR_SIDE_STORE_TYPE } from "../../../src/infra/adapters/pi-archive-adapter.js";
 import { registerContextHandler } from "../../../src/infra/pi-event-handlers/context.js";
+import { registerConversationSummarySettledHandler } from "../../../src/infra/pi-event-handlers/conversation-summary-settled.js";
 import { createInstrumentsPublisher, type Publication } from "../../../src/use-cases/instruments-publisher.js";
 import type { PayloadCacheState } from "../../../src/use-cases/payload-cache.js";
 import type { RecallCache } from "../../../src/use-cases/recall-relevant-context.js";
 import { createContextStub, createFakePi } from "../../support/fake-pi.js";
+import {
+	createSummarizerFake,
+	SUMMARIZER_TEST_MODEL,
+	SUMMARIZER_TEST_PROVIDER,
+	type SummarizerFake,
+} from "../../support/summarizer-fake.js";
 
 type Messages = ContextWithSystemEvent["messages"];
 
@@ -92,6 +101,8 @@ interface HarnessOptions {
 	ready?: boolean;
 	/** Whether another extension's edit lands on the item's message after taiknr's stub (ADR 0005). */
 	foreignEdit?: boolean;
+	/** The summarizer fake the context stub's model registry carries, for the cases that assert it was not called. */
+	summarizer?: SummarizerFake;
 }
 
 /** The handler registered as the composition root registers it, over a fake host and a real branch. */
@@ -110,6 +121,8 @@ function harness(options: HarnessOptions = {}) {
 		classify,
 	};
 	const holder = createInstrumentsHolder();
+	const summary = createConversationSummaryState();
+	const summarizer = options.summarizer ?? createSummarizerFake();
 	const payloadCache: PayloadCacheState = { recallBlock: null, carrier: null, nextCarrier: null, applied: null };
 	registerContextHandler(createGatedPi(fake.pi, session), {
 		config: session,
@@ -117,6 +130,7 @@ function harness(options: HarnessOptions = {}) {
 		recallCache,
 		holder,
 		payloadCache,
+		summary,
 	});
 
 	if (options.ready ?? true) session.assign({ status: "ready", config: { ...CONFIG, ...options.config } });
@@ -133,7 +147,7 @@ function harness(options: HarnessOptions = {}) {
 			branch: manager.getBranch(),
 			contextWindow,
 			model: "model" in options ? options.model : undefined,
-			modelRegistry,
+			modelRegistry: { ...modelRegistry, ...summarizer.modelRegistry },
 			notify: (message) => notices.push(message),
 		});
 
@@ -141,7 +155,21 @@ function harness(options: HarnessOptions = {}) {
 	const fire = async (ctx: ExtensionContext, messages: Messages) =>
 		fake.registered[0].handler({ type: "context_with_system", messages }, ctx);
 
-	return { fake, session, store, recallCache, payloadCache, item, classify, context, fire, manager, holder };
+	return {
+		fake,
+		session,
+		store,
+		recallCache,
+		payloadCache,
+		item,
+		classify,
+		context,
+		fire,
+		manager,
+		holder,
+		summary,
+		summarizer,
+	};
 }
 
 /** The text of the block a result appends to the message at `index`, or `undefined` when none. */
@@ -397,4 +425,102 @@ test("a request recall answers nothing for leaves cell (a) empty", async () => {
 	await fire(context(), [prompt("why?")]);
 
 	expect(payloadCache.recallBlock).toBeNull();
+});
+
+/** The task text the classifier was last asked with. */
+function taskHeard(classify: unknown): string {
+	const calls = (classify as { mock: { calls: unknown[][] } }).mock.calls;
+	const [, context] = calls[calls.length - 1];
+	return (context as { state: { task: string } }).state.task;
+}
+
+/** An assistant message entry appended to the harness's branch. */
+function appendAssistant(manager: SessionManager, text = "earlier reply"): string {
+	return manager.appendMessage({ role: "assistant", content: [{ type: "text", text }], timestamp: 0 } as never);
+}
+
+/** A user message entry appended to the harness's branch. */
+function appendUser(manager: SessionManager, text = "why?"): string {
+	return manager.appendMessage({ role: "user", content: text, timestamp: 0 } as never);
+}
+
+test("X1: a summary keyed on the newest assistant entry before the last user message is carried", async () => {
+	const { fire, context, manager, summary, classify } = harness();
+	const assistantId = appendAssistant(manager);
+	appendUser(manager);
+	await summary.write(assistantId, async () => "Goal: g");
+
+	await fire(context(), [prompt("why?")]);
+
+	expect(taskHeard(classify)).toBe(taskText("why?", "Goal: g"));
+});
+
+test("X2: a summary written for another entry is not carried", async () => {
+	const { fire, context, manager, summary, classify } = harness();
+	const older = appendAssistant(manager);
+	appendAssistant(manager);
+	appendUser(manager);
+	await summary.write(older, async () => "Goal: g");
+
+	await fire(context(), [prompt("why?")]);
+
+	expect(taskHeard(classify)).toBe(taskText("why?", undefined));
+});
+
+test("X3: no summary on either side gives the no-summary default, and building the request makes no summarizer call", async () => {
+	const summarizer = createSummarizerFake();
+	const { fire, context, classify } = harness({ summarizer });
+
+	await fire(context(), [prompt("why?")]);
+
+	expect(taskHeard(classify)).toBe(taskText("why?", undefined));
+	expect(summarizer.calls).toEqual([]);
+});
+
+test("X4: a stored summary is never used with no assistant entry to match", async () => {
+	const { fire, context, manager, summary, classify } = harness();
+	appendUser(manager);
+	await summary.write("e-none", async () => "Goal: g");
+
+	await fire(context(), [prompt("why?")]);
+
+	expect(taskHeard(classify)).toBe(taskText("why?", undefined));
+});
+
+test("X5: a summary keyed on an assistant entry after the current message is not carried", async () => {
+	const { fire, context, manager, summary, classify } = harness();
+	appendUser(manager);
+	const later = appendAssistant(manager);
+	await summary.write(later, async () => "Goal: g");
+
+	await fire(context(), [prompt("why?")]);
+
+	expect(taskHeard(classify)).toBe(taskText("why?", undefined));
+});
+
+test("H9: a summarizer failure and a classifier failure each show their own single notice", async () => {
+	const summarizer = createSummarizerFake();
+	summarizer.answer("error");
+	const { fake, session, holder, summary, manager, context, fire } = harness({
+		summarizer,
+		config: {
+			conversationSummaryEnabled: true,
+			conversationSummaryProvider: SUMMARIZER_TEST_PROVIDER,
+			conversationSummaryModel: SUMMARIZER_TEST_MODEL,
+		},
+		classify: async () => ({ stopReason: "error", errorMessage: "boom", answers: {} }),
+	});
+	registerConversationSummarySettledHandler(createGatedPi(fake.pi, session), { config: session, summary, holder });
+
+	appendAssistant(manager);
+	const notices: string[] = [];
+	const settled = fake.registered.find(({ event }) => event === "agent_settled");
+	settled?.handler({ type: "agent_settled", aborted: false }, context(notices));
+	await vi.waitFor(() => expect(notices).toHaveLength(1));
+	expect(notices[0]).toContain("conversationSummaryProvider");
+
+	await fire(context(notices), [prompt("why?")]);
+
+	expect(notices).toHaveLength(2);
+	expect(notices[1]).toContain("boom");
 });

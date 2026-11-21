@@ -5,6 +5,7 @@ import {
 	type TurnEndEvent,
 } from "@earendil-works/pi-coding-agent";
 import { expect, test, vi } from "vitest";
+import { createConversationSummaryState } from "../../../src/app/extension/conversation-summary-state.js";
 import { createGatedPi } from "../../../src/app/extension/handler-gate.js";
 import { createInstrumentsHolder } from "../../../src/app/extension/instruments-holder.js";
 import { createSessionConfig } from "../../../src/config/session-config.js";
@@ -108,7 +109,14 @@ function harness(options: { config?: Partial<TaiknrConfig>; contextWindow?: numb
 	};
 	const gated = createGatedPi(fake.pi, session);
 	const payloadCache: PayloadCacheState = { recallBlock: null, carrier: null, nextCarrier: null, applied: null };
-	registerContextHandler(gated, { config: session, store, recallCache, holder, payloadCache });
+	registerContextHandler(gated, {
+		config: session,
+		store,
+		recallCache,
+		holder,
+		payloadCache,
+		summary: createConversationSummaryState(),
+	});
 	registerInstrumentsRequestHandler(gated, holder);
 	session.assign({ status: "ready", config: { ...CONFIG, ...options.config } });
 

@@ -97,12 +97,12 @@ test("the separators JSON leaves unescaped become spaces", () => {
 	for (const separator of ["\n", "\r", "\u2028", "\u2029", "\u0085"]) expect(summary).not.toContain(separator);
 });
 
-test("a summary longer than 120 characters is cut to 120", () => {
+test("a summary longer than 120 characters keeps its first 40 units and its last 79", () => {
 	const { argsByCallId, call } = register();
 
 	call({ command: "x".repeat(200) });
 
-	expect(argsByCallId.get("call-1")).toBe(`{"command":"${"x".repeat(108)}`);
+	expect(argsByCallId.get("call-1")).toBe(`{"command":"${"x".repeat(28)}…${"x".repeat(77)}"}`);
 	expect(argsByCallId.get("call-1")).toHaveLength(120);
 });
 

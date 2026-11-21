@@ -96,6 +96,8 @@ export interface InstrumentPublisher extends ClassifierObserver {
 	compacted(read: () => CompactedReadings): void;
 	treeJumped(read: () => TreeJumpedReadings): void;
 	reportRecalled(read: () => { estimate: number }): void;
+	/** The summarizer's spend, subtracted at the next priced response like the classifier's. */
+	summarized(spend: { costTotal: number } | undefined): void;
 }
 
 /** The per-session cell every handler reaches the publisher through, so nothing tests the switch. */
@@ -161,6 +163,13 @@ export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): Inst
 	let unchargedSpend = 0;
 	let savedTokensSinceStart = 0;
 	let savedDollarsSinceStart = 0;
+
+	/** An absent, non-finite or negative cost is no spend; the money is subtracted at the next priced response. */
+	const addSpend = (spend: { costTotal: number } | undefined): void => {
+		if (spend !== undefined && Number.isFinite(spend.costTotal) && spend.costTotal > 0) {
+			unchargedSpend += spend.costTotal;
+		}
+	};
 
 	/** The store's two sizes, scaled: the only figures the archive contributes. */
 	const archiveSizes = (k: number) => {
@@ -351,11 +360,12 @@ export function createInstrumentsPublisher(deps: InstrumentsPublisherDeps): Inst
 		},
 
 		finished(spend) {
-			// An absent, non-finite or negative cost is no spend; the money is subtracted at the next priced response.
-			if (spend !== undefined && Number.isFinite(spend.costTotal) && spend.costTotal > 0) {
-				unchargedSpend += spend.costTotal;
-			}
+			addSpend(spend);
 			deps.sink.post({ deciding: false });
+		},
+
+		summarized(spend) {
+			addSpend(spend);
 		},
 	};
 }

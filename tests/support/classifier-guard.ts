@@ -34,8 +34,11 @@ export const TEST_CLASSIFIER_PROVIDER_CONFIG: ProviderConfig = {
 	classifiers: { "typesafe-system-one": { classify } },
 };
 
-/** How the stubbed wire answers: a probability per asked id, or a call that hangs until aborted. */
-export type ClassifierAnswers = "hang" | ((ids: string[]) => Record<string, number>);
+/**
+ * How the stubbed wire answers: a probability per asked id, a 500 error, or a call that hangs until
+ * aborted.
+ */
+export type ClassifierAnswers = "hang" | "error" | ((ids: string[]) => Record<string, number>);
 
 /** One request the stub answered, as the provider would have received it. */
 export interface RecordedClassifierRequest {
@@ -45,15 +48,23 @@ export interface RecordedClassifierRequest {
 
 export interface ClassifierGuard {
 	requests: RecordedClassifierRequest[];
-	/** Script the answers the next call gets; the default answers `0`, the scripted "no". */
+	/** Script the answer every call gets; the default answers `0`, the scripted "no". */
 	answer(next: ClassifierAnswers): void;
+	/**
+	 * Script a different answer per call: the n-th call after this takes `next[n]`, and a call past
+	 * the end of the list takes what `answer` last set.
+	 */
+	answerEach(next: readonly ClassifierAnswers[]): void;
 }
 
 /** The scripted "no": every asked id answers probability 0. */
 const NO: ClassifierAnswers = (ids) => Object.fromEntries(ids.map((id) => [id, 0]));
 
 /** The System One answer body for `ids`: the wire type is `noul`, and an omitted id gets no answer. */
-function answerBody(answers: Exclude<ClassifierAnswers, "hang">, ids: string[]): string {
+function answerBody(
+	answers: Extract<ClassifierAnswers, (ids: string[]) => Record<string, number>>,
+	ids: string[],
+): string {
 	const wire = Object.fromEntries(
 		Object.entries(answers(ids)).map(([id, probability]) => [id, { type: "noul", noul: probability }]),
 	);
@@ -75,20 +86,27 @@ function hangUntilAborted(signal: AbortSignal | null | undefined): Promise<Respo
 export function installClassifierGuard(initial: ClassifierAnswers = NO): ClassifierGuard {
 	const requests: RecordedClassifierRequest[] = [];
 	let answers: ClassifierAnswers = initial;
+	let script: readonly ClassifierAnswers[] = [];
 
 	vi.stubEnv("OPENROUTER_API_KEY", "");
 	vi.stubEnv("TYPESAFE_API_KEY", "");
 	vi.stubGlobal("fetch", async (url: unknown, init?: RequestInit): Promise<Response> => {
 		const body = JSON.parse(String(init?.body)) as RecordedClassifierRequest["body"];
+		const index = requests.length;
 		requests.push({ url: String(url), body });
-		if (answers === "hang") return hangUntilAborted(init?.signal);
-		return new Response(answerBody(answers, Object.keys(body.questions)));
+		const next = script[index] ?? answers;
+		if (next === "hang") return hangUntilAborted(init?.signal);
+		if (next === "error") return new Response("the classifier is unavailable", { status: 500 });
+		return new Response(answerBody(next, Object.keys(body.questions)));
 	});
 
 	return {
 		requests,
 		answer(next) {
 			answers = next;
+		},
+		answerEach(next) {
+			script = next;
 		},
 	};
 }

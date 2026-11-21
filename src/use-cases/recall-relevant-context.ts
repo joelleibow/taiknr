@@ -1,11 +1,11 @@
-import type { ArchivedToolOutput } from "../domain/archived-output.js";
+import { type ArchivedToolOutput, excerptOf } from "../domain/archived-output.js";
 import {
 	formatRecalledContext,
 	type RecalledOutput,
 	type RelevanceScore,
 	selectRecalledIds,
 } from "../domain/recall.js";
-import type { ArchiveStore, FailureNotifier, RelevanceScorer } from "./ports.js";
+import type { ArchiveStore, FailureNotifier, RelevanceScorer, ScoringRequest } from "./ports.js";
 
 export interface RecallRelevantContextInput {
 	promptKey: string;
@@ -16,6 +16,8 @@ export interface RecallRelevantContextInput {
 	budgetCharacters: number;
 	/** The ids the branch still admits: the only items scored, and the only cached ids kept. */
 	eligibleIds: ReadonlySet<string>;
+	/** The session's summary when one matches this request, passed unchanged as the request's. */
+	summary?: string;
 }
 
 export interface RecallCache {
@@ -76,10 +78,14 @@ export async function recallRelevantContext(
 	// An empty scoreable set and a request with no room are the request's, not the key's: no token.
 	if (candidates.length === 0 || input.budgetCharacters <= 0) return [];
 
-	const archivedStubs = Object.fromEntries(candidates.map(({ id, stub }) => [id, stub]));
+	const request: ScoringRequest = {
+		promptText: input.promptText,
+		summary: input.summary,
+		items: candidates.map(({ id, stub, rawText }) => ({ id, stub, excerpt: excerptOf(rawText) })),
+	};
 	let scores: RelevanceScore[] | undefined;
 	try {
-		scores = await deps.scorer.score(input.promptText, archivedStubs, input.signal);
+		scores = await deps.scorer.score(request, input.signal);
 	} catch (error) {
 		// The adapter writes the notice; this side only shows it and remembers the attempt.
 		deps.notifier.notifyOnce(error instanceof Error ? error.message : String(error));

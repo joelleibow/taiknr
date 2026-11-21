@@ -29,6 +29,8 @@ test("the holder starts with a no-op that evaluates no reading and posts nothing
 		publisher.started(2);
 		publisher.finished({ costTotal: 0.001 });
 		publisher.finished(undefined);
+		publisher.summarized({ costTotal: 0.001 });
+		publisher.summarized(undefined);
 	}).not.toThrow();
 });
 

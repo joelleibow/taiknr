@@ -708,18 +708,80 @@ test("an invalid response carries the spend to the next valid one", () => {
 	expect(last().savedDollarsRequest).toBeCloseTo(96 * READ - 0.001, 9);
 });
 
-test("an absent, non-finite or negative cost counts as no spend", () => {
+test.each(["finished", "summarized"] as const)(
+	"an absent, non-finite or negative cost counts as no spend through %s",
+	(method) => {
+		const { publisher, last, start } = harness({ items: [ONE] });
+		start({ pair: A });
+		publisher[method](undefined);
+		publisher[method]({ costTotal: Number.NaN });
+		publisher[method]({ costTotal: -1 });
+		publisher[method]({ costTotal: 0 });
+		publisher.requestBuilt(() =>
+			reading({ messageEstimates: [400], toolResults: [{ index: 1, firstText: ONE.stub }] }),
+		);
+
+		publisher.responseReceived(response({ cacheRead: 400 }), contextReading);
+
+		expect(last().savedDollarsRequest).toBeCloseTo(96 * READ, 9);
+	},
+);
+
+test("finished and summarized both subtract their spend at the next priced response", () => {
 	const { publisher, last, start } = harness({ items: [ONE] });
 	start({ pair: A });
-	publisher.finished(undefined);
-	publisher.finished({ costTotal: Number.NaN });
-	publisher.finished({ costTotal: -1 });
-	publisher.finished({ costTotal: 0 });
+	publisher.finished({ costTotal: 0.001 });
+	publisher.requestBuilt(() => reading({ messageEstimates: [400], toolResults: [{ index: 1, firstText: ONE.stub }] }));
+	publisher.responseReceived(response({ cacheRead: 400 }), contextReading);
+
+	expect(last().savedDollarsRequest).toBeCloseTo(96 * READ - 0.001, 9);
+
+	publisher.summarized({ costTotal: 0.002 });
+	publisher.requestBuilt(() => reading({ messageEstimates: [400], toolResults: [{ index: 1, firstText: ONE.stub }] }));
+	publisher.responseReceived(response({ cacheRead: 400 }), contextReading);
+
+	expect(last().savedDollarsRequest).toBeCloseTo(96 * READ - 0.002, 9);
+});
+
+test("summarized posts nothing and does not move the in-flight count", () => {
+	const { publisher, recorded, last, start } = harness();
+	start();
+	const opening = recorded.posts[0];
+
+	publisher.summarized({ costTotal: 0.002 });
+
+	expect(recorded.posts).toHaveLength(1);
+	expect(recorded.posts[0]).toBe(opening);
+
+	publisher.started(2);
+	publisher.summarized({ costTotal: 0.002 });
+
+	expect(last()).toEqual({ deciding: true, decidingItems: 2 });
+});
+
+test("a classifier's finished and a summary's spend add up rather than replace each other", () => {
+	const { publisher, last, start } = harness({ items: [ONE] });
+	start({ pair: A });
+	publisher.finished({ costTotal: 0.001 });
+	publisher.summarized({ costTotal: 0.002 });
 	publisher.requestBuilt(() => reading({ messageEstimates: [400], toolResults: [{ index: 1, firstText: ONE.stub }] }));
 
 	publisher.responseReceived(response({ cacheRead: 400 }), contextReading);
 
-	expect(last().savedDollarsRequest).toBeCloseTo(96 * READ, 9);
+	expect(last().savedDollarsRequest).toBeCloseTo(96 * READ - 0.003, 9);
+});
+
+test("a summary's spend with no priced response after it is carried to the next one", () => {
+	const { publisher, last, start } = harness({ items: [ONE] });
+	start({ pair: A });
+	publisher.summarized({ costTotal: 0.002 });
+	publisher.requestBuilt(() => reading({ toolResults: [{ index: 1, firstText: ONE.stub }] }));
+	publisher.responseReceived(response({ cacheRead: 30 }, { stopReason: "aborted" }), contextReading);
+
+	publisher.requestBuilt(() => reading({ messageEstimates: [400], toolResults: [{ index: 1, firstText: ONE.stub }] }));
+	publisher.responseReceived(response({ cacheRead: 400 }), contextReading);
+
+	expect(last().savedDollarsRequest).toBeCloseTo(96 * READ - 0.002, 9);
 });
 
 test.each(["compacted", "treeJumped"] as const)("a %s keeps the uncharged spend", (reset) => {

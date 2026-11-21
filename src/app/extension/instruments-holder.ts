@@ -14,6 +14,7 @@ const noOpPublisher: InstrumentPublisher = {
 	reportRecalled() {},
 	started() {},
 	finished() {},
+	summarized() {},
 };
 
 /** One cell per extension factory call, so no two sessions share a publisher. */

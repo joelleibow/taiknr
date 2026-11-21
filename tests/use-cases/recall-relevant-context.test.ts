@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
-import type { ArchivedToolOutput } from "../../src/domain/archived-output.js";
+import { type ArchivedToolOutput, excerptOf } from "../../src/domain/archived-output.js";
 import { formatRecalledContext, type RelevanceScore } from "../../src/domain/recall.js";
-import type { ArchiveStore, FailureNotifier, RelevanceScorer } from "../../src/use-cases/ports.js";
+import type { ArchiveStore, FailureNotifier, RelevanceScorer, ScoringRequest } from "../../src/use-cases/ports.js";
 import {
 	type RecallCache,
 	type RecallRelevantContextInput,
@@ -30,7 +30,7 @@ function fakeStore(items: ArchivedToolOutput[]): ArchiveStore {
 	};
 }
 
-type ScorerCalls = { promptText: string; archivedStubs: Record<string, string>; signal?: AbortSignal }[];
+type ScorerCalls = { request: ScoringRequest; signal?: AbortSignal }[];
 
 /** A scorer answering as the case says, recording every call it gets. */
 function fakeScorer(result: RelevanceScore[] | undefined): { scorer: RelevanceScorer; calls: ScorerCalls } {
@@ -38,8 +38,8 @@ function fakeScorer(result: RelevanceScore[] | undefined): { scorer: RelevanceSc
 	return {
 		calls,
 		scorer: {
-			async score(promptText, archivedStubs, signal) {
-				calls.push({ promptText, archivedStubs, signal });
+			async score(request, signal) {
+				calls.push({ request, signal });
 				return result;
 			},
 		},
@@ -52,8 +52,8 @@ function failingScorer(message: string): { scorer: RelevanceScorer; calls: Score
 	return {
 		calls,
 		scorer: {
-			async score(promptText, archivedStubs, signal) {
-				calls.push({ promptText, archivedStubs, signal });
+			async score(request, signal) {
+				calls.push({ request, signal });
 				throw new Error(message);
 			},
 		},
@@ -101,9 +101,67 @@ test("a new key scores every eligible item in store order, with its stubs and th
 	});
 
 	expect(calls).toHaveLength(1);
-	expect(calls[0].promptText).toBe("why did it fail?");
-	expect(calls[0].archivedStubs).toEqual({ [A.id]: A.stub, [B.id]: B.stub });
+	expect(calls[0].request.promptText).toBe("why did it fail?");
+	expect(calls[0].request.items).toEqual([
+		{ id: A.id, stub: A.stub, excerpt: excerptOf(A.rawText) },
+		{ id: B.id, stub: B.stub, excerpt: excerptOf(B.rawText) },
+	]);
 	expect(calls[0].signal).toBe(signal);
+});
+
+test("an item crosses the port as its id, its stub and its excerpt, never its raw text", async () => {
+	const long = item("dddd4444", "x".repeat(1000));
+	const { scorer, calls } = fakeScorer([{ id: long.id, probability: 0.9 }]);
+
+	await recallRelevantContext(input({ eligibleIds: new Set([long.id]) }), {
+		store: fakeStore([long]),
+		scorer,
+		notifier: fakeNotifier().notifier,
+		cache: freshCache(),
+	});
+
+	expect(calls[0].request.items).toEqual([{ id: long.id, stub: long.stub, excerpt: "x".repeat(600) }]);
+	expect(calls[0].request.items[0]).not.toHaveProperty("rawText");
+});
+
+test("an item with no raw text crosses the port with an empty excerpt", async () => {
+	const empty = item("eeee5555", "");
+	const { scorer, calls } = fakeScorer([{ id: empty.id, probability: 0.9 }]);
+
+	await recallRelevantContext(input({ eligibleIds: new Set([empty.id]) }), {
+		store: fakeStore([empty]),
+		scorer,
+		notifier: fakeNotifier().notifier,
+		cache: freshCache(),
+	});
+
+	expect(calls[0].request.items).toEqual([{ id: empty.id, stub: empty.stub, excerpt: "" }]);
+});
+
+test("the request carries the input's summary when it has one", async () => {
+	const { scorer, calls } = fakeScorer([{ id: A.id, probability: 0.9 }]);
+
+	await recallRelevantContext(input({ summary: "Goal: ship the recall tuning" }), {
+		store: fakeStore([A]),
+		scorer,
+		notifier: fakeNotifier().notifier,
+		cache: freshCache(),
+	});
+
+	expect(calls[0].request.summary).toBe("Goal: ship the recall tuning");
+});
+
+test("the request carries no summary when the input has none", async () => {
+	const { scorer, calls } = fakeScorer([{ id: A.id, probability: 0.9 }]);
+
+	await recallRelevantContext(input(), {
+		store: fakeStore([A]),
+		scorer,
+		notifier: fakeNotifier().notifier,
+		cache: freshCache(),
+	});
+
+	expect(calls[0].request.summary).toBeUndefined();
 });
 
 test("an ineligible item is not scored", async () => {
@@ -116,7 +174,7 @@ test("an ineligible item is not scored", async () => {
 		cache: freshCache(),
 	});
 
-	expect(calls[0].archivedStubs).toEqual({ [A.id]: A.stub });
+	expect(calls[0].request.items).toEqual([{ id: A.id, stub: A.stub, excerpt: excerptOf(A.rawText) }]);
 });
 
 test("a probability equal to the threshold is recalled and one below it is not", async () => {

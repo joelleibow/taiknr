@@ -10,3 +10,6 @@ node_modules/
 
 # Local secrets loaded by direnv
 .envrc
+
+# OpenSpec lives in the taiknr store (~/Projects/taiknr-sdd)
+openspec/
