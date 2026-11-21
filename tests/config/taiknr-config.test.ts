@@ -241,7 +241,128 @@ test("the known fields accept their valid values", () => {
 		classifierTimeoutMs: 8000,
 		enabled: true,
 		jeffersonInstruments: true,
+		conversationSummaryEnabled: false,
+		conversationSummaryProvider: undefined,
+		conversationSummaryModel: undefined,
+		conversationSummaryThinkingLevel: "high",
 	});
+});
+
+test("the default decision threshold is 0.55, not the 0.50 the code shipped", () => {
+	expect(DEFAULT_TAIKNR_CONFIG.decisionThreshold).toBe(0.55);
+});
+
+test("the default decision model is the pinned typesafe/jev-1.14", () => {
+	expect(DEFAULT_TAIKNR_CONFIG.defaultDecisionModel).toBe("typesafe/jev-1.14");
+});
+
+test("the summary defaults to off, with no pair and the high thinking level", () => {
+	const config = accepted("{}");
+
+	expect(config.conversationSummaryEnabled).toBe(false);
+	expect(config.conversationSummaryProvider).toBeUndefined();
+	expect(config.conversationSummaryModel).toBeUndefined();
+	expect(config.conversationSummaryThinkingLevel).toBe("high");
+});
+
+test("a summary enabled with both its provider and model resolves", () => {
+	const config = accepted(
+		'{"conversationSummaryEnabled":true,"conversationSummaryProvider":"openrouter","conversationSummaryModel":"m"}',
+	);
+
+	expect(config.conversationSummaryEnabled).toBe(true);
+	expect(config.conversationSummaryProvider).toBe("openrouter");
+	expect(config.conversationSummaryModel).toBe("m");
+});
+
+test("a summary's pair in one file and its switch in another resolve", () => {
+	const config = loadTaiknrConfig({
+		agentConfigPath: configFile(
+			tempDirectory(),
+			'{"conversationSummaryProvider":"openrouter","conversationSummaryModel":"m"}',
+		),
+		projectConfigPath: configFile(tempDirectory(), '{"conversationSummaryEnabled":true}'),
+	});
+
+	expect(config.conversationSummaryEnabled).toBe(true);
+	expect(config.conversationSummaryModel).toBe("m");
+});
+
+test("a later layer that turns the summary off needs no pair", () => {
+	const config = loadTaiknrConfig({
+		agentConfigPath: configFile(tempDirectory(), '{"conversationSummaryEnabled":true}'),
+		projectConfigPath: configFile(tempDirectory(), '{"conversationSummaryEnabled":false}'),
+	});
+
+	expect(config.conversationSummaryEnabled).toBe(false);
+});
+
+test.each([
+	['{"conversationSummaryEnabled":true}', "conversationSummaryProvider"],
+	['{"conversationSummaryEnabled":true,"conversationSummaryProvider":"openrouter"}', "conversationSummaryModel"],
+])("enabling the summary without its pair is rejected naming %s", (text, field) => {
+	const error = rejection(text);
+
+	expect(error.field).toBe(field);
+	expect(error.reason).toBe("required when conversationSummaryEnabled is true");
+});
+
+test("the rejection names the file that enabled the summary, not the last one read", () => {
+	const agentConfigPath = configFile(tempDirectory(), '{"conversationSummaryEnabled":true}');
+	const projectConfigPath = configFile(tempDirectory(), '{"decisionThreshold":0.6}');
+
+	let caught: unknown;
+	try {
+		loadTaiknrConfig({ agentConfigPath, projectConfigPath });
+	} catch (error) {
+		caught = error;
+	}
+
+	expect(caught).toBeInstanceOf(TaiknrConfigError);
+	expect((caught as TaiknrConfigError).filePath).toBe(agentConfigPath);
+	expect((caught as TaiknrConfigError).field).toBe("conversationSummaryProvider");
+});
+
+test.each(["off", "minimal", "low", "medium", "high", "xhigh", "max"])(
+	"the thinking level %s is accepted, with the summary on or off",
+	(level) => {
+		expect(accepted(`{"conversationSummaryThinkingLevel":"${level}"}`).conversationSummaryThinkingLevel).toBe(level);
+		expect(
+			accepted(
+				`{"conversationSummaryThinkingLevel":"${level}","conversationSummaryEnabled":true,"conversationSummaryProvider":"p","conversationSummaryModel":"m"}`,
+			).conversationSummaryThinkingLevel,
+		).toBe(level);
+	},
+);
+
+test.each(["none", "HIGH", "", "none "])("the thinking level %j is rejected with the seven-level sentence", (level) => {
+	const error = rejection(`{"conversationSummaryThinkingLevel":${JSON.stringify(level)}}`);
+
+	expect(error.field).toBe("conversationSummaryThinkingLevel");
+	expect(error.reason).toBe("must be one of off, minimal, low, medium, high, xhigh, max");
+});
+
+test.each(["conversationSummaryProvider", "conversationSummaryModel"])(
+	"an empty %s is rejected as any empty string is",
+	(field) => {
+		const error = rejection(`{"${field}":""}`);
+
+		expect(error.field).toBe(field);
+		expect(error.reason).toBe("must be a non-empty string");
+	},
+);
+
+test("the thinking level layers like every other field", () => {
+	const config = loadTaiknrConfig({
+		agentConfigPath: configFile(tempDirectory(), '{"conversationSummaryThinkingLevel":"low"}'),
+		projectConfigPath: configFile(tempDirectory(), '{"conversationSummaryThinkingLevel":"max"}'),
+	});
+
+	expect(config.conversationSummaryThinkingLevel).toBe("max");
+});
+
+test("a user who names the alias instead of the pin still loads", () => {
+	expect(accepted('{"defaultDecisionModel":"~typesafe/jev-latest"}').defaultDecisionModel).toBe("~typesafe/jev-latest");
 });
 
 test("the instruments switch defaults to on", () => {

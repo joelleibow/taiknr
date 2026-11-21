@@ -13,6 +13,10 @@ const config: TaiknrConfig = {
 	classifierTimeoutMs: 5000,
 	enabled: true,
 	jeffersonInstruments: true,
+	conversationSummaryEnabled: false,
+	conversationSummaryProvider: undefined,
+	conversationSummaryModel: undefined,
+	conversationSummaryThinkingLevel: "high",
 };
 
 const result: ToolCallEventResult = { block: false };

@@ -1,5 +1,10 @@
 import { lstatSync, readFileSync } from "node:fs";
 
+/** pi's thinking levels, as a local list because `src/config/` imports no pi package. */
+const SUMMARY_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+
+export type SummaryThinkingLevel = (typeof SUMMARY_THINKING_LEVELS)[number];
+
 export interface TaiknrConfig {
 	decisionThreshold: number;
 	defaultDecisionModel: string;
@@ -8,19 +13,27 @@ export interface TaiknrConfig {
 	classifierTimeoutMs: number;
 	enabled: boolean;
 	jeffersonInstruments: boolean;
+	conversationSummaryEnabled: boolean;
+	conversationSummaryProvider: string | undefined;
+	conversationSummaryModel: string | undefined;
+	conversationSummaryThinkingLevel: SummaryThinkingLevel;
 }
 
 /** The config file's name in both the agent directory and the project config directory. */
 export const CONFIG_FILE_NAME = "pi-taiknr.json";
 
 export const DEFAULT_TAIKNR_CONFIG: TaiknrConfig = {
-	decisionThreshold: 0.5,
-	defaultDecisionModel: "~typesafe/jev-latest",
+	decisionThreshold: 0.55,
+	defaultDecisionModel: "typesafe/jev-1.14",
 	defaultDecisionModelProvider: "openrouter",
 	minCharsToArchive: 600,
 	classifierTimeoutMs: 5000,
 	enabled: true,
 	jeffersonInstruments: true,
+	conversationSummaryEnabled: false,
+	conversationSummaryProvider: undefined,
+	conversationSummaryModel: undefined,
+	conversationSummaryThinkingLevel: "high",
 };
 
 export interface ConfigPaths {
@@ -67,37 +80,79 @@ const FIELD_RULES: { readonly [K in keyof TaiknrConfig]: (value: unknown) => str
 	defaultDecisionModelProvider: (value) => (isNonEmptyString(value) ? undefined : "must be a non-empty string"),
 	enabled: (value) => (typeof value === "boolean" ? undefined : "must be a boolean"),
 	jeffersonInstruments: (value) => (typeof value === "boolean" ? undefined : "must be a boolean"),
+	conversationSummaryEnabled: (value) => (typeof value === "boolean" ? undefined : "must be a boolean"),
+	conversationSummaryProvider: (value) => (isNonEmptyString(value) ? undefined : "must be a non-empty string"),
+	conversationSummaryModel: (value) => (isNonEmptyString(value) ? undefined : "must be a non-empty string"),
+	conversationSummaryThinkingLevel: (value) =>
+		isThinkingLevel(value) ? undefined : `must be one of ${SUMMARY_THINKING_LEVELS.join(", ")}`,
 };
+
+function isThinkingLevel(value: unknown): value is SummaryThinkingLevel {
+	return SUMMARY_THINKING_LEVELS.some((level) => level === value);
+}
+
+/** A parsed document and the path it came from, so a cross-field failure can name the file to fix. */
+interface LoadedDocument {
+	path: string;
+	document: ParsedDocument;
+}
 
 /** Resolve agent-level and project-level config overrides over DEFAULT_TAIKNR_CONFIG. */
 export function loadTaiknrConfig(paths: ConfigPaths): TaiknrConfig {
 	// The agent file is read and validated before the project path is touched (design D4).
-	const documents: ParsedDocument[] = [];
+	const layers: LoadedDocument[] = [];
 	const agentDocument = readDocument(paths.agentConfigPath, "agent");
-	if (agentDocument !== undefined) documents.push(agentDocument);
+	if (agentDocument !== undefined) layers.push({ path: paths.agentConfigPath, document: agentDocument });
 	if (paths.projectConfigPath !== undefined) {
 		const projectDocument = readDocument(paths.projectConfigPath, "project");
-		if (projectDocument !== undefined) documents.push(projectDocument);
+		if (projectDocument !== undefined) layers.push({ path: paths.projectConfigPath, document: projectDocument });
 	}
 
-	return {
-		decisionThreshold: layered("decisionThreshold", documents),
-		defaultDecisionModel: layered("defaultDecisionModel", documents),
-		defaultDecisionModelProvider: layered("defaultDecisionModelProvider", documents),
-		minCharsToArchive: layered("minCharsToArchive", documents),
-		classifierTimeoutMs: layered("classifierTimeoutMs", documents),
-		enabled: layered("enabled", documents),
-		jeffersonInstruments: layered("jeffersonInstruments", documents),
+	const resolved: TaiknrConfig = {
+		decisionThreshold: layered("decisionThreshold", layers),
+		defaultDecisionModel: layered("defaultDecisionModel", layers),
+		defaultDecisionModelProvider: layered("defaultDecisionModelProvider", layers),
+		minCharsToArchive: layered("minCharsToArchive", layers),
+		classifierTimeoutMs: layered("classifierTimeoutMs", layers),
+		enabled: layered("enabled", layers),
+		jeffersonInstruments: layered("jeffersonInstruments", layers),
+		conversationSummaryEnabled: layered("conversationSummaryEnabled", layers),
+		conversationSummaryProvider: layered("conversationSummaryProvider", layers),
+		conversationSummaryModel: layered("conversationSummaryModel", layers),
+		conversationSummaryThinkingLevel: layered("conversationSummaryThinkingLevel", layers),
 	};
+	assertSummaryPair(resolved, layers);
+	return resolved;
 }
 
 /** A field's value from the last document that sets it, else its default (design D4's order). */
-function layered<K extends keyof TaiknrConfig>(field: K, documents: readonly ParsedDocument[]): TaiknrConfig[K] {
+function layered<K extends keyof TaiknrConfig>(field: K, layers: readonly LoadedDocument[]): TaiknrConfig[K] {
 	let value = DEFAULT_TAIKNR_CONFIG[field];
-	for (const document of documents) {
+	for (const { document } of layers) {
 		if (Object.hasOwn(document, field)) value = document[field] as TaiknrConfig[K];
 	}
 	return value;
+}
+
+/**
+ * The one cross-field rule: a resolved config that enables the summary needs its provider and model,
+ * and the error names the last document that turned it on (design decision 14).
+ */
+function assertSummaryPair(config: TaiknrConfig, layers: readonly LoadedDocument[]): void {
+	if (!config.conversationSummaryEnabled) return;
+	const missing =
+		config.conversationSummaryProvider === undefined
+			? "conversationSummaryProvider"
+			: config.conversationSummaryModel === undefined
+				? "conversationSummaryModel"
+				: undefined;
+	if (missing === undefined) return;
+	const enabling = layers.findLast(({ document }) => document.conversationSummaryEnabled === true);
+	throw new TaiknrConfigError(
+		enabling?.path ?? CONFIG_FILE_NAME,
+		missing,
+		"required when conversationSummaryEnabled is true",
+	);
 }
 
 type ConfigLayer = "agent" | "project";
